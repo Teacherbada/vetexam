@@ -1,3 +1,4 @@
+import Link from "next/link";
 export default function Home() {
   return (
     <main className="min-h-screen bg-gray-50 px-6 py-12">
@@ -57,9 +58,12 @@ export default function Home() {
         </section>
 
 
-        <button className="mt-10 rounded-xl bg-blue-600 px-8 py-4 text-lg text-white">
-          開始刷題
-        </button>
+        <Link
+  href="/subjects"
+  className="mt-10 inline-block rounded-xl bg-blue-600 px-8 py-4 text-lg text-white transition hover:bg-blue-700"
+>
+  開始刷題
+</Link>
 
 
       </div>
