@@ -1,72 +1,361 @@
+"use client";
+
 import Link from "next/link";
+import { useEffect, useState } from "react";
+import { dailyGoal } from "@/data/tasks";
+
 export default function Home() {
+
+const [todayProgress, setTodayProgress] = useState(0);
+  const [progress, setProgress] = useState<any>({});
+
+
+  useEffect(() => {
+
+    const data =
+      JSON.parse(
+        localStorage.getItem("progress") || "{}"
+      );
+
+
+    setProgress(data);
+
+const daily =
+  JSON.parse(
+    localStorage.getItem("dailyProgress") || "{}"
+  );
+
+
+const today =
+  new Date().toISOString().split("T")[0];
+
+
+setTodayProgress(
+  daily[today]?.completed || 0
+);
+
+  }, []);
+
+
+
+
+  const subjects = [
+    "犬內科",
+    "病理",
+    "藥理",
+  ];
+
+
+
+
   return (
+
     <main className="min-h-screen bg-gray-50 px-6 py-12">
+
+
       <div className="mx-auto max-w-5xl">
 
+
+
         <h1 className="text-5xl font-bold text-blue-900">
+
           VetExam
+
         </h1>
 
+
+
         <p className="mt-4 text-xl text-gray-600">
+
           獸醫國考 AI 學習平台
+
         </p>
 
 
+
+
+
         <section className="mt-10 rounded-2xl bg-white p-8 shadow">
-          <h2 className="text-2xl font-bold">
-            距離獸醫師國考
-          </h2>
 
-          <p className="mt-3 text-6xl font-bold text-blue-600">
-            182 天
-          </p>
-        </section>
+  <h2 className="text-2xl font-bold">
+    距離獸醫師國考
+  </h2>
+
+  <p className="mt-3 text-6xl font-bold text-blue-600">
+    182 天
+  </p>
+
+</section>
 
 
-        <section className="mt-8 grid gap-6 md:grid-cols-3">
+<section className="mt-8 rounded-2xl bg-white p-8 shadow">
 
-          <div className="rounded-xl bg-white p-6 shadow">
-            <h3 className="text-xl font-bold">
-              犬內科
-            </h3>
-            <p className="mt-2">
-              今日進度 20 / 20
+  <h2 className="text-2xl font-bold">
+    🔥 今日任務
+  </h2>
+
+  <p className="mt-4 text-xl">
+    完成：
+    {todayProgress} / {dailyGoal.target} 題
+  </p>
+
+
+  <div className="mt-4 h-4 rounded-full bg-gray-200">
+
+    <div
+      className="h-4 rounded-full bg-blue-600"
+      style={{
+        width:
+        `${Math.min(
+          (todayProgress / dailyGoal.target) * 100,
+          100
+        )}%`
+      }}
+    />
+
+  </div>
+
+
+</section>
+
+
+    
+
+
+
+
+
+
+        <section className="mt-10 grid gap-6 md:grid-cols-2">
+
+
+
+          <Link
+
+            href="/subjects"
+
+            className="rounded-xl bg-blue-600 p-8 text-white shadow hover:bg-blue-700"
+
+          >
+
+            <h2 className="text-2xl font-bold">
+
+              📖 開始刷題
+
+            </h2>
+
+
+            <p className="mt-3">
+
+              選擇科目開始練習
+
             </p>
-          </div>
 
 
-          <div className="rounded-xl bg-white p-6 shadow">
-            <h3 className="text-xl font-bold">
-              病理
-            </h3>
-            <p className="mt-2">
-              今日進度 15 / 20
-            </p>
-          </div>
+          </Link>
 
 
-          <div className="rounded-xl bg-white p-6 shadow">
-            <h3 className="text-xl font-bold">
-              藥理
-            </h3>
-            <p className="mt-2">
-              今日進度 10 / 20
-            </p>
-          </div>
+<Link
 
-        </section>
+href="/favorites"
 
+className="rounded-xl bg-white p-8 shadow hover:bg-gray-100"
 
-        <Link
-  href="/subjects"
-  className="mt-10 inline-block rounded-xl bg-blue-600 px-8 py-4 text-lg text-white transition hover:bg-blue-700"
 >
-  開始刷題
+
+<h2 className="text-2xl font-bold">
+
+⭐ 我的收藏
+
+</h2>
+
+
+<p className="mt-3">
+
+查看重要題目
+
+</p>
+
+
 </Link>
 
 
+
+          <Link
+
+            href="/wrong"
+
+            className="rounded-xl bg-white p-8 shadow hover:bg-gray-100"
+
+          >
+
+            <h2 className="text-2xl font-bold">
+
+              📚 我的錯題本
+
+            </h2>
+
+
+            <p className="mt-3">
+
+              複習你的弱點題目
+
+            </p>
+
+
+          </Link>
+
+
+<Link
+
+href="/analysis"
+
+className="rounded-xl bg-white p-8 shadow hover:bg-gray-100"
+
+>
+
+<h2 className="text-2xl font-bold">
+
+📊 弱點分析
+
+</h2>
+
+
+<p className="mt-3">
+
+查看你的學習弱點
+
+</p>
+
+
+</Link>
+
+        </section>
+
+
+
+
+
+
+
+
+        <h2 className="mt-12 text-3xl font-bold">
+
+          學習進度
+
+        </h2>
+
+
+
+
+
+        <section className="mt-6 grid gap-6 md:grid-cols-3">
+
+
+
+          {
+
+            subjects.map((subject)=>(
+
+
+              <div
+
+                key={subject}
+
+                className="rounded-xl bg-white p-6 shadow"
+
+              >
+
+
+
+                <h3 className="text-xl font-bold">
+
+                  {subject}
+
+                </h3>
+
+
+
+
+                <p className="mt-3">
+
+                  完成：
+
+                  {
+                    progress[subject]
+                    ?
+                    progress[subject].answered.length
+                    :
+                    0
+                  }
+
+                  題
+
+                </p>
+
+
+
+
+
+                <p className="mt-2">
+
+                  正確：
+
+                  {
+                    progress[subject]
+                    ?
+                    progress[subject].correct
+                    :
+                    0
+                  }
+
+                  題
+
+                </p>
+
+
+
+
+
+
+                <p className="mt-2">
+
+                  錯題：
+
+                  {
+                    progress[subject]
+                    ?
+                    progress[subject].wrong
+                    :
+                    0
+                  }
+
+                  題
+
+                </p>
+
+
+
+              </div>
+
+
+            ))
+
+          }
+
+
+
+        </section>
+
+
+
+
       </div>
+
+
     </main>
+
+
   );
+
 }
