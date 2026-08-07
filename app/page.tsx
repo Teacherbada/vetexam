@@ -7,7 +7,8 @@ import { dailyGoal } from "@/data/tasks";
 export default function Home() {
 
 const [todayProgress, setTodayProgress] = useState(0);
-  const [progress, setProgress] = useState<any>({});
+const [progress, setProgress] = useState<any>({});
+const [examDate, setExamDate] = useState("2027-07-31");
 
 
   useEffect(() => {
@@ -33,17 +34,44 @@ const today =
 setTodayProgress(
   daily[today]?.completed || 0
 );
+const savedExamDate =
+  localStorage.getItem("examDate");
 
+if (savedExamDate) {
+
+  setExamDate(savedExamDate);
+
+} else {
+
+  localStorage.setItem(
+    "examDate",
+    "2027-07-31"
+  );
+
+}
   }, []);
+const today = new Date();
 
+const targetDate = new Date(examDate);
+
+const diffTime =
+  targetDate.getTime() - today.getTime();
+
+const daysLeft = Math.max(
+  0,
+  Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+);
 
 
 
   const subjects = [
-    "犬內科",
-    "病理",
-    "藥理",
-  ];
+  "獸醫病理學",
+  "獸醫藥理學",
+  "獸醫實驗診斷學",
+  "獸醫普通疾病學",
+  "獸醫傳染病學",
+  "獸醫公共衛生學",
+];
 
 
 
@@ -77,12 +105,40 @@ setTodayProgress(
 
         <section className="mt-10 rounded-2xl bg-white p-8 shadow">
 
-  <h2 className="text-2xl font-bold">
-    距離獸醫師國考
-  </h2>
+  <div className="flex items-center justify-between">
 
-  <p className="mt-3 text-6xl font-bold text-blue-600">
-    182 天
+    <h2 className="text-2xl font-bold">
+      📅 距離獸醫師國考
+    </h2>
+
+    <input
+      type="date"
+      value={examDate}
+      onChange={(e) => {
+
+        setExamDate(e.target.value);
+
+        localStorage.setItem(
+          "examDate",
+          e.target.value
+        );
+
+      }}
+      className="rounded-lg border px-3 py-2"
+    />
+
+  </div>
+
+  <p className="mt-6 text-6xl font-bold text-blue-600">
+
+    {daysLeft} 天
+
+  </p>
+
+  <p className="mt-4 text-gray-500">
+
+    考試日期：{examDate}
+
   </p>
 
 </section>

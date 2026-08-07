@@ -1,7 +1,7 @@
 export const questions = [
   {
     id: 1,
-    subject: "犬內科",
+    subject: "獸醫普通疾病學",
     question: "DMVD ACVIM Stage B2 最建議開始使用哪一種藥物？",
     options: [
       "Furosemide",
@@ -15,7 +15,7 @@ export const questions = [
 
   {
     id: 2,
-    subject: "犬內科",
+    subject: "獸醫普通疾病學",
     question: "犬心絲蟲主要寄生於哪個部位？",
     options: [
       "肺動脈",
@@ -29,7 +29,7 @@ export const questions = [
 
   {
     id: 3,
-    subject: "病理",
+    subject: "獸醫病理學",
     question: "壞死最常見的型態為？",
     options: [
       "凝固性壞死",
@@ -43,7 +43,7 @@ export const questions = [
 
   {
     id: 4,
-    subject: "藥理",
+    subject: "獸醫藥理學",
     question: "下列哪一種屬於 NSAID？",
     options: [
       "Carprofen",
@@ -57,7 +57,7 @@ export const questions = [
 
   {
     id: 5,
-    subject: "微生物",
+    subject: "獸醫傳染病學",
     question: "革蘭氏陽性菌染色後呈現什麼顏色？",
     options: [
       "紫色",
