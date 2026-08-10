@@ -40,29 +40,31 @@ export async function POST(request: Request) {
       );
     }
 
-    console.log(
-      "PDF API: 收到檔案",
-      file.name,
-      file.size
-    );
+    console.log("PDF API: 收到檔案", file.name, file.size);
 
     const arrayBuffer = await file.arrayBuffer();
 
+    /*
+     * PDF.js
+     *
+     * 使用 legacy build，適合 Node.js / Vercel Serverless。
+     *
+     * 不使用 disableWorker。
+     *
+     * worker 的檔案會透過 next.config.ts
+     * 的 outputFileTracingIncludes 一起部署到 Vercel。
+     */
     const pdfjsLib = await import(
       "pdfjs-dist/legacy/build/pdf.mjs"
     );
 
-    const loadingTask =
-      pdfjsLib.getDocument({
-        data: new Uint8Array(arrayBuffer),
-      });
+    const loadingTask = pdfjsLib.getDocument({
+      data: new Uint8Array(arrayBuffer),
+    });
 
     const pdf = await loadingTask.promise;
 
-    console.log(
-      "PDF API: PDF 頁數",
-      pdf.numPages
-    );
+    console.log("PDF API: PDF 頁數", pdf.numPages);
 
     let fullText = "";
 
@@ -71,33 +73,26 @@ export async function POST(request: Request) {
       pageNumber <= pdf.numPages;
       pageNumber++
     ) {
-      const page =
-        await pdf.getPage(pageNumber);
+      const page = await pdf.getPage(pageNumber);
+      const textContent = await page.getTextContent();
 
-      const textContent =
-        await page.getTextContent();
-
-      const pageText =
-        textContent.items
-          .map((item: any) =>
-            "str" in item ? item.str : ""
-          )
-          .join(" ");
+      const pageText = textContent.items
+        .map((item: any) =>
+          "str" in item ? item.str : ""
+        )
+        .join(" ");
 
       fullText += pageText + "\n";
 
       console.log(
-        `PDF API: 第 ${pageNumber} 頁文字`,
+        `PDF API: 第 ${pageNumber} 頁文字長度`,
         pageText.length
       );
     }
 
     const text = fullText.trim();
 
-    console.log(
-      "PDF API: 總文字長度",
-      text.length
-    );
+    console.log("PDF API: 總文字長度", text.length);
 
     console.log(
       "PDF RAW TEXT:",
@@ -114,14 +109,24 @@ export async function POST(request: Request) {
       );
     }
 
-    const questions =
-      parseQuestions(text);
+    const questions = parseQuestions(text);
 
     console.log(
       "PDF API: 成功辨識",
       questions.length,
       "題"
     );
+
+    if (questions.length === 0) {
+      return NextResponse.json(
+        {
+          error:
+            "沒有辨識到選擇題。請確認 PDF 是文字型 PDF，且題目格式可以辨識。",
+          textPreview: text.substring(0, 3000),
+        },
+        { status: 400 }
+      );
+    }
 
     return NextResponse.json({
       success: true,
@@ -131,10 +136,7 @@ export async function POST(request: Request) {
       totalPages: pdf.numPages,
     });
   } catch (error) {
-    console.error(
-      "PDF parsing error:",
-      error
-    );
+    console.error("PDF parsing error:", error);
 
     return NextResponse.json(
       {
@@ -167,8 +169,7 @@ function parseQuestions(
   const questions: ParsedQuestion[] = [];
 
   for (const block of blocks) {
-    const question =
-      parseQuestionBlock(block);
+    const question = parseQuestionBlock(block);
 
     if (question) {
       questions.push(question);
@@ -189,19 +190,14 @@ function parseQuestionBlock(
     return null;
   }
 
-  const questionNumber =
-    Number(match[1]);
-
-  const content =
-    match[2].trim();
+  const questionNumber = Number(match[1]);
+  const content = match[2].trim();
 
   const optionRegex =
-    /(?:^|\n|\s)(?:\(?|\（?)([A-D])(?:\)|）)?\s*[.、:：)．]\s*/gi;
+    /(?:^|\n|\s)(?:\(?([A-D])(?:\)|）)?\s*)?[.、:：)．]\s*/gi;
 
   const optionMatches = [
-    ...content.matchAll(
-      optionRegex
-    ),
+    ...content.matchAll(optionRegex),
   ];
 
   if (optionMatches.length < 2) {
@@ -211,20 +207,14 @@ function parseQuestionBlock(
   const firstOptionIndex =
     optionMatches[0].index;
 
-  if (
-    firstOptionIndex === undefined
-  ) {
+  if (firstOptionIndex === undefined) {
     return null;
   }
 
-  const questionText =
-    content
-      .substring(
-        0,
-        firstOptionIndex
-      )
-      .replace(/\s+/g, " ")
-      .trim();
+  const questionText = content
+    .substring(0, firstOptionIndex)
+    .replace(/\s+/g, " ")
+    .trim();
 
   if (!questionText) {
     return null;
@@ -232,31 +222,23 @@ function parseQuestionBlock(
 
   const options: string[] = [];
 
-  for (
-    let i = 0;
-    i < optionMatches.length;
-    i++
-  ) {
-    const current =
-      optionMatches[i];
+  for (let i = 0; i < optionMatches.length; i++) {
+    const current = optionMatches[i];
 
     const start =
       (current.index ?? 0) +
       current[0].length;
 
-    const next =
-      optionMatches[i + 1];
+    const next = optionMatches[i + 1];
 
     const end = next
-      ? next.index ??
-        content.length
+      ? next.index ?? content.length
       : content.length;
 
-    const optionText =
-      content
-        .substring(start, end)
-        .replace(/\s+/g, " ")
-        .trim();
+    const optionText = content
+      .substring(start, end)
+      .replace(/\s+/g, " ")
+      .trim();
 
     if (optionText) {
       options.push(optionText);
