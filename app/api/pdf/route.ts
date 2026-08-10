@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { extractText, getDocumentProxy } from "unpdf";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -49,39 +48,74 @@ export async function POST(request: Request) {
 
     const arrayBuffer = await file.arrayBuffer();
 
-    const pdfData = new Uint8Array(arrayBuffer);
+    const pdfjsLib = await import(
+      "pdfjs-dist/legacy/build/pdf.mjs"
+    );
 
-    console.log("PDF API: 開始載入 PDF");
+    const loadingTask =
+      pdfjsLib.getDocument({
+        data: new Uint8Array(arrayBuffer),
+      });
 
-    const pdf = await getDocumentProxy(pdfData);
+    const pdf = await loadingTask.promise;
 
     console.log(
       "PDF API: PDF 頁數",
       pdf.numPages
     );
 
-    const result = await extractText(pdf, {
-      mergePages: true,
-    });
+    let fullText = "";
 
-    const text = result.text || "";
+    for (
+      let pageNumber = 1;
+      pageNumber <= pdf.numPages;
+      pageNumber++
+    ) {
+      const page =
+        await pdf.getPage(pageNumber);
+
+      const textContent =
+        await page.getTextContent();
+
+      const pageText =
+        textContent.items
+          .map((item: any) =>
+            "str" in item ? item.str : ""
+          )
+          .join(" ");
+
+      fullText += pageText + "\n";
+
+      console.log(
+        `PDF API: 第 ${pageNumber} 頁文字`,
+        pageText.length
+      );
+    }
+
+    const text = fullText.trim();
 
     console.log(
-      "PDF API: 取得文字長度",
+      "PDF API: 總文字長度",
       text.length
     );
 
-    if (!text.trim()) {
+    console.log(
+      "PDF RAW TEXT:",
+      text.substring(0, 5000)
+    );
+
+    if (!text) {
       return NextResponse.json(
         {
           error:
-            "PDF 有成功讀取，但沒有偵測到文字。這可能是一份掃描圖片型 PDF，目前尚未支援 OCR。",
+            "PDF 有成功讀取，但沒有偵測到文字。目前尚未支援掃描圖片型 PDF OCR。",
         },
         { status: 400 }
       );
     }
 
-    const questions = parseQuestions(text);
+    const questions =
+      parseQuestions(text);
 
     console.log(
       "PDF API: 成功辨識",
@@ -94,7 +128,7 @@ export async function POST(request: Request) {
       total: questions.length,
       questions,
       textLength: text.length,
-      totalPages: result.totalPages,
+      totalPages: pdf.numPages,
     });
   } catch (error) {
     console.error(
@@ -133,7 +167,8 @@ function parseQuestions(
   const questions: ParsedQuestion[] = [];
 
   for (const block of blocks) {
-    const question = parseQuestionBlock(block);
+    const question =
+      parseQuestionBlock(block);
 
     if (question) {
       questions.push(question);
@@ -154,15 +189,19 @@ function parseQuestionBlock(
     return null;
   }
 
-  const questionNumber = Number(match[1]);
+  const questionNumber =
+    Number(match[1]);
 
-  const content = match[2].trim();
+  const content =
+    match[2].trim();
 
   const optionRegex =
     /(?:^|\n|\s)(?:\(?|\（?)([A-D])(?:\)|）)?\s*[.、:：)．]\s*/gi;
 
   const optionMatches = [
-    ...content.matchAll(optionRegex),
+    ...content.matchAll(
+      optionRegex
+    ),
   ];
 
   if (optionMatches.length < 2) {
@@ -172,14 +211,20 @@ function parseQuestionBlock(
   const firstOptionIndex =
     optionMatches[0].index;
 
-  if (firstOptionIndex === undefined) {
+  if (
+    firstOptionIndex === undefined
+  ) {
     return null;
   }
 
-  const questionText = content
-    .substring(0, firstOptionIndex)
-    .replace(/\s+/g, " ")
-    .trim();
+  const questionText =
+    content
+      .substring(
+        0,
+        firstOptionIndex
+      )
+      .replace(/\s+/g, " ")
+      .trim();
 
   if (!questionText) {
     return null;
@@ -192,22 +237,26 @@ function parseQuestionBlock(
     i < optionMatches.length;
     i++
   ) {
-    const current = optionMatches[i];
+    const current =
+      optionMatches[i];
 
     const start =
       (current.index ?? 0) +
       current[0].length;
 
-    const next = optionMatches[i + 1];
+    const next =
+      optionMatches[i + 1];
 
     const end = next
-      ? next.index ?? content.length
+      ? next.index ??
+        content.length
       : content.length;
 
-    const optionText = content
-      .substring(start, end)
-      .replace(/\s+/g, " ")
-      .trim();
+    const optionText =
+      content
+        .substring(start, end)
+        .replace(/\s+/g, " ")
+        .trim();
 
     if (optionText) {
       options.push(optionText);
