@@ -210,7 +210,18 @@ const daysLeft = Math.max(
 
           </Link>
 
+<Link
+  href="/pdf"
+  className="rounded-xl bg-purple-600 p-8 text-white shadow hover:bg-purple-700"
+>
+  <h2 className="text-2xl font-bold">
+    📄 PDF 自動出題
+  </h2>
 
+  <p className="mt-3">
+    上傳 PDF，自動建立題目練習
+  </p>
+</Link>
 <Link
 
 href="/favorites"
