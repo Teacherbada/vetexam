@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { PDFParse } from "pdf-parse";
+import { extractText, getDocumentProxy } from "unpdf";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -44,23 +44,25 @@ export async function POST(request: Request) {
     console.log(
       "PDF API: 收到檔案",
       file.name,
-      file.size,
-      file.type
+      file.size
     );
 
     const arrayBuffer = await file.arrayBuffer();
 
-    const uint8Array = new Uint8Array(arrayBuffer);
+    const pdfData = new Uint8Array(arrayBuffer);
 
-    console.log("PDF API: 開始解析 PDF");
+    console.log("PDF API: 開始載入 PDF");
 
-    const parser = new PDFParse({
-      data: uint8Array,
+    const pdf = await getDocumentProxy(pdfData);
+
+    console.log(
+      "PDF API: PDF 頁數",
+      pdf.numPages
+    );
+
+    const result = await extractText(pdf, {
+      mergePages: true,
     });
-
-    const result = await parser.getText();
-
-    await parser.destroy();
 
     const text = result.text || "";
 
@@ -92,6 +94,7 @@ export async function POST(request: Request) {
       total: questions.length,
       questions,
       textLength: text.length,
+      totalPages: result.totalPages,
     });
   } catch (error) {
     console.error(
@@ -115,51 +118,45 @@ export async function POST(request: Request) {
 function parseQuestions(
   text: string
 ): ParsedQuestion[] {
-  const normalized = normalizeText(text);
-
-  const questionBlocks = normalized.split(
-    /(?=\n?\s*\d+\s*[.、)．]\s+)/
-  );
-
-  const questions: ParsedQuestion[] = [];
-
-  for (const block of questionBlocks) {
-    const parsed = parseQuestionBlock(block);
-
-    if (parsed) {
-      questions.push(parsed);
-    }
-  }
-
-  return questions;
-}
-
-function normalizeText(text: string): string {
-  return text
+  const normalized = text
     .replace(/\r\n/g, "\n")
     .replace(/\r/g, "\n")
     .replace(/\u00a0/g, " ")
     .replace(/[ \t]+/g, " ")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+
+  const blocks = normalized.split(
+    /(?=\n?\s*\d+\s*[.、)．]\s+)/
+  );
+
+  const questions: ParsedQuestion[] = [];
+
+  for (const block of blocks) {
+    const question = parseQuestionBlock(block);
+
+    if (question) {
+      questions.push(question);
+    }
+  }
+
+  return questions;
 }
 
 function parseQuestionBlock(
   block: string
 ): ParsedQuestion | null {
-  const questionMatch = block.match(
+  const match = block.match(
     /^\s*(\d+)\s*[.、)．]\s*([\s\S]+)$/
   );
 
-  if (!questionMatch) {
+  if (!match) {
     return null;
   }
 
-  const questionNumber = Number(
-    questionMatch[1]
-  );
+  const questionNumber = Number(match[1]);
 
-  const content = questionMatch[2].trim();
+  const content = match[2].trim();
 
   const optionRegex =
     /(?:^|\n|\s)(?:\(?|\（?)([A-D])(?:\)|）)?\s*[.、:：)．]\s*/gi;
@@ -195,28 +192,16 @@ function parseQuestionBlock(
     i < optionMatches.length;
     i++
   ) {
-    const match = optionMatches[i];
-
-    const optionLetter =
-      match[1].toUpperCase();
-
-    if (
-      !["A", "B", "C", "D"].includes(
-        optionLetter
-      )
-    ) {
-      continue;
-    }
+    const current = optionMatches[i];
 
     const start =
-      (match.index ?? 0) +
-      match[0].length;
+      (current.index ?? 0) +
+      current[0].length;
 
-    const nextMatch =
-      optionMatches[i + 1];
+    const next = optionMatches[i + 1];
 
-    const end = nextMatch
-      ? nextMatch.index ?? content.length
+    const end = next
+      ? next.index ?? content.length
       : content.length;
 
     const optionText = content
@@ -224,7 +209,9 @@ function parseQuestionBlock(
       .replace(/\s+/g, " ")
       .trim();
 
-    options.push(optionText);
+    if (optionText) {
+      options.push(optionText);
+    }
   }
 
   if (options.length < 2) {
