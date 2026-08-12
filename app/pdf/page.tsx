@@ -33,6 +33,8 @@ export default function PDFPage() {
   const [loadingQuestionSets, setLoadingQuestionSets] =
     useState(true);
   const [message, setMessage] = useState("");
+  const [upgradeRequired, setUpgradeRequired] =
+    useState(false);
 
   useEffect(() => {
     loadQuestionSets();
@@ -76,6 +78,7 @@ export default function PDFPage() {
 
     setQuestions([]);
     setMessage("");
+    setUpgradeRequired(false);
 
     if (!selectedFile) {
       setFile(null);
@@ -105,6 +108,8 @@ export default function PDFPage() {
 
   async function handleUpload() {
     console.log("開始解析按鈕被點擊");
+
+    setUpgradeRequired(false);
 
     if (!file) {
       setMessage("請先選擇 PDF 檔案");
@@ -166,6 +171,24 @@ export default function PDFPage() {
       }
 
       if (!response.ok) {
+        if (
+          response.status === 403 ||
+          data.code === "PRO_REQUIRED"
+        ) {
+          setUpgradeRequired(true);
+          setMessage(
+            "此功能需要 PRO 會員才能使用。"
+          );
+          return;
+        }
+
+        if (response.status === 401) {
+          setMessage(
+            "請先登入後再使用 PDF 匯入功能。"
+          );
+          return;
+        }
+
         throw new Error(
           data.detail ||
             data.error ||
@@ -621,6 +644,37 @@ export default function PDFPage() {
               "
             >
               {message}
+            </div>
+          )}
+
+          {upgradeRequired && (
+            <div className="mt-4 rounded-xl border border-yellow-200 bg-yellow-50 p-5">
+              <p className="font-bold text-yellow-900">
+                PDF 匯入功能需要 PRO 會員
+              </p>
+
+              <p className="mt-2 text-sm text-yellow-800">
+                升級 PRO 後即可使用 PDF 自動辨識與題庫匯入功能。
+              </p>
+
+              <button
+                type="button"
+                className="
+                  mt-4
+                  rounded-lg
+                  bg-yellow-600
+                  px-5
+                  py-2.5
+                  font-bold
+                  text-white
+                  hover:bg-yellow-700
+                "
+                onClick={() => {
+                  window.location.href = "/";
+                }}
+              >
+                查看 PRO 方案
+              </button>
             </div>
           )}
         </div>
