@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { authClient } from "@/lib/auth-client";
 
 type ParsedQuestion = {
   id: number;
@@ -32,13 +33,6 @@ type ManualQuestion = {
   explanation: string;
 };
 
-/*
- * 台灣獸醫師國考科目
- *
- * 一般使用者目前只能建立私人題庫。
- * 公開國考題庫未來由管理員後台統一匯入，
- * 因此一般使用者不會看到 public 選項。
- */
 const EXAM_SUBJECTS = [
   "獸醫病理學",
   "獸醫藥理學",
@@ -54,6 +48,19 @@ const EXAM_YEARS = Array.from(
 );
 
 export default function PDFPage() {
+  const {
+    data: session,
+    isPending: sessionLoading,
+    refetch: refetchSession,
+  } = authClient.useSession();
+
+  const [subscription, setSubscription] = useState<{
+    plan: string;
+    status: string;
+  } | null>(null);
+
+  const [subscriptionLoading, setSubscriptionLoading] = useState(true);
+
   const [file, setFile] = useState<File | null>(null);
 
   const [questions, setQuestions] = useState<ParsedQuestion[]>([]);
@@ -81,12 +88,6 @@ export default function PDFPage() {
     number | null
   >(null);
 
-  /*
-   * 一般使用者目前固定使用私人題庫。
-   * 公開題庫未來由管理員後台處理。
-   */
-  const [visibility] = useState<Visibility>("private");
-
   const [examSubject, setExamSubject] = useState("");
 
   const [examYear, setExamYear] = useState<number | "">("");
@@ -99,9 +100,52 @@ export default function PDFPage() {
 
   const [upgradeRequired, setUpgradeRequired] = useState(false);
 
+  const isLoggedIn = !!session?.user;
+
+  const isPro =
+    subscription?.plan === "pro" &&
+    subscription?.status === "active";
+
   useEffect(() => {
-    loadQuestionSets();
-  }, []);
+    if (!sessionLoading) {
+      loadQuestionSets();
+      loadSubscription();
+    }
+  }, [sessionLoading, session?.user?.id]);
+
+  async function loadSubscription() {
+    if (!session?.user?.id) {
+      setSubscription(null);
+      setSubscriptionLoading(false);
+      return;
+    }
+
+    try {
+      setSubscriptionLoading(true);
+
+      const response = await fetch("/api/subscription", {
+        method: "GET",
+        cache: "no-store",
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.detail ||
+            data.error ||
+            "無法取得會員方案"
+        );
+      }
+
+      setSubscription(data.subscription || null);
+    } catch (error) {
+      console.error("取得會員方案失敗：", error);
+      setSubscription(null);
+    } finally {
+      setSubscriptionLoading(false);
+    }
+  }
 
   async function loadQuestionSets() {
     try {
@@ -116,7 +160,9 @@ export default function PDFPage() {
 
       if (!response.ok) {
         throw new Error(
-          data.detail || data.error || "無法取得已匯入題庫"
+          data.detail ||
+            data.error ||
+            "無法取得已匯入題庫"
         );
       }
 
@@ -128,10 +174,24 @@ export default function PDFPage() {
     }
   }
 
+  async function handleLogout() {
+    try {
+      await authClient.signOut();
+      await refetchSession();
+
+      setSubscription(null);
+
+      window.location.href = "/";
+    } catch (error) {
+      console.error("登出失敗：", error);
+    }
+  }
+
   function handleFileChange(
     event: React.ChangeEvent<HTMLInputElement>
   ) {
-    const selectedFile = event.target.files?.[0] || null;
+    const selectedFile =
+      event.target.files?.[0] || null;
 
     setQuestions([]);
     setCurrentQuestionSetId(null);
@@ -159,7 +219,9 @@ export default function PDFPage() {
 
     setFile(selectedFile);
 
-    setMessage(`已選擇 PDF：${selectedFile.name}`);
+    setMessage(
+      `已選擇 PDF：${selectedFile.name}`
+    );
   }
 
   function addManualQuestion() {
@@ -176,11 +238,17 @@ export default function PDFPage() {
 
   function removeManualQuestion(index: number) {
     setManualQuestions((current) =>
-      current.filter((_, questionIndex) => questionIndex !== index)
+      current.filter(
+        (_, questionIndex) =>
+          questionIndex !== index
+      )
     );
   }
 
-  function updateManualQuestion(index: number, value: string) {
+  function updateManualQuestion(
+    index: number,
+    value: string
+  ) {
     setManualQuestions((current) =>
       current.map((question, questionIndex) =>
         questionIndex === index
@@ -216,7 +284,10 @@ export default function PDFPage() {
     );
   }
 
-  function updateManualAnswer(index: number, value: string) {
+  function updateManualAnswer(
+    index: number,
+    value: string
+  ) {
     setManualQuestions((current) =>
       current.map((question, questionIndex) =>
         questionIndex === index
@@ -229,7 +300,10 @@ export default function PDFPage() {
     );
   }
 
-  function updateManualExplanation(index: number, value: string) {
+  function updateManualExplanation(
+    index: number,
+    value: string
+  ) {
     setManualQuestions((current) =>
       current.map((question, questionIndex) =>
         questionIndex === index
@@ -244,6 +318,13 @@ export default function PDFPage() {
 
   async function handleManualImport() {
     setManualMessage("");
+
+    if (!isLoggedIn) {
+      setManualMessage(
+        "請先登入後再使用手動匯入功能。"
+      );
+      return;
+    }
 
     if (!manualQuestions.length) {
       setManualMessage("至少需要建立一題。");
@@ -264,9 +345,10 @@ export default function PDFPage() {
         return;
       }
 
-      const filledOptions = question.options.filter(
-        (option) => option.trim() !== ""
-      );
+      const filledOptions =
+        question.options.filter(
+          (option) => option.trim() !== ""
+        );
 
       if (filledOptions.length < 2) {
         setManualMessage(
@@ -292,19 +374,22 @@ export default function PDFPage() {
     setManualMessage("正在建立私人題庫...");
 
     try {
-      const response = await fetch("/api/manual-question-set", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          name: manualSetName,
-          visibility: "private",
-          examSubject: "",
-          examYear: "",
-          questions: manualQuestions,
-        }),
-      });
+      const response = await fetch(
+        "/api/manual-question-set",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            name: manualSetName,
+            visibility: "private",
+            examSubject,
+            examYear,
+            questions: manualQuestions,
+          }),
+        }
+      );
 
       const data = await response.json();
 
@@ -313,7 +398,9 @@ export default function PDFPage() {
           response.status === 403 ||
           data.code === "PRO_REQUIRED"
         ) {
-          setManualMessage("手動匯入功能需要 PRO 會員。");
+          setManualMessage(
+            "手動匯入功能需要 PRO 會員。"
+          );
           return;
         }
 
@@ -325,7 +412,9 @@ export default function PDFPage() {
         }
 
         throw new Error(
-          data.detail || data.error || "手動匯入失敗"
+          data.detail ||
+            data.error ||
+            "手動匯入失敗"
         );
       }
 
@@ -359,9 +448,14 @@ export default function PDFPage() {
   }
 
   async function handleUpload() {
-    console.log("開始解析按鈕被點擊");
-
     setUpgradeRequired(false);
+
+    if (!isLoggedIn) {
+      setMessage(
+        "請先登入後再使用 PDF 匯入功能。"
+      );
+      return;
+    }
 
     if (!file) {
       setMessage("請先選擇 PDF 檔案");
@@ -369,7 +463,9 @@ export default function PDFPage() {
     }
 
     setLoading(true);
-    setMessage("正在上傳 PDF，請稍候...");
+    setMessage(
+      "正在上傳 PDF，請稍候..."
+    );
     setQuestions([]);
     setCurrentQuestionSetId(null);
 
@@ -377,19 +473,32 @@ export default function PDFPage() {
       const formData = new FormData();
 
       formData.append("file", file);
-
-      /*
-       * 一般使用者目前只能建立私人題庫。
-       * 不從前端提供 public 選項。
-       */
       formData.append("visibility", "private");
 
-      const response = await fetch("/api/pdf", {
-        method: "POST",
-        body: formData,
-      });
+      if (examSubject) {
+        formData.append(
+          "examSubject",
+          examSubject
+        );
+      }
 
-      const responseText = await response.text();
+      if (examYear) {
+        formData.append(
+          "examYear",
+          String(examYear)
+        );
+      }
+
+      const response = await fetch(
+        "/api/pdf",
+        {
+          method: "POST",
+          body: formData,
+        }
+      );
+
+      const responseText =
+        await response.text();
 
       let data: any;
 
@@ -407,7 +516,9 @@ export default function PDFPage() {
           data.code === "PRO_REQUIRED"
         ) {
           setUpgradeRequired(true);
-          setMessage("此功能需要 PRO 會員才能使用。");
+          setMessage(
+            "此功能需要 PRO 會員才能使用。"
+          );
           return;
         }
 
@@ -425,7 +536,8 @@ export default function PDFPage() {
         );
       }
 
-      const parsedQuestions = data.questions || [];
+      const parsedQuestions =
+        data.questions || [];
 
       if (parsedQuestions.length === 0) {
         setMessage(
@@ -496,7 +608,9 @@ export default function PDFPage() {
           return question;
         }
 
-        const newOptions = [...question.options];
+        const newOptions = [
+          ...question.options,
+        ];
 
         newOptions[optionIndex] = value;
 
@@ -508,37 +622,44 @@ export default function PDFPage() {
     );
   }
 
-  function deleteQuestion(questionId: number) {
+  function deleteQuestion(
+    questionId: number
+  ) {
     setQuestions((current) =>
       current.filter(
-        (question) => question.id !== questionId
+        (question) =>
+          question.id !== questionId
       )
     );
   }
 
   function startQuiz() {
     if (questions.length === 0) {
-      setMessage("目前沒有可以刷的題目");
+      setMessage(
+        "目前沒有可以刷的題目"
+      );
       return;
     }
 
-    const invalidQuestion = questions.find(
-      (question) => {
+    const invalidQuestion =
+      questions.find((question) => {
         if (!question.question.trim()) {
           return true;
         }
 
-        const filledOptions = question.options.filter(
-          (option) => option.trim() !== ""
-        );
+        const filledOptions =
+          question.options.filter(
+            (option) => option.trim() !== ""
+          );
 
         return filledOptions.length < 2;
-      }
-    );
+      });
 
     if (invalidQuestion) {
       const index =
-        questions.indexOf(invalidQuestion);
+        questions.indexOf(
+          invalidQuestion
+        );
 
       setMessage(
         `第 ${index + 1} 題資料不完整，請先修正。`
@@ -569,22 +690,30 @@ export default function PDFPage() {
       )}`;
   }
 
-  function formatDate(dateString: string) {
+  function formatDate(
+    dateString: string
+  ) {
     const date = new Date(dateString);
 
-    return date.toLocaleString("zh-TW", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    return date.toLocaleString(
+      "zh-TW",
+      {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      }
+    );
   }
 
   return (
     <main className="min-h-screen bg-gray-50 px-4 py-10">
       <div className="mx-auto max-w-5xl">
-        <div className="mb-6 flex flex-wrap items-center gap-3">
+
+        {/* ==================== 頂部登入狀態 ==================== */}
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+
           <button
             type="button"
             onClick={() => {
@@ -605,41 +734,102 @@ export default function PDFPage() {
             ← 回首頁
           </button>
 
-          <button
-            type="button"
-            onClick={() => {
-              window.location.href = "/login";
-            }}
-            className="
-              rounded-lg
-              bg-blue-600
-              px-4
-              py-2
-              font-semibold
-              text-white
-              hover:bg-blue-700
-            "
-          >
-            登入
-          </button>
+          {sessionLoading ? (
+            <div className="rounded-xl bg-white px-5 py-3 shadow-sm">
+              <span className="text-sm text-gray-500">
+                正在確認登入狀態...
+              </span>
+            </div>
+          ) : isLoggedIn ? (
+            <div className="flex flex-wrap items-center gap-3">
 
-          <button
-            type="button"
-            onClick={() => {
-              window.location.href = "/register";
-            }}
-            className="
-              rounded-lg
-              bg-green-600
-              px-4
-              py-2
-              font-semibold
-              text-white
-              hover:bg-green-700
-            "
-          >
-            註冊
-          </button>
+              <div className="rounded-xl border border-gray-200 bg-white px-5 py-3 shadow-sm">
+                <div className="font-bold text-gray-900">
+                  {session.user.name ||
+                    session.user.email}
+                </div>
+
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-sm">
+                  <span className="font-semibold text-green-600">
+                    已登入
+                  </span>
+
+                  {subscriptionLoading ? (
+                    <span className="rounded-full bg-gray-100 px-3 py-1 text-gray-500">
+                      會員資料讀取中
+                    </span>
+                  ) : isPro ? (
+                    <span className="rounded-full bg-yellow-100 px-3 py-1 font-bold text-yellow-700">
+                      PRO 會員
+                    </span>
+                  ) : (
+                    <span className="rounded-full bg-gray-100 px-3 py-1 font-semibold text-gray-600">
+                      免費會員
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="
+                  rounded-lg
+                  border
+                  border-red-200
+                  bg-white
+                  px-4
+                  py-2
+                  font-semibold
+                  text-red-600
+                  hover:bg-red-50
+                "
+              >
+                登出
+              </button>
+
+            </div>
+          ) : (
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  window.location.href =
+                    "/login";
+                }}
+                className="
+                  rounded-lg
+                  bg-blue-600
+                  px-4
+                  py-2
+                  font-semibold
+                  text-white
+                  hover:bg-blue-700
+                "
+              >
+                登入
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  window.location.href =
+                    "/register";
+                }}
+                className="
+                  rounded-lg
+                  bg-green-600
+                  px-4
+                  py-2
+                  font-semibold
+                  text-white
+                  hover:bg-green-700
+                "
+              >
+                註冊
+              </button>
+            </div>
+          )}
         </div>
 
         <h1 className="text-4xl font-bold text-blue-900">
@@ -666,7 +856,9 @@ export default function PDFPage() {
             <button
               type="button"
               onClick={loadQuestionSets}
-              disabled={loadingQuestionSets}
+              disabled={
+                loadingQuestionSets
+              }
               className="
                 rounded-lg
                 border
@@ -689,86 +881,103 @@ export default function PDFPage() {
             <div className="mt-6 rounded-xl bg-gray-50 p-6 text-center text-gray-500">
               正在讀取題庫...
             </div>
-          ) : questionSets.length === 0 ? (
+          ) : questionSets.length ===
+            0 ? (
             <div className="mt-6 rounded-xl bg-gray-50 p-6 text-center text-gray-500">
               目前還沒有匯入任何題庫。
             </div>
           ) : (
             <div className="mt-6 space-y-4">
-              {questionSets.map((questionSet) => (
-                <div
-                  key={questionSet.id}
-                  className="
-                    rounded-xl
-                    border
-                    border-gray-200
-                    bg-gray-50
-                    p-5
-                    transition
-                    hover:shadow-md
-                  "
-                >
-                  <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                    <div>
-                      <h3 className="text-xl font-bold text-gray-900">
-                        {questionSet.name}
-                      </h3>
+              {questionSets.map(
+                (questionSet) => (
+                  <div
+                    key={questionSet.id}
+                    className="
+                      rounded-xl
+                      border
+                      border-gray-200
+                      bg-gray-50
+                      p-5
+                      transition
+                      hover:shadow-md
+                    "
+                  >
+                    <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                      <div>
+                        <h3 className="text-xl font-bold text-gray-900">
+                          {questionSet.name}
+                        </h3>
 
-                      {questionSet.filename && (
-                        <p className="mt-1 text-sm text-gray-500">
-                          {questionSet.filename}
-                        </p>
-                      )}
-
-                      <div className="mt-3 flex flex-wrap gap-2 text-sm">
-                        <span className="rounded-full bg-blue-100 px-3 py-1 font-semibold text-blue-700">
-                          {questionSet.total_questions} 題
-                        </span>
-
-                        {questionSet.exam_subject && (
-                          <span className="rounded-full bg-orange-100 px-3 py-1 font-semibold text-orange-700">
-                            {questionSet.exam_subject}
-                          </span>
+                        {questionSet.filename && (
+                          <p className="mt-1 text-sm text-gray-500">
+                            {
+                              questionSet.filename
+                            }
+                          </p>
                         )}
 
-                        {questionSet.exam_year && (
-                          <span className="rounded-full bg-yellow-100 px-3 py-1 font-semibold text-yellow-700">
-                            {questionSet.exam_year} 年
+                        <div className="mt-3 flex flex-wrap gap-2 text-sm">
+                          <span className="rounded-full bg-blue-100 px-3 py-1 font-semibold text-blue-700">
+                            {
+                              questionSet.total_questions
+                            }{" "}
+                            題
                           </span>
-                        )}
 
-                        <span className="rounded-full bg-purple-100 px-3 py-1 font-semibold text-purple-700">
-                          私人題庫
-                        </span>
+                          {questionSet.exam_subject && (
+                            <span className="rounded-full bg-orange-100 px-3 py-1 font-semibold text-orange-700">
+                              {
+                                questionSet.exam_subject
+                              }
+                            </span>
+                          )}
 
-                        <span className="rounded-full bg-gray-200 px-3 py-1 text-gray-700">
-                          匯入於{" "}
-                          {formatDate(questionSet.created_at)}
-                        </span>
+                          {questionSet.exam_year && (
+                            <span className="rounded-full bg-yellow-100 px-3 py-1 font-semibold text-yellow-700">
+                              {
+                                questionSet.exam_year
+                              }{" "}
+                              年
+                            </span>
+                          )}
+
+                          <span className="rounded-full bg-purple-100 px-3 py-1 font-semibold text-purple-700">
+                            私人題庫
+                          </span>
+
+                          <span className="rounded-full bg-gray-200 px-3 py-1 text-gray-700">
+                            匯入於{" "}
+                            {formatDate(
+                              questionSet.created_at
+                            )}
+                          </span>
+                        </div>
                       </div>
-                    </div>
 
-                    <button
-                      type="button"
-                      onClick={() =>
-                        startSavedQuestionSet(questionSet.id)
-                      }
-                      className="
-                        shrink-0
-                        rounded-lg
-                        bg-green-600
-                        px-5
-                        py-3
-                        font-bold
-                        text-white
-                        hover:bg-green-700
-                      "
-                    >
-                      開始刷題
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          startSavedQuestionSet(
+                            questionSet.id
+                          )
+                        }
+                        className="
+                          shrink-0
+                          rounded-lg
+                          bg-green-600
+                          px-5
+                          py-3
+                          font-bold
+                          text-white
+                          hover:bg-green-700
+                        "
+                      >
+                        開始刷題
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                )
+              )}
             </div>
           )}
         </div>
@@ -816,9 +1025,41 @@ export default function PDFPage() {
             </h2>
 
             <p className="mt-2 text-sm text-gray-500">
-              上傳含有選擇題文字的 PDF，系統會自動辨識題目與選項。
-              最大 20 MB。
+              上傳含有選擇題文字的 PDF，系統會自動辨識題目與選項。最大 20 MB。
             </p>
+
+            {!sessionLoading &&
+              !isLoggedIn && (
+                <div className="mt-5 rounded-xl border border-blue-200 bg-blue-50 p-5">
+                  <p className="font-bold text-blue-900">
+                    請先登入
+                  </p>
+
+                  <p className="mt-2 text-sm text-blue-800">
+                    登入後才能建立私人題庫。
+                  </p>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      window.location.href =
+                        "/login";
+                    }}
+                    className="
+                      mt-4
+                      rounded-lg
+                      bg-blue-600
+                      px-5
+                      py-2.5
+                      font-bold
+                      text-white
+                      hover:bg-blue-700
+                    "
+                  >
+                    前往登入
+                  </button>
+                </div>
+              )}
 
             <input
               type="file"
@@ -844,12 +1085,16 @@ export default function PDFPage() {
 
                 <p className="mt-1 text-sm text-blue-700">
                   檔案大小：
-                  {(file.size / 1024 / 1024).toFixed(2)} MB
+                  {(
+                    file.size /
+                    1024 /
+                    1024
+                  ).toFixed(2)}{" "}
+                  MB
                 </p>
               </div>
             )}
 
-            {/* 私人題庫 */}
             <div className="mt-6 rounded-xl border-2 border-purple-500 bg-purple-50 p-5">
               <div className="text-lg font-bold text-purple-900">
                 私人題庫
@@ -873,7 +1118,9 @@ export default function PDFPage() {
                 <select
                   value={examSubject}
                   onChange={(event) =>
-                    setExamSubject(event.target.value)
+                    setExamSubject(
+                      event.target.value
+                    )
                   }
                   className="
                     w-full
@@ -890,11 +1137,16 @@ export default function PDFPage() {
                     不指定國考科目
                   </option>
 
-                  {EXAM_SUBJECTS.map((subject) => (
-                    <option key={subject} value={subject}>
-                      {subject}
-                    </option>
-                  ))}
+                  {EXAM_SUBJECTS.map(
+                    (subject) => (
+                      <option
+                        key={subject}
+                        value={subject}
+                      >
+                        {subject}
+                      </option>
+                    )
+                  )}
                 </select>
               </div>
             </div>
@@ -914,7 +1166,9 @@ export default function PDFPage() {
                   onChange={(event) =>
                     setExamYear(
                       event.target.value
-                        ? Number(event.target.value)
+                        ? Number(
+                            event.target.value
+                          )
                         : ""
                     )
                   }
@@ -934,11 +1188,16 @@ export default function PDFPage() {
                     不指定年份
                   </option>
 
-                  {EXAM_YEARS.map((year) => (
-                    <option key={year} value={year}>
-                      {year} 年
-                    </option>
-                  ))}
+                  {EXAM_YEARS.map(
+                    (year) => (
+                      <option
+                        key={year}
+                        value={year}
+                      >
+                        {year} 年
+                      </option>
+                    )
+                  )}
                 </select>
               </div>
             )}
@@ -950,7 +1209,11 @@ export default function PDFPage() {
             <button
               type="button"
               onClick={handleUpload}
-              disabled={loading}
+              disabled={
+                loading ||
+                sessionLoading ||
+                !isLoggedIn
+              }
               className="
                 mt-6
                 rounded-lg
@@ -965,7 +1228,9 @@ export default function PDFPage() {
                 disabled:bg-gray-400
               "
             >
-              {loading ? "正在解析 PDF..." : "開始解析"}
+              {loading
+                ? "正在解析 PDF..."
+                : "開始解析"}
             </button>
 
             {message && (
@@ -981,8 +1246,7 @@ export default function PDFPage() {
                 </p>
 
                 <p className="mt-2 text-sm text-yellow-800">
-                  升級 PRO 後即可使用 PDF
-                  自動辨識與題庫匯入功能。
+                  升級 PRO 後即可使用 PDF 自動辨識與題庫匯入功能。
                 </p>
 
                 <button
@@ -998,7 +1262,8 @@ export default function PDFPage() {
                     hover:bg-yellow-700
                   "
                   onClick={() => {
-                    window.location.href = "/";
+                    window.location.href =
+                      "/";
                   }}
                 >
                   查看 PRO 方案
@@ -1016,8 +1281,7 @@ export default function PDFPage() {
             </h2>
 
             <p className="mt-2 text-sm text-gray-500">
-              PDF
-              格式無法辨識時，可以直接手動輸入題目。建立後只會保存到你的私人題庫。
+              PDF 格式無法辨識時，可以直接手動輸入題目。建立後只會保存到你的私人題庫。
             </p>
 
             <div className="mt-6">
@@ -1029,7 +1293,9 @@ export default function PDFPage() {
                 type="text"
                 value={manualSetName}
                 onChange={(event) =>
-                  setManualSetName(event.target.value)
+                  setManualSetName(
+                    event.target.value
+                  )
                 }
                 placeholder="例如：我的內科整理"
                 className="
@@ -1067,7 +1333,9 @@ export default function PDFPage() {
               <select
                 value={examSubject}
                 onChange={(event) =>
-                  setExamSubject(event.target.value)
+                  setExamSubject(
+                    event.target.value
+                  )
                 }
                 className="
                   mt-2
@@ -1085,11 +1353,16 @@ export default function PDFPage() {
                   不指定國考科目
                 </option>
 
-                {EXAM_SUBJECTS.map((subject) => (
-                  <option key={subject} value={subject}>
-                    {subject}
-                  </option>
-                ))}
+                {EXAM_SUBJECTS.map(
+                  (subject) => (
+                    <option
+                      key={subject}
+                      value={subject}
+                    >
+                      {subject}
+                    </option>
+                  )
+                )}
               </select>
             </div>
 
@@ -1104,7 +1377,9 @@ export default function PDFPage() {
                   onChange={(event) =>
                     setExamYear(
                       event.target.value
-                        ? Number(event.target.value)
+                        ? Number(
+                            event.target.value
+                          )
                         : ""
                     )
                   }
@@ -1124,18 +1399,26 @@ export default function PDFPage() {
                     不指定年份
                   </option>
 
-                  {EXAM_YEARS.map((year) => (
-                    <option key={year} value={year}>
-                      {year} 年
-                    </option>
-                  ))}
+                  {EXAM_YEARS.map(
+                    (year) => (
+                      <option
+                        key={year}
+                        value={year}
+                      >
+                        {year} 年
+                      </option>
+                    )
+                  )}
                 </select>
               </div>
             )}
 
             <div className="mt-8 space-y-6">
               {manualQuestions.map(
-                (question, questionIndex) => (
+                (
+                  question,
+                  questionIndex
+                ) => (
                   <div
                     key={questionIndex}
                     className="
@@ -1148,14 +1431,19 @@ export default function PDFPage() {
                   >
                     <div className="flex items-center justify-between">
                       <h3 className="text-xl font-bold text-gray-900">
-                        第 {questionIndex + 1} 題
+                        第{" "}
+                        {questionIndex + 1}{" "}
+                        題
                       </h3>
 
-                      {manualQuestions.length > 1 && (
+                      {manualQuestions.length >
+                        1 && (
                         <button
                           type="button"
                           onClick={() =>
-                            removeManualQuestion(questionIndex)
+                            removeManualQuestion(
+                              questionIndex
+                            )
                           }
                           className="
                             rounded-lg
@@ -1173,7 +1461,9 @@ export default function PDFPage() {
                     </div>
 
                     <textarea
-                      value={question.question}
+                      value={
+                        question.question
+                      }
                       onChange={(event) =>
                         updateManualQuestion(
                           questionIndex,
@@ -1200,40 +1490,50 @@ export default function PDFPage() {
 
                     <div className="mt-5 grid gap-3">
                       {question.options.map(
-                        (option, optionIndex) => (
+                        (
+                          option,
+                          optionIndex
+                        ) => (
                           <div
                             key={optionIndex}
                             className="flex items-center gap-3"
                           >
-                            <div className="
-                              flex
-                              h-9
-                              w-9
-                              shrink-0
-                              items-center
-                              justify-center
-                              rounded-full
-                              bg-blue-100
-                              font-bold
-                              text-blue-700
-                            ">
+                            <div
+                              className="
+                                flex
+                                h-9
+                                w-9
+                                shrink-0
+                                items-center
+                                justify-center
+                                rounded-full
+                                bg-blue-100
+                                font-bold
+                                text-blue-700
+                              "
+                            >
                               {String.fromCharCode(
-                                65 + optionIndex
+                                65 +
+                                  optionIndex
                               )}
                             </div>
 
                             <input
                               type="text"
                               value={option}
-                              onChange={(event) =>
+                              onChange={(
+                                event
+                              ) =>
                                 updateManualOption(
                                   questionIndex,
                                   optionIndex,
-                                  event.target.value
+                                  event.target
+                                    .value
                                 )
                               }
                               placeholder={`選項 ${String.fromCharCode(
-                                65 + optionIndex
+                                65 +
+                                  optionIndex
                               )}`}
                               className="
                                 w-full
@@ -1262,7 +1562,9 @@ export default function PDFPage() {
                         </label>
 
                         <select
-                          value={question.answer}
+                          value={
+                            question.answer
+                          }
                           onChange={(event) =>
                             updateManualAnswer(
                               questionIndex,
@@ -1285,10 +1587,21 @@ export default function PDFPage() {
                             尚未設定
                           </option>
 
-                          <option value="A">A</option>
-                          <option value="B">B</option>
-                          <option value="C">C</option>
-                          <option value="D">D</option>
+                          <option value="A">
+                            A
+                          </option>
+
+                          <option value="B">
+                            B
+                          </option>
+
+                          <option value="C">
+                            C
+                          </option>
+
+                          <option value="D">
+                            D
+                          </option>
                         </select>
                       </div>
 
@@ -1298,7 +1611,9 @@ export default function PDFPage() {
                         </label>
 
                         <textarea
-                          value={question.explanation}
+                          value={
+                            question.explanation
+                          }
                           onChange={(event) =>
                             updateManualExplanation(
                               questionIndex,
@@ -1348,7 +1663,11 @@ export default function PDFPage() {
               <button
                 type="button"
                 onClick={handleManualImport}
-                disabled={manualLoading}
+                disabled={
+                  manualLoading ||
+                  sessionLoading ||
+                  !isLoggedIn
+                }
                 className="
                   rounded-lg
                   bg-green-600
@@ -1413,127 +1732,146 @@ export default function PDFPage() {
             </div>
 
             <div className="space-y-6">
-              {questions.map((question, index) => (
-                <div
-                  key={`${question.id}-${index}`}
-                  className="rounded-2xl bg-white p-6 shadow"
-                >
-                  <div className="flex items-center justify-between">
-                    <p className="font-bold text-blue-600">
-                      第 {index + 1} 題
-                    </p>
+              {questions.map(
+                (question, index) => (
+                  <div
+                    key={`${question.id}-${index}`}
+                    className="rounded-2xl bg-white p-6 shadow"
+                  >
+                    <div className="flex items-center justify-between">
+                      <p className="font-bold text-blue-600">
+                        第 {index + 1} 題
+                      </p>
 
-                    <button
-                      type="button"
-                      onClick={() =>
-                        deleteQuestion(question.id)
-                      }
-                      className="
-                        rounded-lg
-                        px-3
-                        py-2
-                        text-sm
-                        font-semibold
-                        text-red-600
-                        hover:bg-red-50
-                      "
-                    >
-                      刪除
-                    </button>
-                  </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          deleteQuestion(
+                            question.id
+                          )
+                        }
+                        className="
+                          rounded-lg
+                          px-3
+                          py-2
+                          text-sm
+                          font-semibold
+                          text-red-600
+                          hover:bg-red-50
+                        "
+                      >
+                        刪除
+                      </button>
+                    </div>
 
-                  <div className="mt-4">
-                    <label className="text-sm font-semibold text-gray-600">
-                      題目
-                    </label>
+                    <div className="mt-4">
+                      <label className="text-sm font-semibold text-gray-600">
+                        題目
+                      </label>
 
-                    <textarea
-                      value={question.question}
-                      onChange={(event) =>
-                        updateQuestion(
-                          question.id,
-                          event.target.value
-                        )
-                      }
-                      rows={4}
-                      className="
-                        mt-2
-                        w-full
-                        rounded-lg
-                        border
-                        border-gray-300
-                        p-4
-                        text-lg
-                        font-semibold
-                        text-gray-900
-                        outline-none
-                        focus:border-blue-500
-                        focus:ring-2
-                        focus:ring-blue-100
-                      "
-                    />
-                  </div>
+                      <textarea
+                        value={
+                          question.question
+                        }
+                        onChange={(event) =>
+                          updateQuestion(
+                            question.id,
+                            event.target.value
+                          )
+                        }
+                        rows={4}
+                        className="
+                          mt-2
+                          w-full
+                          rounded-lg
+                          border
+                          border-gray-300
+                          p-4
+                          text-lg
+                          font-semibold
+                          text-gray-900
+                          outline-none
+                          focus:border-blue-500
+                          focus:ring-2
+                          focus:ring-blue-100
+                        "
+                      />
+                    </div>
 
-                  <div className="mt-5">
-                    <label className="text-sm font-semibold text-gray-600">
-                      選項
-                    </label>
+                    <div className="mt-5">
+                      <label className="text-sm font-semibold text-gray-600">
+                        選項
+                      </label>
 
-                    <div className="mt-2 space-y-3">
-                      {question.options.map(
-                        (option, optionIndex) => (
-                          <div
-                            key={optionIndex}
-                            className="flex items-start gap-3"
-                          >
-                            <div className="
-                              mt-3
-                              flex
-                              h-8
-                              w-8
-                              shrink-0
-                              items-center
-                              justify-center
-                              rounded-full
-                              bg-blue-100
-                              font-bold
-                              text-blue-700
-                            ">
-                              {String.fromCharCode(
-                                65 + optionIndex
-                              )}
-                            </div>
-
-                            <textarea
-                              value={option}
-                              onChange={(event) =>
-                                updateOption(
-                                  question.id,
-                                  optionIndex,
-                                  event.target.value
-                                )
+                      <div className="mt-2 space-y-3">
+                        {question.options.map(
+                          (
+                            option,
+                            optionIndex
+                          ) => (
+                            <div
+                              key={
+                                optionIndex
                               }
-                              rows={2}
-                              className="
-                                w-full
-                                rounded-lg
-                                border
-                                border-gray-300
-                                p-3
-                                text-gray-900
-                                outline-none
-                                focus:border-blue-500
-                                focus:ring-2
-                                focus:ring-blue-100
-                              "
-                            />
-                          </div>
-                        )
-                      )}
+                              className="flex items-start gap-3"
+                            >
+                              <div
+                                className="
+                                  mt-3
+                                  flex
+                                  h-8
+                                  w-8
+                                  shrink-0
+                                  items-center
+                                  justify-center
+                                  rounded-full
+                                  bg-blue-100
+                                  font-bold
+                                  text-blue-700
+                                "
+                              >
+                                {String.fromCharCode(
+                                  65 +
+                                    optionIndex
+                                )}
+                              </div>
+
+                              <textarea
+                                value={
+                                  option
+                                }
+                                onChange={(
+                                  event
+                                ) =>
+                                  updateOption(
+                                    question.id,
+                                    optionIndex,
+                                    event.target
+                                      .value
+                                  )
+                                }
+                                rows={2}
+                                className="
+                                  w-full
+                                  rounded-lg
+                                  border
+                                  border-gray-300
+                                  p-3
+                                  text-gray-900
+                                  outline-none
+                                  focus:border-blue-500
+                                  focus:ring-2
+                                  focus:ring-blue-100
+                                "
+                              />
+                            </div>
+                          )
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                )
+              )}
             </div>
           </div>
         )}
