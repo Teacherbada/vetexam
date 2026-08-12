@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { neon } from "@neondatabase/serverless";
 import { createHash } from "crypto";
+import { auth } from "@/lib/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,6 +37,60 @@ export async function POST(request: Request) {
       );
     }
 
+    /*
+     * 取得 Better Auth 登入狀態
+     */
+    const session = await auth.api.getSession({
+      headers: request.headers,
+    });
+
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        {
+          error: "請先登入才能上傳 PDF。",
+        },
+        { status: 401 }
+      );
+    }
+
+    const userId = session.user.id;
+
+    const sql = neon(databaseUrl);
+
+    /*
+     * 檢查目前使用者的會員方案
+     */
+    const subscriptions = await sql`
+      SELECT
+        plan,
+        status,
+        expires_at
+      FROM subscriptions
+      WHERE user_id = ${userId}
+      LIMIT 1
+    `;
+
+    const subscription = subscriptions[0];
+
+    const isPro =
+      subscription?.plan === "pro" &&
+      subscription?.status === "active" &&
+      (
+        subscription?.expires_at === null ||
+        subscription?.expires_at === undefined ||
+        new Date(subscription.expires_at) > new Date()
+      );
+
+    if (!isPro) {
+      return NextResponse.json(
+        {
+          error: "目前只有 PRO 會員可以上傳 PDF 題庫。",
+          code: "PRO_REQUIRED",
+        },
+        { status: 403 }
+      );
+    }
+
     const formData = await request.formData();
 
     const file = formData.get("file");
@@ -54,6 +109,7 @@ export async function POST(request: Request) {
       visibilityValue === "public" ? "public" : "private";
 
     console.log("PDF API: 題庫可見性", visibility);
+    console.log("PDF API: owner_id", userId);
 
     if (file.type !== "application/pdf") {
       return NextResponse.json(
@@ -182,8 +238,6 @@ export async function POST(request: Request) {
       );
     }
 
-    const sql = neon(databaseUrl);
-
     /*
      * 檢查相同 PDF 是否已經匯入。
      */
@@ -195,7 +249,8 @@ export async function POST(request: Request) {
         total_questions,
         created_at,
         file_hash,
-        visibility
+        visibility,
+        owner_id
       FROM question_sets
       WHERE file_hash = ${fileHash}
       LIMIT 1
@@ -208,6 +263,21 @@ export async function POST(request: Request) {
         "PDF API: 發現重複 PDF",
         existingSet.id
       );
+
+      /*
+       * 私人題庫只有建立者可以使用。
+       */
+      if (
+        existingSet.visibility === "private" &&
+        existingSet.owner_id !== userId
+      ) {
+        return NextResponse.json(
+          {
+            error: "這份 PDF 已經存在於其他使用者的私人題庫中。",
+          },
+          { status: 403 }
+        );
+      }
 
       const existingQuestions = await sql`
         SELECT
@@ -267,16 +337,18 @@ export async function POST(request: Request) {
         filename,
         file_hash,
         total_questions,
-        visibility
+        visibility,
+        owner_id
       )
       VALUES (
         ${setName},
         ${file.name},
         ${fileHash},
         ${questions.length},
-        ${visibility}
+        ${visibility},
+        ${userId}
       )
-      RETURNING id, visibility
+      RETURNING id, visibility, owner_id
     `;
 
     const questionSetId = Number(
@@ -287,7 +359,9 @@ export async function POST(request: Request) {
       "PDF API: 建立題庫",
       questionSetId,
       "visibility:",
-      insertedSets[0].visibility
+      insertedSets[0].visibility,
+      "owner_id:",
+      insertedSets[0].owner_id
     );
 
     /*
@@ -334,6 +408,7 @@ export async function POST(request: Request) {
       message: "PDF 匯入成功，題目已永久保存。",
       questionSetId,
       visibility,
+      ownerId: userId,
       total: questions.length,
       questions,
       textLength: text.length,
