@@ -11,31 +11,15 @@ export async function GET(request: Request) {
 
     if (!databaseUrl) {
       return NextResponse.json(
-        {
-          error: "伺服器資料庫設定錯誤",
-        },
-        {
-          status: 500,
-        }
+        { error: "伺服器資料庫設定錯誤" },
+        { status: 500 }
       );
     }
 
     const sql = neon(databaseUrl);
-
-    /*
-     * 取得目前登入使用者
-     *
-     * 未登入：
-     * → 只能看到公開題庫
-     *
-     * 已登入：
-     * → 可以看到所有公開題庫
-     * → 以及自己建立的私人題庫
-     */
     const session = await auth.api.getSession({
       headers: request.headers,
     });
-
     const userId = session?.user?.id ?? null;
 
     let questionSets;
@@ -50,6 +34,7 @@ export async function GET(request: Request) {
           created_at,
           file_hash,
           visibility,
+          owner_id,
           exam_subject,
           exam_year
         FROM question_sets
@@ -84,22 +69,110 @@ export async function GET(request: Request) {
       questionSets,
     });
   } catch (error) {
-    console.error(
-      "Question sets API error:",
-      error
-    );
+    console.error("Question sets API error:", error);
 
     return NextResponse.json(
       {
         error: "取得題庫失敗",
         detail:
-          error instanceof Error
-            ? error.message
-            : "未知錯誤",
+          error instanceof Error ? error.message : "未知錯誤",
       },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const databaseUrl = process.env.DATABASE_URL;
+
+    if (!databaseUrl) {
+      return NextResponse.json(
+        { error: "伺服器資料庫設定錯誤" },
+        { status: 500 }
+      );
+    }
+
+    const session = await auth.api.getSession({
+      headers: request.headers,
+    });
+
+    const userId = session?.user?.id;
+
+    if (!userId) {
+      return NextResponse.json(
+        { error: "請先登入。" },
+        { status: 401 }
+      );
+    }
+
+    const body = await request.json();
+    const questionSetId = Number(body?.questionSetId);
+
+    if (!Number.isInteger(questionSetId) || questionSetId <= 0) {
+      return NextResponse.json(
+        { error: "無效的題庫 ID。" },
+        { status: 400 }
+      );
+    }
+
+    const sql = neon(databaseUrl);
+
+    const adminUserId = process.env.ADMIN_USER_ID;
+    const isAdmin = Boolean(adminUserId && adminUserId === userId);
+
+    const sets = await sql`
+      SELECT id, visibility, owner_id, name
+      FROM question_sets
+      WHERE id = ${questionSetId}
+      LIMIT 1
+    `;
+
+    if (sets.length === 0) {
+      return NextResponse.json(
+        { error: "找不到這個題庫。" },
+        { status: 404 }
+      );
+    }
+
+    const questionSet = sets[0];
+    const canDelete =
+      questionSet.owner_id === userId ||
+      (isAdmin && questionSet.visibility === "public");
+
+    if (!canDelete) {
+      return NextResponse.json(
+        { error: "你沒有權限刪除這個題庫。" },
+        { status: 403 }
+      );
+    }
+
+    // 先刪除題目，再刪除題庫，避免資料庫沒有 ON DELETE CASCADE 時留下孤兒資料。
+    await sql`
+      DELETE FROM questions
+      WHERE question_set_id = ${questionSetId}
+    `;
+
+    await sql`
+      DELETE FROM question_sets
+      WHERE id = ${questionSetId}
+    `;
+
+    return NextResponse.json({
+      success: true,
+      message: `題庫「${questionSet.name}" 已刪除。`,
+      questionSetId,
+    });
+  } catch (error) {
+    console.error("Delete question set error:", error);
+
+    return NextResponse.json(
       {
-        status: 500,
-      }
+        error: "刪除題庫失敗",
+        detail:
+          error instanceof Error ? error.message : "未知錯誤",
+      },
+      { status: 500 }
     );
   }
 }
