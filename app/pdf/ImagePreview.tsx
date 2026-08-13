@@ -52,7 +52,7 @@ export default function ImagePreview({ file, pageNumber, questionNumber, onImage
   if (!src) return null;
 
   return (
-    <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 p-3">
+    <div className="mt-4 w-full">
       <img
         src={src}
         alt={`第 ${questionNumber} 題 PDF 圖片`}
