@@ -45,7 +45,7 @@ const EXAM_SUBJECTS = [
 
 const EXAM_YEARS = Array.from(
   { length: 10 },
-  (_, index) => 115 - index
+  (_, index) => new Date().getFullYear() - 1911 - index
 );
 
 export default function PDFPage() {
@@ -532,7 +532,10 @@ export default function PDFPage() {
               visibility:
                 "private",
               examSubject,
-              examYear,
+              examYear:
+  examYear === ""
+    ? ""
+    : Number(examYear) + 1911,
               questions:
                 manualQuestions,
             }),
@@ -653,11 +656,11 @@ export default function PDFPage() {
       }
 
       if (examYear) {
-        formData.append(
-          "exam_year",
-          String(examYear)
-        );
-      }
+  formData.append(
+    "examYear",
+    String(Number(examYear) + 1911)
+  );
+}
 
       const response =
         await fetch(
