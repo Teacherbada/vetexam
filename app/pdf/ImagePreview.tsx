@@ -2,9 +2,14 @@
 
 import { useEffect, useState } from "react";
 
-type Props = { file: File | null; pageNumber?: number; questionNumber: number };
+type Props = {
+  file: File | null;
+  pageNumber?: number;
+  questionNumber: number;
+  onImageLoaded?: (imageDataUrl: string) => void;
+};
 
-export default function ImagePreview({ file, pageNumber, questionNumber }: Props) {
+export default function ImagePreview({ file, pageNumber, questionNumber, onImageLoaded }: Props) {
   const [src, setSrc] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -25,8 +30,12 @@ export default function ImagePreview({ file, pageNumber, questionNumber }: Props
         const data = await response.json();
         if (!response.ok) throw new Error(data.detail || data.error || "圖片擷取失敗");
         if (!cancelled) {
-          if (data.imageDataUrl) setSrc(data.imageDataUrl);
-          else setError("找到了圖片位置，但目前無法擷取圖片內容。");
+          if (data.imageDataUrl) {
+            setSrc(data.imageDataUrl);
+            onImageLoaded?.(data.imageDataUrl);
+          } else {
+            setError("找到了圖片位置，但目前無法擷取圖片內容。");
+          }
         }
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : "圖片擷取失敗");
@@ -36,7 +45,7 @@ export default function ImagePreview({ file, pageNumber, questionNumber }: Props
     }
     load();
     return () => { cancelled = true; };
-  }, [file, pageNumber, questionNumber]);
+  }, [file, pageNumber, questionNumber, onImageLoaded]);
 
   if (loading) return <div className="mt-4 rounded-2xl border border-dashed border-amber-200 bg-amber-50/60 p-5 text-sm text-amber-700">🖼 正在載入圖片預覽…</div>;
   if (error) return <div className="mt-4 rounded-2xl border border-dashed border-amber-200 bg-amber-50/60 p-5 text-sm text-amber-700">🖼 {error}</div>;
