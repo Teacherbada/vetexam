@@ -13,7 +13,9 @@ export default function ImagePreview({ file, pageNumber, questionNumber }: Props
     let cancelled = false;
     async function load() {
       if (!file || !pageNumber || !questionNumber) return;
-      setLoading(true); setError(""); setSrc(null);
+      setLoading(true);
+      setError("");
+      setSrc(null);
       try {
         const fd = new FormData();
         fd.append("file", file);
@@ -40,5 +42,13 @@ export default function ImagePreview({ file, pageNumber, questionNumber }: Props
   if (error) return <div className="mt-4 rounded-2xl border border-dashed border-amber-200 bg-amber-50/60 p-5 text-sm text-amber-700">🖼 {error}</div>;
   if (!src) return null;
 
-  return <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 p-3"><img src={src} alt={`第 ${questionNumber} 題 PDF 圖片`} className="mx-auto max-h-[520px] max-w-full rounded-xl object-contain" /></div>;
+  return (
+    <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 p-3">
+      <img
+        src={src}
+        alt={`第 ${questionNumber} 題 PDF 圖片`}
+        className="mx-auto block h-auto w-auto max-w-full rounded-xl object-contain"
+      />
+    </div>
+  );
 }
