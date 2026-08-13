@@ -24,14 +24,15 @@ function ImagePreview({ file, pageNumber, questionNumber, onImageLoaded }: Props
     loadedKeyRef.current = loadKey;
 
     let cancelled = false;
-    async function load() {
+
+    async function load(pdfFile: File, pdfPageNumber: number, pdfQuestionNumber: number) {
       setLoading(true);
       setError("");
       try {
         const fd = new FormData();
-        fd.append("file", currentFile);
-        fd.append("pageNumber", String(pageNumber));
-        fd.append("questionNumber", String(questionNumber));
+        fd.append("file", pdfFile);
+        fd.append("pageNumber", String(pdfPageNumber));
+        fd.append("questionNumber", String(pdfQuestionNumber));
         const response = await fetch("/api/pdf/images", { method: "POST", body: fd });
         const data = await response.json();
         if (!response.ok) throw new Error(data.detail || data.error || "圖片擷取失敗");
@@ -50,7 +51,7 @@ function ImagePreview({ file, pageNumber, questionNumber, onImageLoaded }: Props
       }
     }
 
-    load();
+    load(currentFile, pageNumber, questionNumber);
     return () => { cancelled = true; };
   }, [file, pageNumber, questionNumber, onImageLoaded]);
 
