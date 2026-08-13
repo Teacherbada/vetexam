@@ -125,15 +125,24 @@ async function renderPdfRegion(pdfjsLib: any, page: any, image: ImageAsset, view
     viewport: renderViewport,
   }).promise;
 
-  const cropLeft = Math.max(0, Math.floor((image.x - RENDER_PADDING) * RENDER_SCALE));
-  const cropTop = Math.max(0, Math.floor((image.y - RENDER_PADDING) * RENDER_SCALE));
+  const imageTop = image.y - image.height / 2;
+  const imageBottom = image.y + image.height / 2;
+
+  const cropLeft = Math.max(
+    0,
+    Math.floor((image.x - RENDER_PADDING) * RENDER_SCALE),
+  );
+  const cropTop = Math.max(
+    0,
+    Math.floor((imageTop - RENDER_PADDING) * RENDER_SCALE),
+  );
   const cropRight = Math.min(
     pageCanvas.width,
     Math.ceil((image.x + image.width + RENDER_PADDING) * RENDER_SCALE),
   );
   const cropBottom = Math.min(
     pageCanvas.height,
-    Math.ceil((image.y + image.height + RENDER_PADDING + 24) * RENDER_SCALE),
+    Math.ceil((imageBottom + RENDER_PADDING + 24) * RENDER_SCALE),
   );
 
   const cropWidth = cropRight - cropLeft;
