@@ -80,7 +80,16 @@ export async function POST(request: Request) {
       };
     });
 
-    const invalid = normalizedQuestions.find((q) => !q.question || !q.optionA || !q.optionB || !q.optionC || !q.optionD);
+    const invalid = normalizedQuestions.find(
+      (q: {
+        number: number;
+        question: string;
+        optionA: string;
+        optionB: string;
+        optionC: string;
+        optionD: string;
+      }) => !q.question || !q.optionA || !q.optionB || !q.optionC || !q.optionD
+    );
     if (invalid) return NextResponse.json({ error: `第 ${invalid.number} 題資料不完整，請先檢查題目與四個選項。` }, { status: 400 });
 
     const sql = neon(databaseUrl);
