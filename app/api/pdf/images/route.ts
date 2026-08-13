@@ -8,6 +8,8 @@ export const dynamic = "force-dynamic";
 type ImageAsset = { y: number; dataUrl: string };
 type Anchor = { number: number; y: number };
 
+const IMAGE_PADDING = 8;
+
 export async function POST(request: Request) {
   try {
     const session = await auth.api.getSession({ headers: request.headers });
@@ -131,13 +133,39 @@ function imageObjectToDataUrl(image: any): string | null {
     }
   } else return null;
 
-  const rowSize = width * 4;
-  const scanlines = new Uint8Array((rowSize + 1) * height);
-  for (let y = 0; y < height; y++) { const row = y * (rowSize + 1); scanlines[row] = 0; scanlines.set(rgba.subarray(y * rowSize, (y + 1) * rowSize), row + 1); }
+  const paddedWidth = width + IMAGE_PADDING * 2;
+  const paddedHeight = height + IMAGE_PADDING * 2;
+  const rowSize = paddedWidth * 4;
+  const scanlines = new Uint8Array((rowSize + 1) * paddedHeight);
+
+  for (let y = 0; y < paddedHeight; y++) {
+    const row = y * (rowSize + 1);
+    scanlines[row] = 0;
+    if (y < IMAGE_PADDING || y >= IMAGE_PADDING + height) {
+      for (let x = 0; x < paddedWidth; x++) {
+        const d = row + 1 + x * 4;
+        scanlines[d + 3] = 0;
+      }
+      continue;
+    }
+    const sourceRow = (y - IMAGE_PADDING) * width * 4;
+    for (let x = 0; x < paddedWidth; x++) {
+      const d = row + 1 + x * 4;
+      if (x < IMAGE_PADDING || x >= IMAGE_PADDING + width) {
+        scanlines[d + 3] = 0;
+      } else {
+        const s = sourceRow + (x - IMAGE_PADDING) * 4;
+        scanlines[d] = rgba[s];
+        scanlines[d + 1] = rgba[s + 1];
+        scanlines[d + 2] = rgba[s + 2];
+        scanlines[d + 3] = rgba[s + 3];
+      }
+    }
+  }
 
   const png = new Uint8Array([
     137,80,78,71,13,10,26,10,
-    ...pngChunk("IHDR", new Uint8Array([width >>> 24, width >>> 16, width >>> 8, width, height >>> 24, height >>> 16, height >>> 8, height, 8, 6, 0, 0, 0])),
+    ...pngChunk("IHDR", new Uint8Array([paddedWidth >>> 24, paddedWidth >>> 16, paddedWidth >>> 8, paddedWidth, paddedHeight >>> 24, paddedHeight >>> 16, paddedHeight >>> 8, paddedHeight, 8, 6, 0, 0, 0])),
     ...pngChunk("IDAT", Uint8Array.from(deflateSync(scanlines))),
     ...pngChunk("IEND", new Uint8Array()),
   ]);
