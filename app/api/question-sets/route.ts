@@ -5,6 +5,18 @@ import { auth } from "@/lib/auth";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+type NormalizedQuestion = {
+  number: number;
+  subject: string;
+  question: string;
+  optionA: string;
+  optionB: string;
+  optionC: string;
+  optionD: string;
+  answer: string;
+  explanation: string;
+};
+
 export async function GET(request: Request) {
   try {
     const databaseUrl = process.env.DATABASE_URL;
@@ -65,7 +77,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "目前只有管理員可以建立公開國考題庫。", code: "ADMIN_REQUIRED" }, { status: 403 });
     }
 
-    const normalizedQuestions = questions.map((q: any, index: number) => {
+    const normalizedQuestions: NormalizedQuestion[] = questions.map((q: any, index: number) => {
       const options = Array.isArray(q?.options) ? q.options : [];
       return {
         number: index + 1,
@@ -81,14 +93,7 @@ export async function POST(request: Request) {
     });
 
     const invalid = normalizedQuestions.find(
-      (q: {
-        number: number;
-        question: string;
-        optionA: string;
-        optionB: string;
-        optionC: string;
-        optionD: string;
-      }) => !q.question || !q.optionA || !q.optionB || !q.optionC || !q.optionD
+      (q: NormalizedQuestion) => !q.question || !q.optionA || !q.optionB || !q.optionC || !q.optionD
     );
     if (invalid) return NextResponse.json({ error: `第 ${invalid.number} 題資料不完整，請先檢查題目與四個選項。` }, { status: 400 });
 
@@ -121,7 +126,7 @@ export async function POST(request: Request) {
     if (!questionSetId) throw new Error("建立題庫失敗，沒有取得題庫 ID。");
 
     await sql.transaction(
-      normalizedQuestions.map((q) => sql`
+      normalizedQuestions.map((q: NormalizedQuestion) => sql`
         INSERT INTO questions
           (question_set_id, question_number, subject, question, option_a, option_b, option_c, option_d, answer, explanation)
         VALUES
