@@ -70,7 +70,6 @@ export async function POST(request: Request) {
 
     let fullText = "";
     const imagePages = new Set<number>();
-    const imageQuestionKeys = new Set<string>();
     const pageAnchors = new Map<number, PageQuestionAnchor[]>();
     const pageImages = new Map<number, ImagePosition[]>();
 
@@ -94,8 +93,7 @@ export async function POST(request: Request) {
           width: Number(item.width ?? 0),
         }));
 
-      const anchors = getQuestionAnchors(rawItems);
-      pageAnchors.set(pageNumber, anchors);
+      pageAnchors.set(pageNumber, getQuestionAnchors(rawItems));
 
       const items = rawItems.sort((a, b) => Math.abs(a.y - b.y) <= 3 ? a.x - b.x : b.y - a.y);
       const lines: Array<{ y: number; items: Array<{ text: string; x: number; width: number }> }> = [];
@@ -108,7 +106,6 @@ export async function POST(request: Request) {
           lines.push({ y: item.y, items: [{ text: item.text, x: item.x, width: item.width }] });
         }
       }
-
       lines.sort((a, b) => b.y - a.y);
       const pageText = lines.map((line) => {
         let result = "";
@@ -120,7 +117,6 @@ export async function POST(request: Request) {
         }
         return result.trim();
       }).filter(Boolean).join("\n");
-
       fullText += `\n===== PDF PAGE ${pageNumber} =====\n${pageText}\n`;
     }
 
@@ -129,11 +125,7 @@ export async function POST(request: Request) {
 
     const questions = parseQuestions(text, imagePages, pageAnchors, pageImages);
     if (questions.length === 0) {
-      return NextResponse.json({
-        error: "沒有辨識到選擇題。請確認 PDF 題目格式。",
-        detail: "目前已放寬國考常見的 1.、1、(1)、1) 與 A.、A、(A)、A) 格式。如果這份 PDF 仍無法辨識，請把該 PDF 上傳給我，我可以依實際文字層格式再調整。",
-        textPreview: text.substring(0, 5000),
-      }, { status: 400 });
+      return NextResponse.json({ error: "沒有辨識到選擇題。請確認 PDF 題目格式。", detail: "目前已放寬國考常見的 1.、1、(1)、1) 與 A.、A、(A)、A) 格式。", textPreview: text.substring(0, 5000) }, { status: 400 });
     }
 
     const imageQuestionCount = questions.filter((question) => question.hasImage).length;
@@ -175,39 +167,21 @@ function getImagePositions(pdfjsLib: any, operatorList: any, viewport: any): Ima
     pdfjsLib.OPS.paintImageXObjectRepeat,
     pdfjsLib.OPS.paintJpegXObject,
   ].filter((value): value is number => typeof value === "number"));
-
   const positions: ImagePosition[] = [];
   let ctm = [1, 0, 0, 1, 0, 0];
   const stack: number[][] = [];
-
   for (let i = 0; i < operatorList.fnArray.length; i++) {
-    const fn = operatorList.fnArray[i];
-    const args = operatorList.argsArray[i] ?? [];
-
-    if (fn === pdfjsLib.OPS.save) {
-      stack.push([...ctm]);
-      continue;
-    }
-    if (fn === pdfjsLib.OPS.restore) {
-      ctm = stack.pop() ?? ctm;
-      continue;
-    }
-    if (fn === pdfjsLib.OPS.transform && args.length >= 6) {
-      ctm = pdfjsLib.Util.transform(ctm, args.slice(0, 6));
-      continue;
-    }
+    const fn = operatorList.fnArray[i], args = operatorList.argsArray[i] ?? [];
+    if (fn === pdfjsLib.OPS.save) { stack.push([...ctm]); continue; }
+    if (fn === pdfjsLib.OPS.restore) { ctm = stack.pop() ?? ctm; continue; }
+    if (fn === pdfjsLib.OPS.transform && args.length >= 6) { ctm = pdfjsLib.Util.transform(ctm, args.slice(0, 6)); continue; }
     if (!imageOps.has(fn)) continue;
-
     try {
       const transform = pdfjsLib.Util.transform(viewport.transform, ctm);
-      const p1 = pdfjsLib.Util.applyTransform([0, 0], transform);
-      const p2 = pdfjsLib.Util.applyTransform([1, 1], transform);
+      const p1 = pdfjsLib.Util.applyTransform([0, 0], transform), p2 = pdfjsLib.Util.applyTransform([1, 1], transform);
       positions.push({ y: (p1[1] + p2[1]) / 2 });
-    } catch {
-      positions.push({ y: 0 });
-    }
+    } catch { positions.push({ y: 0 }); }
   }
-
   return positions.filter((position) => Number.isFinite(position.y));
 }
 
@@ -223,116 +197,57 @@ function getQuestionAnchors(items: Array<{ text: string; x: number; y: number }>
   return anchors;
 }
 
-function parseQuestions(
-  text: string,
-  imagePages: Set<number>,
-  pageAnchors: Map<number, PageQuestionAnchor[]>,
-  pageImages: Map<number, ImagePosition[]>,
-): ParsedQuestion[] {
+function parseQuestions(text: string, imagePages: Set<number>, pageAnchors: Map<number, PageQuestionAnchor[]>, pageImages: Map<number, ImagePosition[]>): ParsedQuestion[] {
   const normalized = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").replace(/\u00a0/g, " ").replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
   const questionStartRegex = /^\s*(?:[（(]\s*)?(\d{1,3})(?:\s*[）)])?\s*(?:[.、．:：]|(?=\S))\s*/gm;
   const matches = [...normalized.matchAll(questionStartRegex)].filter((match) => {
     const prefix = normalized.slice(Math.max(0, (match.index ?? 0) - 2), (match.index ?? 0));
     return (match.index ?? 0) === 0 || /\n/.test(prefix);
   });
-
   const questions: ParsedQuestion[] = [];
   for (let index = 0; index < matches.length; index++) {
-    const match = matches[index];
-    const number = Number(match[1]);
+    const match = matches[index], number = Number(match[1]);
     if (number < 1 || number > 999) continue;
-
-    const start = (match.index ?? 0) + match[0].length;
-    const end = matches[index + 1]?.index ?? normalized.length;
-    const content = normalized.substring(start, end).trim();
-    const parsed = parseQuestionContent(number, content);
+    const start = (match.index ?? 0) + match[0].length, end = matches[index + 1]?.index ?? normalized.length;
+    const parsed = parseQuestionContent(number, normalized.substring(start, end).trim());
     if (!parsed) continue;
-
-    const before = normalized.slice(0, match.index ?? 0);
-    const pageMatches = [...before.matchAll(/===== PDF PAGE (\d+) =====/g)];
+    const before = normalized.slice(0, match.index ?? 0), pageMatches = [...before.matchAll(/===== PDF PAGE (\d+) =====/g)];
     const pageNumber = pageMatches.length ? Number(pageMatches[pageMatches.length - 1][1]) : undefined;
     parsed.pageNumber = pageNumber;
-
-    if (pageNumber && imagePages.has(pageNumber)) {
-      const anchors = pageAnchors.get(pageNumber) ?? [];
-      const images = pageImages.get(pageNumber) ?? [];
-      if (isImageNearQuestion(number, anchors, images)) parsed.hasImage = true;
-    } else {
-      parsed.hasImage = false;
-    }
-
+    parsed.hasImage = !!(pageNumber && imagePages.has(pageNumber) && isImageNearQuestion(number, pageAnchors.get(pageNumber) ?? [], pageImages.get(pageNumber) ?? []));
     questions.push(parsed);
   }
-
   const seen = new Set<string>();
-  return questions.filter((q) => {
-    const key = `${q.id}|${q.question}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  }).sort((a, b) => a.id - b.id);
+  return questions.filter((q) => { const key = `${q.id}|${q.question}`; if (seen.has(key)) return false; seen.add(key); return true; }).sort((a, b) => a.id - b.id);
 }
 
 function isImageNearQuestion(questionNumber: number, anchors: PageQuestionAnchor[], images: ImagePosition[]): boolean {
   if (!anchors.length || !images.length) return false;
-
   const sameQuestion = anchors.filter((anchor) => anchor.number === questionNumber);
   if (!sameQuestion.length) return false;
-
-  const target = sameQuestion[0];
-  const ordered = [...anchors].sort((a, b) => b.y - a.y);
+  const target = sameQuestion[0], ordered = [...anchors].sort((a, b) => b.y - a.y);
   const targetIndex = ordered.findIndex((anchor) => anchor.number === questionNumber && Math.abs(anchor.y - target.y) < 0.5);
   const previous = targetIndex > 0 ? ordered[targetIndex - 1] : undefined;
   const next = targetIndex >= 0 && targetIndex < ordered.length - 1 ? ordered[targetIndex + 1] : undefined;
-
-  // PDF.js text coordinates are device-space coordinates: smaller Y is visually higher.
-  // An image belongs to this question when it falls between this question's start and
-  // the next question's start. For an image above the first question, allow a small
-  // nearest-anchor window so image-first question layouts still work.
-  const lower = target.y;
-  const upper = previous?.y ?? target.y - 120;
-  const nextBoundary = next?.y ?? target.y + 5000;
-
-  return images.some((image) => {
-    const y = image.y;
-    if (targetIndex === 0) return y <= nextBoundary + 40;
-    return y <= upper + 20 && y >= nextBoundary - 20;
-  });
+  const upper = previous?.y ?? target.y - 120, nextBoundary = next?.y ?? target.y + 5000;
+  return images.some((image) => { const y = image.y; if (targetIndex === 0) return y <= nextBoundary + 40; return y <= upper + 20 && y >= nextBoundary - 20; });
 }
 
 function parseQuestionContent(questionNumber: number, content: string): ParsedQuestion | null {
   if (!content) return null;
   const optionRegex = /^\s*(?:[（(]\s*)?([A-DＡ-Ｄ])\s*(?:[）)])?\s*(?:[.、．:：]|(?=\S))\s*/gim;
-  const optionMatches = [...content.matchAll(optionRegex)].filter((m) => {
-    const index = m.index ?? 0;
-    return index === 0 || /\n/.test(content.slice(Math.max(0, index - 2), index));
-  });
+  const optionMatches = [...content.matchAll(optionRegex)].filter((m) => { const index = m.index ?? 0; return index === 0 || /\n/.test(content.slice(Math.max(0, index - 2), index)); });
   if (optionMatches.length < 2) return null;
-
-  const firstIndex = optionMatches[0].index;
-  if (firstIndex == null) return null;
-  const questionText = clean(content.substring(0, firstIndex));
-  if (!questionText || questionText.length < 2) return null;
-
+  const firstIndex = optionMatches[0].index; if (firstIndex == null) return null;
+  const questionText = clean(content.substring(0, firstIndex)); if (!questionText || questionText.length < 2) return null;
   const options: string[] = [];
   for (let i = 0; i < optionMatches.length; i++) {
-    const start = (optionMatches[i].index ?? 0) + optionMatches[i][0].length;
-    const end = optionMatches[i + 1]?.index ?? content.length;
+    const start = (optionMatches[i].index ?? 0) + optionMatches[i][0].length, end = optionMatches[i + 1]?.index ?? content.length;
     options.push(clean(content.substring(start, end)));
   }
   if (options.filter(Boolean).length < 2) return null;
   while (options.length < 4) options.push("");
-
-  return {
-    id: questionNumber,
-    subject: "PDF 題庫",
-    question: questionText,
-    options: options.slice(0, 4),
-    answer: "",
-    explanation: "",
-  };
+  return { id: questionNumber, subject: "PDF 題庫", question: questionText, options: options.slice(0, 4), answer: "", explanation: "" };
 }
 
-function clean(value: string) {
-  return value.replace(/===== PDF PAGE \d+ =====/g, "").replace(/\s+/g, " ").trim();
-}
+function clean(value: string) { return value.replace(/===== PDF PAGE \d+ =====/g, "").replace(/\s+/g, " ").trim(); }
