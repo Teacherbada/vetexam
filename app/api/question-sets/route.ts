@@ -100,34 +100,32 @@ export async function POST(request: Request) {
     const sql = neon(databaseUrl);
 
     if (fileHash) {
-      let existing;
-
-      if (isAdmin) {
-        existing = await sql`
-          SELECT id, name, owner_id, visibility
-          FROM question_sets
-          WHERE file_hash = ${fileHash}
-            AND visibility = ${visibility}
-          LIMIT 1
-        `;
-      } else {
-        existing = await sql`
-          SELECT id, name, owner_id, visibility
-          FROM question_sets
-          WHERE file_hash = ${fileHash}
-            AND (
-              visibility = 'public'
-              OR (visibility = 'private' AND owner_id = ${userId})
-            )
-          LIMIT 1
-        `;
-      }
+      // Admins are scoped only by visibility: public and private may coexist.
+      // Regular users cannot duplicate an existing public file or their own private file.
+      const existing = isAdmin
+        ? await sql`
+            SELECT id, name, owner_id, visibility
+            FROM question_sets
+            WHERE file_hash = ${fileHash}
+              AND visibility = ${visibility}
+            LIMIT 1
+          `
+        : await sql`
+            SELECT id, name, owner_id, visibility
+            FROM question_sets
+            WHERE file_hash = ${fileHash}
+              AND (
+                visibility = 'public'
+                OR (visibility = 'private' AND owner_id = ${userId})
+              )
+            LIMIT 1
+          `;
 
       if (existing.length) {
         const existingSet = existing[0];
         const message = existingSet.visibility === "public"
           ? "這份 PDF 已經存在於公開題庫，不需要再次匯入。"
-          : "這份 PDF 你已經匯入到私人題庫了。";
+          : "這份 PDF 已經存在於相同的題庫範圍，不需要再次匯入。";
 
         return NextResponse.json(
           {
