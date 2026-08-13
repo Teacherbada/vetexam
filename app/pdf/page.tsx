@@ -22,6 +22,7 @@ type QuestionSet = {
   created_at: string;
   file_hash: string | null;
   visibility: Visibility;
+  owner_id: string | null;
   exam_subject: string | null;
   exam_year: number | null;
 };
@@ -44,7 +45,7 @@ const EXAM_SUBJECTS = [
 
 const EXAM_YEARS = Array.from(
   { length: 10 },
-  (_, index) => new Date().getFullYear() - index
+  (_, index) => 115 - index
 );
 
 export default function PDFPage() {
@@ -59,17 +60,27 @@ export default function PDFPage() {
     status: string;
   } | null>(null);
 
-  const [subscriptionLoading, setSubscriptionLoading] = useState(true);
+  const [subscriptionLoading, setSubscriptionLoading] =
+    useState(true);
+
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [adminLoading, setAdminLoading] = useState(true);
 
   const [file, setFile] = useState<File | null>(null);
 
-  const [questions, setQuestions] = useState<ParsedQuestion[]>([]);
+  const [questions, setQuestions] = useState<ParsedQuestion[]>(
+    []
+  );
 
-  const [importMode, setImportMode] = useState<"pdf" | "manual">("pdf");
+  const [importMode, setImportMode] = useState<
+    "pdf" | "manual"
+  >("pdf");
 
   const [manualSetName, setManualSetName] = useState("");
 
-  const [manualQuestions, setManualQuestions] = useState<ManualQuestion[]>([
+  const [manualQuestions, setManualQuestions] = useState<
+    ManualQuestion[]
+  >([
     {
       question: "",
       options: ["", "", "", ""],
@@ -82,23 +93,29 @@ export default function PDFPage() {
 
   const [manualMessage, setManualMessage] = useState("");
 
-  const [questionSets, setQuestionSets] = useState<QuestionSet[]>([]);
+  const [questionSets, setQuestionSets] = useState<
+    QuestionSet[]
+  >([]);
 
-  const [currentQuestionSetId, setCurrentQuestionSetId] = useState<
-    number | null
-  >(null);
+  const [currentQuestionSetId, setCurrentQuestionSetId] =
+    useState<number | null>(null);
 
   const [examSubject, setExamSubject] = useState("");
 
   const [examYear, setExamYear] = useState<number | "">("");
 
+  const [visibility, setVisibility] =
+    useState<Visibility>("private");
+
   const [loading, setLoading] = useState(false);
 
-  const [loadingQuestionSets, setLoadingQuestionSets] = useState(true);
+  const [loadingQuestionSets, setLoadingQuestionSets] =
+    useState(true);
 
   const [message, setMessage] = useState("");
 
-  const [upgradeRequired, setUpgradeRequired] = useState(false);
+  const [upgradeRequired, setUpgradeRequired] =
+    useState(false);
 
   const isLoggedIn = !!session?.user;
 
@@ -110,8 +127,52 @@ export default function PDFPage() {
     if (!sessionLoading) {
       loadQuestionSets();
       loadSubscription();
+      loadAdminStatus();
     }
   }, [sessionLoading, session?.user?.id]);
+
+  async function loadAdminStatus() {
+    if (!session?.user?.id) {
+      setIsAdmin(false);
+      setAdminLoading(false);
+      return;
+    }
+
+    try {
+      setAdminLoading(true);
+
+      const response = await fetch(
+        "/api/admin/status",
+        {
+          method: "GET",
+          cache: "no-store",
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setIsAdmin(false);
+        return;
+      }
+
+      setIsAdmin(data.isAdmin === true);
+
+      if (data.isAdmin !== true) {
+        setVisibility("private");
+      }
+    } catch (error) {
+      console.error(
+        "取得管理員狀態失敗：",
+        error
+      );
+
+      setIsAdmin(false);
+      setVisibility("private");
+    } finally {
+      setAdminLoading(false);
+    }
+  }
 
   async function loadSubscription() {
     if (!session?.user?.id) {
@@ -123,10 +184,13 @@ export default function PDFPage() {
     try {
       setSubscriptionLoading(true);
 
-      const response = await fetch("/api/subscription", {
-        method: "GET",
-        cache: "no-store",
-      });
+      const response = await fetch(
+        "/api/subscription",
+        {
+          method: "GET",
+          cache: "no-store",
+        }
+      );
 
       const data = await response.json();
 
@@ -138,9 +202,15 @@ export default function PDFPage() {
         );
       }
 
-      setSubscription(data.subscription || null);
+      setSubscription(
+        data.subscription || null
+      );
     } catch (error) {
-      console.error("取得會員方案失敗：", error);
+      console.error(
+        "取得會員方案失敗：",
+        error
+      );
+
       setSubscription(null);
     } finally {
       setSubscriptionLoading(false);
@@ -151,10 +221,13 @@ export default function PDFPage() {
     try {
       setLoadingQuestionSets(true);
 
-      const response = await fetch("/api/question-sets", {
-        method: "GET",
-        cache: "no-store",
-      });
+      const response = await fetch(
+        "/api/question-sets",
+        {
+          method: "GET",
+          cache: "no-store",
+        }
+      );
 
       const data = await response.json();
 
@@ -166,9 +239,14 @@ export default function PDFPage() {
         );
       }
 
-      setQuestionSets(data.questionSets || []);
+      setQuestionSets(
+        data.questionSets || []
+      );
     } catch (error) {
-      console.error("取得題庫失敗：", error);
+      console.error(
+        "取得題庫失敗：",
+        error
+      );
     } finally {
       setLoadingQuestionSets(false);
     }
@@ -180,10 +258,14 @@ export default function PDFPage() {
       await refetchSession();
 
       setSubscription(null);
+      setIsAdmin(false);
 
       window.location.href = "/";
     } catch (error) {
-      console.error("登出失敗：", error);
+      console.error(
+        "登出失敗：",
+        error
+      );
     }
   }
 
@@ -203,17 +285,28 @@ export default function PDFPage() {
       return;
     }
 
-    if (selectedFile.type !== "application/pdf") {
+    if (
+      selectedFile.type !==
+      "application/pdf"
+    ) {
       setFile(null);
-      setMessage("請選擇 PDF 檔案");
+      setMessage(
+        "請選擇 PDF 檔案"
+      );
       return;
     }
 
-    const maxSize = 20 * 1024 * 1024;
+    const maxSize =
+      20 * 1024 * 1024;
 
-    if (selectedFile.size > maxSize) {
+    if (
+      selectedFile.size >
+      maxSize
+    ) {
       setFile(null);
-      setMessage("PDF 檔案不能超過 20 MB");
+      setMessage(
+        "PDF 檔案不能超過 20 MB"
+      );
       return;
     }
 
@@ -225,23 +318,33 @@ export default function PDFPage() {
   }
 
   function addManualQuestion() {
-    setManualQuestions((current) => [
-      ...current,
-      {
-        question: "",
-        options: ["", "", "", ""],
-        answer: "",
-        explanation: "",
-      },
-    ]);
+    setManualQuestions(
+      (current) => [
+        ...current,
+        {
+          question: "",
+          options: [
+            "",
+            "",
+            "",
+            "",
+          ],
+          answer: "",
+          explanation: "",
+        },
+      ]
+    );
   }
 
-  function removeManualQuestion(index: number) {
-    setManualQuestions((current) =>
-      current.filter(
-        (_, questionIndex) =>
-          questionIndex !== index
-      )
+  function removeManualQuestion(
+    index: number
+  ) {
+    setManualQuestions(
+      (current) =>
+        current.filter(
+          (_, questionIndex) =>
+            questionIndex !== index
+        )
     );
   }
 
@@ -249,15 +352,20 @@ export default function PDFPage() {
     index: number,
     value: string
   ) {
-    setManualQuestions((current) =>
-      current.map((question, questionIndex) =>
-        questionIndex === index
-          ? {
-              ...question,
-              question: value,
-            }
-          : question
-      )
+    setManualQuestions(
+      (current) =>
+        current.map(
+          (
+            question,
+            questionIndex
+          ) =>
+            questionIndex === index
+              ? {
+                  ...question,
+                  question: value,
+                }
+              : question
+        )
     );
   }
 
@@ -266,21 +374,31 @@ export default function PDFPage() {
     optionIndex: number,
     value: string
   ) {
-    setManualQuestions((current) =>
-      current.map((question, index) => {
-        if (index !== questionIndex) {
-          return question;
-        }
+    setManualQuestions(
+      (current) =>
+        current.map(
+          (question, index) => {
+            if (
+              index !==
+              questionIndex
+            ) {
+              return question;
+            }
 
-        const options = [...question.options];
+            const options = [
+              ...question.options,
+            ];
 
-        options[optionIndex] = value;
+            options[
+              optionIndex
+            ] = value;
 
-        return {
-          ...question,
-          options,
-        };
-      })
+            return {
+              ...question,
+              options,
+            };
+          }
+        )
     );
   }
 
@@ -288,15 +406,20 @@ export default function PDFPage() {
     index: number,
     value: string
   ) {
-    setManualQuestions((current) =>
-      current.map((question, questionIndex) =>
-        questionIndex === index
-          ? {
-              ...question,
-              answer: value,
-            }
-          : question
-      )
+    setManualQuestions(
+      (current) =>
+        current.map(
+          (
+            question,
+            questionIndex
+          ) =>
+            questionIndex === index
+              ? {
+                  ...question,
+                  answer: value,
+                }
+              : question
+        )
     );
   }
 
@@ -304,15 +427,20 @@ export default function PDFPage() {
     index: number,
     value: string
   ) {
-    setManualQuestions((current) =>
-      current.map((question, questionIndex) =>
-        questionIndex === index
-          ? {
-              ...question,
-              explanation: value,
-            }
-          : question
-      )
+    setManualQuestions(
+      (current) =>
+        current.map(
+          (
+            question,
+            questionIndex
+          ) =>
+            questionIndex === index
+              ? {
+                  ...question,
+                  explanation: value,
+                }
+              : question
+        )
     );
   }
 
@@ -327,18 +455,24 @@ export default function PDFPage() {
     }
 
     if (!manualQuestions.length) {
-      setManualMessage("至少需要建立一題。");
+      setManualMessage(
+        "至少需要建立一題。"
+      );
       return;
     }
 
     for (
       let index = 0;
-      index < manualQuestions.length;
+      index <
+      manualQuestions.length;
       index++
     ) {
-      const question = manualQuestions[index];
+      const question =
+        manualQuestions[index];
 
-      if (!question.question.trim()) {
+      if (
+        !question.question.trim()
+      ) {
         setManualMessage(
           `第 ${index + 1} 題還沒有填寫題目。`
         );
@@ -347,10 +481,13 @@ export default function PDFPage() {
 
       const filledOptions =
         question.options.filter(
-          (option) => option.trim() !== ""
+          (option) =>
+            option.trim() !== ""
         );
 
-      if (filledOptions.length < 2) {
+      if (
+        filledOptions.length < 2
+      ) {
         setManualMessage(
           `第 ${index + 1} 題至少需要兩個選項。`
         );
@@ -359,7 +496,12 @@ export default function PDFPage() {
 
       if (
         question.answer &&
-        !["A", "B", "C", "D"].includes(
+        ![
+          "A",
+          "B",
+          "C",
+          "D",
+        ].includes(
           question.answer.toUpperCase()
         )
       ) {
@@ -371,32 +513,40 @@ export default function PDFPage() {
     }
 
     setManualLoading(true);
-    setManualMessage("正在建立私人題庫...");
+    setManualMessage(
+      "正在建立私人題庫..."
+    );
 
     try {
-      const response = await fetch(
-        "/api/manual-question-set",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            name: manualSetName,
-            visibility: "private",
-            examSubject,
-            examYear,
-            questions: manualQuestions,
-          }),
-        }
-      );
+      const response =
+        await fetch(
+          "/api/manual-question-set",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+            body: JSON.stringify({
+              name: manualSetName,
+              visibility:
+                "private",
+              examSubject,
+              examYear,
+              questions:
+                manualQuestions,
+            }),
+          }
+        );
 
-      const data = await response.json();
+      const data =
+        await response.json();
 
       if (!response.ok) {
         if (
           response.status === 403 ||
-          data.code === "PRO_REQUIRED"
+          data.code ===
+            "PRO_REQUIRED"
         ) {
           setManualMessage(
             "手動匯入功能需要 PRO 會員。"
@@ -404,7 +554,9 @@ export default function PDFPage() {
           return;
         }
 
-        if (response.status === 401) {
+        if (
+          response.status === 401
+        ) {
           setManualMessage(
             "請先登入後再使用手動匯入功能。"
           );
@@ -425,7 +577,12 @@ export default function PDFPage() {
       setManualQuestions([
         {
           question: "",
-          options: ["", "", "", ""],
+          options: [
+            "",
+            "",
+            "",
+            "",
+          ],
           answer: "",
           explanation: "",
         },
@@ -435,7 +592,10 @@ export default function PDFPage() {
 
       await loadQuestionSets();
     } catch (error) {
-      console.error("手動匯入失敗：", error);
+      console.error(
+        "手動匯入失敗：",
+        error
+      );
 
       setManualMessage(
         error instanceof Error
@@ -458,7 +618,9 @@ export default function PDFPage() {
     }
 
     if (!file) {
-      setMessage("請先選擇 PDF 檔案");
+      setMessage(
+        "請先選擇 PDF 檔案"
+      );
       return;
     }
 
@@ -470,32 +632,41 @@ export default function PDFPage() {
     setCurrentQuestionSetId(null);
 
     try {
-      const formData = new FormData();
+      const formData =
+        new FormData();
 
-      formData.append("file", file);
-      formData.append("visibility", "private");
+      formData.append(
+        "file",
+        file
+      );
+
+      formData.append(
+        "visibility",
+        visibility
+      );
 
       if (examSubject) {
         formData.append(
-          "examSubject",
+          "exam_subject",
           examSubject
         );
       }
 
       if (examYear) {
         formData.append(
-          "examYear",
+          "exam_year",
           String(examYear)
         );
       }
 
-      const response = await fetch(
-        "/api/pdf",
-        {
-          method: "POST",
-          body: formData,
-        }
-      );
+      const response =
+        await fetch(
+          "/api/pdf",
+          {
+            method: "POST",
+            body: formData,
+          }
+        );
 
       const responseText =
         await response.text();
@@ -503,7 +674,10 @@ export default function PDFPage() {
       let data: any;
 
       try {
-        data = JSON.parse(responseText);
+        data =
+          JSON.parse(
+            responseText
+          );
       } catch {
         throw new Error(
           `伺服器沒有正常回傳 JSON（HTTP ${response.status}）。`
@@ -512,17 +686,35 @@ export default function PDFPage() {
 
       if (!response.ok) {
         if (
-          response.status === 403 ||
-          data.code === "PRO_REQUIRED"
+          response.status === 403 &&
+          data.code ===
+            "ADMIN_REQUIRED"
         ) {
-          setUpgradeRequired(true);
           setMessage(
-            "此功能需要 PRO 會員才能使用。"
+            "只有管理員可以建立公開國考題庫。"
           );
           return;
         }
 
-        if (response.status === 401) {
+        if (
+          response.status === 403 ||
+          data.code ===
+            "PRO_REQUIRED"
+        ) {
+          setUpgradeRequired(
+            true
+          );
+
+          setMessage(
+            "此功能需要 PRO 會員才能使用。"
+          );
+
+          return;
+        }
+
+        if (
+          response.status === 401
+        ) {
           setMessage(
             "請先登入後再使用 PDF 匯入功能。"
           );
@@ -539,24 +731,51 @@ export default function PDFPage() {
       const parsedQuestions =
         data.questions || [];
 
-      if (parsedQuestions.length === 0) {
+      if (
+        parsedQuestions.length ===
+        0
+      ) {
         setMessage(
           "PDF 有成功送到伺服器，但沒有辨識到題目。"
         );
         return;
       }
 
-      if (data.questionSetId) {
+      if (
+        data.questionSetId
+      ) {
         setCurrentQuestionSetId(
-          Number(data.questionSetId)
+          Number(
+            data.questionSetId
+          )
         );
       }
 
-      setQuestions(parsedQuestions);
+      setQuestions(
+        parsedQuestions
+      );
 
-      if (data.duplicate) {
+      if (
+        data.duplicate
+      ) {
+        if (
+          data.visibility ===
+          "public"
+        ) {
+          setMessage(
+            `這份 PDF 已存在於公開國考題庫，不再重複建立資料。共 ${parsedQuestions.length} 題，直接使用既有題庫。`
+          );
+        } else {
+          setMessage(
+            `這份 PDF 已經匯入過，直接使用既有題庫。共 ${parsedQuestions.length} 題。`
+          );
+        }
+      } else if (
+        data.visibility ===
+        "public"
+      ) {
         setMessage(
-          `這份 PDF 已經匯入過，使用原本的私人題庫。共 ${parsedQuestions.length} 題。`
+          `成功辨識 ${parsedQuestions.length} 題，已建立公開國考題庫。`
         );
       } else {
         setMessage(
@@ -585,15 +804,18 @@ export default function PDFPage() {
     questionId: number,
     value: string
   ) {
-    setQuestions((current) =>
-      current.map((question) =>
-        question.id === questionId
-          ? {
-              ...question,
-              question: value,
-            }
-          : question
-      )
+    setQuestions(
+      (current) =>
+        current.map(
+          (question) =>
+            question.id ===
+            questionId
+              ? {
+                  ...question,
+                  question: value,
+                }
+              : question
+        )
     );
   }
 
@@ -602,39 +824,53 @@ export default function PDFPage() {
     optionIndex: number,
     value: string
   ) {
-    setQuestions((current) =>
-      current.map((question) => {
-        if (question.id !== questionId) {
-          return question;
-        }
+    setQuestions(
+      (current) =>
+        current.map(
+          (question) => {
+            if (
+              question.id !==
+              questionId
+            ) {
+              return question;
+            }
 
-        const newOptions = [
-          ...question.options,
-        ];
+            const newOptions = [
+              ...question.options,
+            ];
 
-        newOptions[optionIndex] = value;
+            newOptions[
+              optionIndex
+            ] = value;
 
-        return {
-          ...question,
-          options: newOptions,
-        };
-      })
+            return {
+              ...question,
+              options:
+                newOptions,
+            };
+          }
+        )
     );
   }
 
   function deleteQuestion(
     questionId: number
   ) {
-    setQuestions((current) =>
-      current.filter(
-        (question) =>
-          question.id !== questionId
-      )
+    setQuestions(
+      (current) =>
+        current.filter(
+          (question) =>
+            question.id !==
+            questionId
+        )
     );
   }
 
   function startQuiz() {
-    if (questions.length === 0) {
+    if (
+      questions.length ===
+      0
+    ) {
       setMessage(
         "目前沒有可以刷的題目"
       );
@@ -642,18 +878,27 @@ export default function PDFPage() {
     }
 
     const invalidQuestion =
-      questions.find((question) => {
-        if (!question.question.trim()) {
-          return true;
-        }
+      questions.find(
+        (question) => {
+          if (
+            !question.question.trim()
+          ) {
+            return true;
+          }
 
-        const filledOptions =
-          question.options.filter(
-            (option) => option.trim() !== ""
+          const filledOptions =
+            question.options.filter(
+              (option) =>
+                option.trim() !==
+                ""
+            );
+
+          return (
+            filledOptions.length <
+            2
           );
-
-        return filledOptions.length < 2;
-      });
+        }
+      );
 
     if (invalidQuestion) {
       const index =
@@ -668,10 +913,13 @@ export default function PDFPage() {
       return;
     }
 
-    if (!currentQuestionSetId) {
+    if (
+      !currentQuestionSetId
+    ) {
       setMessage(
         "找不到題庫 ID，請重新匯入這份 PDF。"
       );
+
       return;
     }
 
@@ -693,7 +941,10 @@ export default function PDFPage() {
   function formatDate(
     dateString: string
   ) {
-    const date = new Date(dateString);
+    const date =
+      new Date(
+        dateString
+      );
 
     return date.toLocaleString(
       "zh-TW",
@@ -711,25 +962,15 @@ export default function PDFPage() {
     <main className="min-h-screen bg-gray-50 px-4 py-10">
       <div className="mx-auto max-w-5xl">
 
-        {/* ==================== 頂部登入狀態 ==================== */}
         <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
 
           <button
             type="button"
             onClick={() => {
-              window.location.href = "/";
+              window.location.href =
+                "/";
             }}
-            className="
-              rounded-lg
-              border
-              border-gray-300
-              bg-white
-              px-4
-              py-2
-              font-semibold
-              text-gray-700
-              hover:bg-gray-50
-            "
+            className="rounded-lg border border-gray-300 bg-white px-4 py-2 font-semibold text-gray-700 hover:bg-gray-50"
           >
             ← 回首頁
           </button>
@@ -750,9 +991,20 @@ export default function PDFPage() {
                 </div>
 
                 <div className="mt-1 flex flex-wrap items-center gap-2 text-sm">
+
                   <span className="font-semibold text-green-600">
                     已登入
                   </span>
+
+                  {adminLoading ? (
+                    <span className="rounded-full bg-gray-100 px-3 py-1 text-gray-500">
+                      權限確認中
+                    </span>
+                  ) : isAdmin ? (
+                    <span className="rounded-full bg-red-100 px-3 py-1 font-bold text-red-700">
+                      管理員
+                    </span>
+                  ) : null}
 
                   {subscriptionLoading ? (
                     <span className="rounded-full bg-gray-100 px-3 py-1 text-gray-500">
@@ -772,18 +1024,10 @@ export default function PDFPage() {
 
               <button
                 type="button"
-                onClick={handleLogout}
-                className="
-                  rounded-lg
-                  border
-                  border-red-200
-                  bg-white
-                  px-4
-                  py-2
-                  font-semibold
-                  text-red-600
-                  hover:bg-red-50
-                "
+                onClick={
+                  handleLogout
+                }
+                className="rounded-lg border border-red-200 bg-white px-4 py-2 font-semibold text-red-600 hover:bg-red-50"
               >
                 登出
               </button>
@@ -797,15 +1041,7 @@ export default function PDFPage() {
                   window.location.href =
                     "/login";
                 }}
-                className="
-                  rounded-lg
-                  bg-blue-600
-                  px-4
-                  py-2
-                  font-semibold
-                  text-white
-                  hover:bg-blue-700
-                "
+                className="rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white hover:bg-blue-700"
               >
                 登入
               </button>
@@ -816,15 +1052,7 @@ export default function PDFPage() {
                   window.location.href =
                     "/register";
                 }}
-                className="
-                  rounded-lg
-                  bg-green-600
-                  px-4
-                  py-2
-                  font-semibold
-                  text-white
-                  hover:bg-green-700
-                "
+                className="rounded-lg bg-green-600 px-4 py-2 font-semibold text-white hover:bg-green-700"
               >
                 註冊
               </button>
@@ -837,12 +1065,13 @@ export default function PDFPage() {
         </h1>
 
         <p className="mt-3 text-gray-600">
-          上傳你的考試 PDF，自動辨識選擇題並建立私人題庫。
+          上傳你的考試 PDF，自動辨識選擇題並建立題庫。
         </p>
 
-        {/* ==================== 已匯入題庫 ==================== */}
         <div className="mt-8 rounded-2xl bg-white p-8 shadow">
+
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+
             <div>
               <h2 className="text-2xl font-bold text-gray-900">
                 已匯入題庫
@@ -855,23 +1084,13 @@ export default function PDFPage() {
 
             <button
               type="button"
-              onClick={loadQuestionSets}
+              onClick={
+                loadQuestionSets
+              }
               disabled={
                 loadingQuestionSets
               }
-              className="
-                rounded-lg
-                border
-                border-gray-300
-                px-4
-                py-2
-                text-sm
-                font-semibold
-                text-gray-700
-                hover:bg-gray-50
-                disabled:cursor-not-allowed
-                disabled:opacity-50
-              "
+              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
             >
               重新整理
             </button>
@@ -889,23 +1108,22 @@ export default function PDFPage() {
           ) : (
             <div className="mt-6 space-y-4">
               {questionSets.map(
-                (questionSet) => (
+                (
+                  questionSet
+                ) => (
                   <div
-                    key={questionSet.id}
-                    className="
-                      rounded-xl
-                      border
-                      border-gray-200
-                      bg-gray-50
-                      p-5
-                      transition
-                      hover:shadow-md
-                    "
+                    key={
+                      questionSet.id
+                    }
+                    className="rounded-xl border border-gray-200 bg-gray-50 p-5 transition hover:shadow-md"
                   >
                     <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+
                       <div>
                         <h3 className="text-xl font-bold text-gray-900">
-                          {questionSet.name}
+                          {
+                            questionSet.name
+                          }
                         </h3>
 
                         {questionSet.filename && (
@@ -917,6 +1135,7 @@ export default function PDFPage() {
                         )}
 
                         <div className="mt-3 flex flex-wrap gap-2 text-sm">
+
                           <span className="rounded-full bg-blue-100 px-3 py-1 font-semibold text-blue-700">
                             {
                               questionSet.total_questions
@@ -941,9 +1160,16 @@ export default function PDFPage() {
                             </span>
                           )}
 
-                          <span className="rounded-full bg-purple-100 px-3 py-1 font-semibold text-purple-700">
-                            私人題庫
-                          </span>
+                          {questionSet.visibility ===
+                          "public" ? (
+                            <span className="rounded-full bg-green-100 px-3 py-1 font-bold text-green-700">
+                              公開國考題庫
+                            </span>
+                          ) : (
+                            <span className="rounded-full bg-purple-100 px-3 py-1 font-semibold text-purple-700">
+                              私人題庫
+                            </span>
+                          )}
 
                           <span className="rounded-full bg-gray-200 px-3 py-1 text-gray-700">
                             匯入於{" "}
@@ -961,16 +1187,7 @@ export default function PDFPage() {
                             questionSet.id
                           )
                         }
-                        className="
-                          shrink-0
-                          rounded-lg
-                          bg-green-600
-                          px-5
-                          py-3
-                          font-bold
-                          text-white
-                          hover:bg-green-700
-                        "
+                        className="shrink-0 rounded-lg bg-green-600 px-5 py-3 font-bold text-white hover:bg-green-700"
                       >
                         開始刷題
                       </button>
@@ -982,17 +1199,20 @@ export default function PDFPage() {
           )}
         </div>
 
-        {/* ==================== 匯入模式 ==================== */}
         <div className="mt-8 rounded-2xl bg-white p-3 shadow">
           <div className="grid gap-3 md:grid-cols-2">
+
             <button
               type="button"
               onClick={() => {
-                setImportMode("pdf");
+                setImportMode(
+                  "pdf"
+                );
                 setManualMessage("");
               }}
               className={`rounded-xl px-5 py-4 text-lg font-bold transition ${
-                importMode === "pdf"
+                importMode ===
+                "pdf"
                   ? "bg-blue-600 text-white"
                   : "bg-gray-100 text-gray-700 hover:bg-gray-200"
               }`}
@@ -1003,11 +1223,14 @@ export default function PDFPage() {
             <button
               type="button"
               onClick={() => {
-                setImportMode("manual");
+                setImportMode(
+                  "manual"
+                );
                 setMessage("");
               }}
               className={`rounded-xl px-5 py-4 text-lg font-bold transition ${
-                importMode === "manual"
+                importMode ===
+                "manual"
                   ? "bg-green-600 text-white"
                   : "bg-gray-100 text-gray-700 hover:bg-gray-200"
               }`}
@@ -1017,9 +1240,10 @@ export default function PDFPage() {
           </div>
         </div>
 
-        {/* ==================== PDF ==================== */}
-        {importMode === "pdf" && (
+        {importMode ===
+          "pdf" && (
           <div className="mt-8 rounded-2xl bg-white p-8 shadow">
+
             <h2 className="text-2xl font-bold text-gray-900">
               PDF 自動匯入
             </h2>
@@ -1045,16 +1269,7 @@ export default function PDFPage() {
                       window.location.href =
                         "/login";
                     }}
-                    className="
-                      mt-4
-                      rounded-lg
-                      bg-blue-600
-                      px-5
-                      py-2.5
-                      font-bold
-                      text-white
-                      hover:bg-blue-700
-                    "
+                    className="mt-4 rounded-lg bg-blue-600 px-5 py-2.5 font-bold text-white hover:bg-blue-700"
                   >
                     前往登入
                   </button>
@@ -1064,17 +1279,10 @@ export default function PDFPage() {
             <input
               type="file"
               accept=".pdf,application/pdf"
-              onChange={handleFileChange}
-              className="
-                mt-6
-                w-full
-                rounded-lg
-                border
-                border-gray-300
-                bg-white
-                p-3
-                text-gray-700
-              "
+              onChange={
+                handleFileChange
+              }
+              className="mt-6 w-full rounded-lg border border-gray-300 bg-white p-3 text-gray-700"
             />
 
             {file && (
@@ -1089,23 +1297,99 @@ export default function PDFPage() {
                     file.size /
                     1024 /
                     1024
-                  ).toFixed(2)}{" "}
+                  ).toFixed(
+                    2
+                  )}{" "}
                   MB
                 </p>
               </div>
             )}
 
-            <div className="mt-6 rounded-xl border-2 border-purple-500 bg-purple-50 p-5">
-              <div className="text-lg font-bold text-purple-900">
-                私人題庫
-              </div>
+            <div className="mt-6 rounded-xl border border-gray-200 bg-gray-50 p-5">
 
-              <p className="mt-2 text-sm text-purple-800">
-                這份 PDF 只會建立你的私人題庫，不會直接公開給其他使用者。
-              </p>
+              <h3 className="text-lg font-bold text-gray-900">
+                題庫類型
+              </h3>
+
+              {adminLoading ? (
+                <p className="mt-2 text-sm text-gray-500">
+                  正在確認管理員權限...
+                </p>
+              ) : isAdmin ? (
+                <>
+                  <p className="mt-2 text-sm text-gray-600">
+                    你是管理員，可以選擇建立私人題庫或公開國考題庫。
+                  </p>
+
+                  <div className="mt-4 grid gap-3 md:grid-cols-2">
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setVisibility(
+                          "private"
+                        )}
+                      className={`rounded-xl border-2 p-5 text-left transition ${
+                        visibility ===
+                        "private"
+                          ? "border-purple-500 bg-purple-50"
+                          : "border-gray-200 bg-white hover:border-purple-300"
+                      }`}
+                    >
+                      <div className="text-lg font-bold text-purple-900">
+                        私人題庫
+                      </div>
+
+                      <p className="mt-2 text-sm text-purple-800">
+                        只有你自己可以使用。
+                      </p>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setVisibility(
+                          "public"
+                        )}
+                      className={`rounded-xl border-2 p-5 text-left transition ${
+                        visibility ===
+                        "public"
+                          ? "border-green-500 bg-green-50"
+                          : "border-gray-200 bg-white hover:border-green-300"
+                      }`}
+                    >
+                      <div className="text-lg font-bold text-green-900">
+                        公開國考題庫
+                      </div>
+
+                      <p className="mt-2 text-sm text-green-800">
+                        提供所有使用者使用。
+                      </p>
+                    </button>
+
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="rounded-xl border-2 border-purple-500 bg-purple-50 p-5">
+                    <div className="text-lg font-bold text-purple-900">
+                      私人題庫
+                    </div>
+
+                    <p className="mt-2 text-sm text-purple-800">
+                      這份 PDF 只會建立你的私人題庫。
+                    </p>
+                  </div>
+
+                  <p className="mt-4 text-sm text-gray-500">
+                    公開國考題庫由管理員統一管理。
+                  </p>
+                </>
+              )}
             </div>
 
             <div className="mt-6 rounded-xl border border-gray-200 bg-gray-50 p-5">
+
               <h3 className="text-lg font-bold text-gray-900">
                 國考科目
               </h3>
@@ -1114,87 +1398,92 @@ export default function PDFPage() {
                 如果這份 PDF 是國考相關資料，可以選擇對應科目。
               </p>
 
-              <div className="mt-4">
-                <select
-                  value={examSubject}
-                  onChange={(event) =>
-                    setExamSubject(
-                      event.target.value
-                    )
-                  }
-                  className="
-                    w-full
-                    rounded-lg
-                    border
-                    border-gray-300
-                    bg-white
-                    px-4
-                    py-3
-                    text-gray-900
-                  "
-                >
-                  <option value="">
-                    不指定國考科目
-                  </option>
+              <select
+                value={
+                  examSubject
+                }
+                onChange={(
+                  event
+                ) =>
+                  setExamSubject(
+                    event.target
+                      .value
+                  )
+                }
+                className="mt-4 w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-gray-900"
+              >
+                <option value="">
+                  不指定國考科目
+                </option>
 
-                  {EXAM_SUBJECTS.map(
-                    (subject) => (
-                      <option
-                        key={subject}
-                        value={subject}
-                      >
-                        {subject}
-                      </option>
-                    )
-                  )}
-                </select>
-              </div>
+                {EXAM_SUBJECTS.map(
+                  (
+                    subject
+                  ) => (
+                    <option
+                      key={
+                        subject
+                      }
+                      value={
+                        subject
+                      }
+                    >
+                      {subject}
+                    </option>
+                  )
+                )}
+              </select>
             </div>
 
             {examSubject && (
               <div className="mt-4 rounded-xl border border-orange-200 bg-orange-50 p-5">
+
                 <h3 className="text-lg font-bold text-orange-900">
                   國考年份
                 </h3>
 
                 <p className="mt-1 text-sm text-orange-800">
-                  如果是特定年度國考題，可以指定年份。
+                  國考年份使用民國年。
                 </p>
 
                 <select
-                  value={examYear}
-                  onChange={(event) =>
+                  value={
+                    examYear
+                  }
+                  onChange={(
+                    event
+                  ) =>
                     setExamYear(
-                      event.target.value
+                      event.target
+                        .value
                         ? Number(
-                            event.target.value
+                            event.target
+                              .value
                           )
                         : ""
                     )
                   }
-                  className="
-                    mt-4
-                    w-full
-                    rounded-lg
-                    border
-                    border-gray-300
-                    bg-white
-                    px-4
-                    py-3
-                    text-gray-900
-                  "
+                  className="mt-4 w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-gray-900"
                 >
                   <option value="">
                     不指定年份
                   </option>
 
                   {EXAM_YEARS.map(
-                    (year) => (
+                    (
+                      year
+                    ) => (
                       <option
-                        key={year}
-                        value={year}
+                        key={
+                          year
+                        }
+                        value={
+                          year
+                        }
                       >
-                        {year} 年
+                        民國{" "}
+                        {year}{" "}
+                        年
                       </option>
                     )
                   )}
@@ -1202,35 +1491,25 @@ export default function PDFPage() {
               </div>
             )}
 
-            <p className="mt-4 text-sm text-gray-500">
-              公開國考題庫目前由管理員統一管理，一般使用者無法直接上傳公開題目。
-            </p>
-
             <button
               type="button"
-              onClick={handleUpload}
+              onClick={
+                handleUpload
+              }
               disabled={
                 loading ||
                 sessionLoading ||
+                adminLoading ||
                 !isLoggedIn
               }
-              className="
-                mt-6
-                rounded-lg
-                bg-blue-600
-                px-6
-                py-3
-                font-bold
-                text-white
-                transition
-                hover:bg-blue-700
-                disabled:cursor-not-allowed
-                disabled:bg-gray-400
-              "
+              className="mt-6 rounded-lg bg-blue-600 px-6 py-3 font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-400"
             >
               {loading
                 ? "正在解析 PDF..."
-                : "開始解析"}
+                : visibility ===
+                  "public"
+                ? "建立公開國考題庫"
+                : "建立私人題庫"}
             </button>
 
             {message && (
@@ -1251,16 +1530,7 @@ export default function PDFPage() {
 
                 <button
                   type="button"
-                  className="
-                    mt-4
-                    rounded-lg
-                    bg-yellow-600
-                    px-5
-                    py-2.5
-                    font-bold
-                    text-white
-                    hover:bg-yellow-700
-                  "
+                  className="mt-4 rounded-lg bg-yellow-600 px-5 py-2.5 font-bold text-white hover:bg-yellow-700"
                   onClick={() => {
                     window.location.href =
                       "/";
@@ -1273,9 +1543,10 @@ export default function PDFPage() {
           </div>
         )}
 
-        {/* ==================== 手動 ==================== */}
-        {importMode === "manual" && (
+        {importMode ===
+          "manual" && (
           <div className="mt-8 rounded-2xl bg-white p-8 shadow">
+
             <h2 className="text-2xl font-bold text-gray-900">
               手動建立題目
             </h2>
@@ -1291,27 +1562,19 @@ export default function PDFPage() {
 
               <input
                 type="text"
-                value={manualSetName}
-                onChange={(event) =>
+                value={
+                  manualSetName
+                }
+                onChange={(
+                  event
+                ) =>
                   setManualSetName(
-                    event.target.value
+                    event.target
+                      .value
                   )
                 }
                 placeholder="例如：我的內科整理"
-                className="
-                  mt-2
-                  w-full
-                  rounded-lg
-                  border
-                  border-gray-300
-                  px-4
-                  py-3
-                  text-gray-900
-                  outline-none
-                  focus:border-blue-500
-                  focus:ring-2
-                  focus:ring-blue-100
-                "
+                className="mt-2 w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
               />
             </div>
 
@@ -1331,33 +1594,34 @@ export default function PDFPage() {
               </label>
 
               <select
-                value={examSubject}
-                onChange={(event) =>
+                value={
+                  examSubject
+                }
+                onChange={(
+                  event
+                ) =>
                   setExamSubject(
-                    event.target.value
+                    event.target
+                      .value
                   )
                 }
-                className="
-                  mt-2
-                  w-full
-                  rounded-lg
-                  border
-                  border-gray-300
-                  bg-white
-                  px-4
-                  py-3
-                  text-gray-900
-                "
+                className="mt-2 w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-gray-900"
               >
                 <option value="">
                   不指定國考科目
                 </option>
 
                 {EXAM_SUBJECTS.map(
-                  (subject) => (
+                  (
+                    subject
+                  ) => (
                     <option
-                      key={subject}
-                      value={subject}
+                      key={
+                        subject
+                      }
+                      value={
+                        subject
+                      }
                     >
                       {subject}
                     </option>
@@ -1373,39 +1637,43 @@ export default function PDFPage() {
                 </label>
 
                 <select
-                  value={examYear}
-                  onChange={(event) =>
+                  value={
+                    examYear
+                  }
+                  onChange={(
+                    event
+                  ) =>
                     setExamYear(
-                      event.target.value
+                      event.target
+                        .value
                         ? Number(
-                            event.target.value
+                            event.target
+                              .value
                           )
                         : ""
                     )
                   }
-                  className="
-                    mt-2
-                    w-full
-                    rounded-lg
-                    border
-                    border-gray-300
-                    bg-white
-                    px-4
-                    py-3
-                    text-gray-900
-                  "
+                  className="mt-2 w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-gray-900"
                 >
                   <option value="">
                     不指定年份
                   </option>
 
                   {EXAM_YEARS.map(
-                    (year) => (
+                    (
+                      year
+                    ) => (
                       <option
-                        key={year}
-                        value={year}
+                        key={
+                          year
+                        }
+                        value={
+                          year
+                        }
                       >
-                        {year} 年
+                        民國{" "}
+                        {year}{" "}
+                        年
                       </option>
                     )
                   )}
@@ -1420,19 +1688,18 @@ export default function PDFPage() {
                   questionIndex
                 ) => (
                   <div
-                    key={questionIndex}
-                    className="
-                      rounded-2xl
-                      border
-                      border-gray-200
-                      bg-gray-50
-                      p-6
-                    "
+                    key={
+                      questionIndex
+                    }
+                    className="rounded-2xl border border-gray-200 bg-gray-50 p-6"
                   >
+
                     <div className="flex items-center justify-between">
+
                       <h3 className="text-xl font-bold text-gray-900">
                         第{" "}
-                        {questionIndex + 1}{" "}
+                        {questionIndex +
+                          1}{" "}
                         題
                       </h3>
 
@@ -1445,15 +1712,7 @@ export default function PDFPage() {
                               questionIndex
                             )
                           }
-                          className="
-                            rounded-lg
-                            px-3
-                            py-2
-                            text-sm
-                            font-semibold
-                            text-red-600
-                            hover:bg-red-50
-                          "
+                          className="rounded-lg px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-50"
                         >
                           刪除
                         </button>
@@ -1464,28 +1723,18 @@ export default function PDFPage() {
                       value={
                         question.question
                       }
-                      onChange={(event) =>
+                      onChange={(
+                        event
+                      ) =>
                         updateManualQuestion(
                           questionIndex,
-                          event.target.value
+                          event.target
+                            .value
                         )
                       }
                       rows={4}
                       placeholder="輸入題目內容..."
-                      className="
-                        mt-4
-                        w-full
-                        rounded-lg
-                        border
-                        border-gray-300
-                        bg-white
-                        p-4
-                        text-gray-900
-                        outline-none
-                        focus:border-blue-500
-                        focus:ring-2
-                        focus:ring-blue-100
-                      "
+                      className="mt-4 w-full rounded-lg border border-gray-300 bg-white p-4 text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                     />
 
                     <div className="mt-5 grid gap-3">
@@ -1495,23 +1744,13 @@ export default function PDFPage() {
                           optionIndex
                         ) => (
                           <div
-                            key={optionIndex}
+                            key={
+                              optionIndex
+                            }
                             className="flex items-center gap-3"
                           >
-                            <div
-                              className="
-                                flex
-                                h-9
-                                w-9
-                                shrink-0
-                                items-center
-                                justify-center
-                                rounded-full
-                                bg-blue-100
-                                font-bold
-                                text-blue-700
-                              "
-                            >
+
+                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-100 font-bold text-blue-700">
                               {String.fromCharCode(
                                 65 +
                                   optionIndex
@@ -1520,14 +1759,17 @@ export default function PDFPage() {
 
                             <input
                               type="text"
-                              value={option}
+                              value={
+                                option
+                              }
                               onChange={(
                                 event
                               ) =>
                                 updateManualOption(
                                   questionIndex,
                                   optionIndex,
-                                  event.target
+                                  event
+                                    .target
                                     .value
                                 )
                               }
@@ -1535,20 +1777,7 @@ export default function PDFPage() {
                                 65 +
                                   optionIndex
                               )}`}
-                              className="
-                                w-full
-                                rounded-lg
-                                border
-                                border-gray-300
-                                bg-white
-                                px-4
-                                py-3
-                                text-gray-900
-                                outline-none
-                                focus:border-blue-500
-                                focus:ring-2
-                                focus:ring-blue-100
-                              "
+                              className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                             />
                           </div>
                         )
@@ -1556,6 +1785,7 @@ export default function PDFPage() {
                     </div>
 
                     <div className="mt-5 grid gap-4 md:grid-cols-2">
+
                       <div>
                         <label className="block text-sm font-semibold text-gray-700">
                           正確答案
@@ -1565,23 +1795,16 @@ export default function PDFPage() {
                           value={
                             question.answer
                           }
-                          onChange={(event) =>
+                          onChange={(
+                            event
+                          ) =>
                             updateManualAnswer(
                               questionIndex,
-                              event.target.value
+                              event.target
+                                .value
                             )
                           }
-                          className="
-                            mt-2
-                            w-full
-                            rounded-lg
-                            border
-                            border-gray-300
-                            bg-white
-                            px-4
-                            py-3
-                            text-gray-900
-                          "
+                          className="mt-2 w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-gray-900"
                         >
                           <option value="">
                             尚未設定
@@ -1614,26 +1837,21 @@ export default function PDFPage() {
                           value={
                             question.explanation
                           }
-                          onChange={(event) =>
+                          onChange={(
+                            event
+                          ) =>
                             updateManualExplanation(
                               questionIndex,
-                              event.target.value
+                              event.target
+                                .value
                             )
                           }
                           rows={3}
                           placeholder="輸入題目解析..."
-                          className="
-                            mt-2
-                            w-full
-                            rounded-lg
-                            border
-                            border-gray-300
-                            bg-white
-                            p-3
-                            text-gray-900
-                          "
+                          className="mt-2 w-full rounded-lg border border-gray-300 bg-white p-3 text-gray-900"
                         />
                       </div>
+
                     </div>
                   </div>
                 )
@@ -1642,43 +1860,27 @@ export default function PDFPage() {
 
             <button
               type="button"
-              onClick={addManualQuestion}
-              className="
-                mt-6
-                rounded-lg
-                border
-                border-blue-300
-                bg-blue-50
-                px-5
-                py-3
-                font-bold
-                text-blue-700
-                hover:bg-blue-100
-              "
+              onClick={
+                addManualQuestion
+              }
+              className="mt-6 rounded-lg border border-blue-300 bg-blue-50 px-5 py-3 font-bold text-blue-700 hover:bg-blue-100"
             >
               + 新增一題
             </button>
 
             <div className="mt-8 flex flex-wrap items-center gap-4">
+
               <button
                 type="button"
-                onClick={handleManualImport}
+                onClick={
+                  handleManualImport
+                }
                 disabled={
                   manualLoading ||
                   sessionLoading ||
                   !isLoggedIn
                 }
-                className="
-                  rounded-lg
-                  bg-green-600
-                  px-6
-                  py-3
-                  font-bold
-                  text-white
-                  hover:bg-green-700
-                  disabled:cursor-not-allowed
-                  disabled:bg-gray-400
-                "
+                className="rounded-lg bg-green-600 px-6 py-3 font-bold text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-gray-400"
               >
                 {manualLoading
                   ? "正在匯入..."
@@ -1687,18 +1889,23 @@ export default function PDFPage() {
 
               {manualMessage && (
                 <div className="rounded-lg bg-gray-100 px-4 py-3 font-semibold text-gray-800">
-                  {manualMessage}
+                  {
+                    manualMessage
+                  }
                 </div>
               )}
             </div>
           </div>
         )}
 
-        {/* ==================== PDF 辨識結果 ==================== */}
-        {questions.length > 0 && (
+        {questions.length >
+          0 && (
           <div className="mt-8">
+
             <div className="mb-5 rounded-2xl bg-white p-6 shadow">
+
               <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+
                 <div>
                   <h2 className="text-2xl font-bold text-gray-900">
                     ② 確認辨識結果
@@ -1707,7 +1914,9 @@ export default function PDFPage() {
                   <p className="mt-2 text-gray-600">
                     共辨識到{" "}
                     <span className="font-bold text-blue-600">
-                      {questions.length}
+                      {
+                        questions.length
+                      }
                     </span>{" "}
                     題。
                   </p>
@@ -1715,32 +1924,35 @@ export default function PDFPage() {
 
                 <button
                   type="button"
-                  onClick={startQuiz}
-                  className="
-                    rounded-lg
-                    bg-green-600
-                    px-6
-                    py-3
-                    font-bold
-                    text-white
-                    hover:bg-green-700
-                  "
+                  onClick={
+                    startQuiz
+                  }
+                  className="rounded-lg bg-green-600 px-6 py-3 font-bold text-white hover:bg-green-700"
                 >
                   確認並開始刷題
                 </button>
+
               </div>
             </div>
 
             <div className="space-y-6">
+
               {questions.map(
-                (question, index) => (
+                (
+                  question,
+                  index
+                ) => (
                   <div
                     key={`${question.id}-${index}`}
                     className="rounded-2xl bg-white p-6 shadow"
                   >
+
                     <div className="flex items-center justify-between">
+
                       <p className="font-bold text-blue-600">
-                        第 {index + 1} 題
+                        第{" "}
+                        {index + 1}{" "}
+                        題
                       </p>
 
                       <button
@@ -1750,21 +1962,15 @@ export default function PDFPage() {
                             question.id
                           )
                         }
-                        className="
-                          rounded-lg
-                          px-3
-                          py-2
-                          text-sm
-                          font-semibold
-                          text-red-600
-                          hover:bg-red-50
-                        "
+                        className="rounded-lg px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-50"
                       >
                         刪除
                       </button>
+
                     </div>
 
                     <div className="mt-4">
+
                       <label className="text-sm font-semibold text-gray-600">
                         題目
                       </label>
@@ -1773,37 +1979,29 @@ export default function PDFPage() {
                         value={
                           question.question
                         }
-                        onChange={(event) =>
+                        onChange={(
+                          event
+                        ) =>
                           updateQuestion(
                             question.id,
-                            event.target.value
+                            event.target
+                              .value
                           )
                         }
                         rows={4}
-                        className="
-                          mt-2
-                          w-full
-                          rounded-lg
-                          border
-                          border-gray-300
-                          p-4
-                          text-lg
-                          font-semibold
-                          text-gray-900
-                          outline-none
-                          focus:border-blue-500
-                          focus:ring-2
-                          focus:ring-blue-100
-                        "
+                        className="mt-2 w-full rounded-lg border border-gray-300 p-4 text-lg font-semibold text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                       />
+
                     </div>
 
                     <div className="mt-5">
+
                       <label className="text-sm font-semibold text-gray-600">
                         選項
                       </label>
 
                       <div className="mt-2 space-y-3">
+
                         {question.options.map(
                           (
                             option,
@@ -1815,21 +2013,8 @@ export default function PDFPage() {
                               }
                               className="flex items-start gap-3"
                             >
-                              <div
-                                className="
-                                  mt-3
-                                  flex
-                                  h-8
-                                  w-8
-                                  shrink-0
-                                  items-center
-                                  justify-center
-                                  rounded-full
-                                  bg-blue-100
-                                  font-bold
-                                  text-blue-700
-                                "
-                              >
+
+                              <div className="mt-3 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-100 font-bold text-blue-700">
                                 {String.fromCharCode(
                                   65 +
                                     optionIndex
@@ -1851,30 +2036,24 @@ export default function PDFPage() {
                                   )
                                 }
                                 rows={2}
-                                className="
-                                  w-full
-                                  rounded-lg
-                                  border
-                                  border-gray-300
-                                  p-3
-                                  text-gray-900
-                                  outline-none
-                                  focus:border-blue-500
-                                  focus:ring-2
-                                  focus:ring-blue-100
-                                "
+                                className="w-full rounded-lg border border-gray-300 p-3 text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                               />
+
                             </div>
                           )
                         )}
+
                       </div>
                     </div>
+
                   </div>
                 )
               )}
+
             </div>
           </div>
         )}
+
       </div>
     </main>
   );

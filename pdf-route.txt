@@ -1,0 +1,1 @@
+how HEAD:app/api/pdf/route.ts
