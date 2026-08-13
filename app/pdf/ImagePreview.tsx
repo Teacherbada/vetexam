@@ -16,9 +16,10 @@ function ImagePreview({ file, pageNumber, questionNumber, onImageLoaded }: Props
   const loadedKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!file || !pageNumber || !questionNumber) return;
+    const currentFile = file;
+    if (!currentFile || !pageNumber || !questionNumber) return;
 
-    const loadKey = `${file.name}:${file.size}:${file.lastModified}:${pageNumber}:${questionNumber}`;
+    const loadKey = `${currentFile.name}:${currentFile.size}:${currentFile.lastModified}:${pageNumber}:${questionNumber}`;
     if (loadedKeyRef.current === loadKey) return;
     loadedKeyRef.current = loadKey;
 
@@ -28,7 +29,7 @@ function ImagePreview({ file, pageNumber, questionNumber, onImageLoaded }: Props
       setError("");
       try {
         const fd = new FormData();
-        fd.append("file", file);
+        fd.append("file", currentFile);
         fd.append("pageNumber", String(pageNumber));
         fd.append("questionNumber", String(questionNumber));
         const response = await fetch("/api/pdf/images", { method: "POST", body: fd });
@@ -51,7 +52,7 @@ function ImagePreview({ file, pageNumber, questionNumber, onImageLoaded }: Props
 
     load();
     return () => { cancelled = true; };
-  }, [file, pageNumber, questionNumber, onImageLoaded]);
+  }, [currentFile, pageNumber, questionNumber, onImageLoaded]);
 
   if (error) return <div className="mt-4 text-sm text-amber-700">🖼 {error}</div>;
   if (loading && !src) return <div className="mt-4 text-sm text-amber-700">🖼 正在載入圖片預覽…</div>;
