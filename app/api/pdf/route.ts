@@ -8,7 +8,16 @@ export const dynamic = "force-dynamic";
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const MAX_PAGES = 200;
 
-type ParsedQuestion = { id: number; subject: string; question: string; options: string[]; answer: string; explanation: string };
+type ParsedQuestion = {
+  id: number;
+  subject: string;
+  question: string;
+  options: string[];
+  answer: string;
+  explanation: string;
+  pageNumber?: number;
+  hasImage?: boolean;
+};
 type Visibility = "public" | "private";
 
 export async function POST(request: Request) {
@@ -52,8 +61,26 @@ export async function POST(request: Request) {
     if (pdf.numPages > MAX_PAGES) return NextResponse.json({ error: "PDF 頁數太多", detail: `目前單一 PDF 最大限制為 ${MAX_PAGES} 頁。` }, { status: 413 });
 
     let fullText = "";
+    const imagePages = new Set<number>();
+
     for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
       const page = await pdf.getPage(pageNumber);
+
+      // 只判斷這一頁是否真的包含 PDF 圖片物件，不把圖片當成文字 OCR。
+      try {
+        const operatorList = await page.getOperatorList();
+        const imageOps = new Set<number>([
+          pdfjsLib.OPS.paintImageMaskXObject,
+          pdfjsLib.OPS.paintImageXObject,
+          pdfjsLib.OPS.paintInlineImageXObject,
+          pdfjsLib.OPS.paintImageMaskXObjectRepeat,
+          pdfjsLib.OPS.paintImageXObjectRepeat,
+        ].filter((value): value is number => typeof value === "number"));
+        if (operatorList.fnArray.some((fn: number) => imageOps.has(fn))) imagePages.add(pageNumber);
+      } catch (imageError) {
+        console.warn(`PDF 第 ${pageNumber} 頁圖片偵測失敗：`, imageError);
+      }
+
       const textContent = await page.getTextContent();
       const items = textContent.items.filter((item: any) => typeof item.str === "string" && item.str.trim() !== "").map((item: any) => ({ text: item.str.trim(), x: Number(item.transform?.[4] ?? 0), y: Number(item.transform?.[5] ?? 0), width: Number(item.width ?? 0) })).sort((a, b) => Math.abs(a.y - b.y) <= 3 ? a.x - b.x : b.y - a.y);
       const lines: Array<{ y: number; items: Array<{ text: string; x: number; width: number }> }> = [];
@@ -72,10 +99,26 @@ export async function POST(request: Request) {
 
     const text = fullText.trim();
     if (!text) return NextResponse.json({ error: "PDF 有成功讀取，但沒有偵測到文字。目前尚未支援純掃描圖片型 PDF OCR。" }, { status: 400 });
-    const questions = parseQuestions(text);
+    const questions = parseQuestions(text, imagePages);
     if (questions.length === 0) return NextResponse.json({ error: "沒有辨識到選擇題。請確認 PDF 題目格式。", detail: "目前已放寬國考常見的 1.、1、(1)、1) 與 A.、A、(A)、A) 格式。如果這份 PDF 仍無法辨識，請把該 PDF 上傳給我，我可以依實際文字層格式再調整。", textPreview: text.substring(0, 5000) }, { status: 400 });
 
-    return NextResponse.json({ success: true, pendingConfirmation: true, message: `成功辨識 ${questions.length} 題，尚未寫入資料庫。請檢查後確認。`, fileHash, filename: file.name, visibility, examYear, examSubject, total: questions.length, questions, textLength: text.length, totalPages: pdf.numPages });
+    const imageQuestionCount = questions.filter((question) => question.hasImage).length;
+    return NextResponse.json({
+      success: true,
+      pendingConfirmation: true,
+      message: `成功辨識 ${questions.length} 題${imageQuestionCount ? `，其中 ${imageQuestionCount} 題位於含圖片的 PDF 頁面` : ""}，尚未寫入資料庫。請檢查後確認。`,
+      fileHash,
+      filename: file.name,
+      visibility,
+      examYear,
+      examSubject,
+      total: questions.length,
+      questions,
+      imagePages: [...imagePages],
+      imageQuestionCount,
+      textLength: text.length,
+      totalPages: pdf.numPages,
+    });
   } catch (error) {
     console.error("PDF parsing error:", error);
     return NextResponse.json({ error: "PDF 解析失敗", detail: error instanceof Error ? error.message : "未知錯誤" }, { status: 500 });
@@ -88,10 +131,8 @@ function normalizeExamYear(value: number) {
   return year >= 1990 && year <= 2100 ? year : null;
 }
 
-function parseQuestions(text: string): ParsedQuestion[] {
-  const normalized = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").replace(/\u00a0/g, " ").replace(/[ \t]+/g, " ").replace(/===== PDF PAGE \d+ =====/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
-
-  // 國考 PDF 常見題號格式：1.、1、1)、(1)、1．、1：；允許題號與文字間沒有空格。
+function parseQuestions(text: string, imagePages: Set<number>): ParsedQuestion[] {
+  const normalized = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").replace(/\u00a0/g, " ").replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
   const questionStartRegex = /^\s*(?:[（(]\s*)?(\d{1,3})(?:\s*[）)])?\s*(?:[.、．:：]|(?=\S))\s*/gm;
   const matches = [...normalized.matchAll(questionStartRegex)].filter((match) => {
     const prefix = normalized.slice(Math.max(0, (match.index ?? 0) - 2), (match.index ?? 0));
@@ -104,11 +145,17 @@ function parseQuestions(text: string): ParsedQuestion[] {
     if (number < 1 || number > 999) continue;
     const start = (match.index ?? 0) + match[0].length;
     const end = matches[index + 1]?.index ?? normalized.length;
-    const parsed = parseQuestionContent(number, normalized.substring(start, end).trim());
-    if (parsed) questions.push(parsed);
+    const content = normalized.substring(start, end).trim();
+    const parsed = parseQuestionContent(number, content);
+    if (parsed) {
+      const before = normalized.slice(0, match.index ?? 0);
+      const pageMatches = [...before.matchAll(/===== PDF PAGE (\d+) =====/g)];
+      const pageNumber = pageMatches.length ? Number(pageMatches[pageMatches.length - 1][1]) : undefined;
+      parsed.pageNumber = pageNumber;
+      parsed.hasImage = pageNumber ? imagePages.has(pageNumber) : false;
+      questions.push(parsed);
+    }
   }
-
-  // 不再用題號當唯一鍵，避免 PDF 每頁重新從 1 開始時把後頁題目全部刪掉。
   const seen = new Set<string>();
   return questions.filter((q) => {
     const key = `${q.id}|${q.question}`;
@@ -119,19 +166,16 @@ function parseQuestions(text: string): ParsedQuestion[] {
 
 function parseQuestionContent(questionNumber: number, content: string): ParsedQuestion | null {
   if (!content) return null;
-  // 選項格式放寬：A.、A、A)、(A)、Ａ. 等；但仍要求出現在換行開頭，避免誤抓題幹中的 A/B/C。
   const optionRegex = /^\s*(?:[（(]\s*)?([A-DＡ-Ｄ])\s*(?:[）)])?\s*(?:[.、．:：]|(?=\S))\s*/gim;
   const optionMatches = [...content.matchAll(optionRegex)].filter((m) => {
     const index = m.index ?? 0;
     return index === 0 || /\n/.test(content.slice(Math.max(0, index - 2), index));
   });
   if (optionMatches.length < 2) return null;
-
   const firstIndex = optionMatches[0].index;
   if (firstIndex == null) return null;
   const questionText = clean(content.substring(0, firstIndex));
   if (!questionText || questionText.length < 2) return null;
-
   const options: string[] = [];
   for (let i = 0; i < optionMatches.length; i++) {
     const start = (optionMatches[i].index ?? 0) + optionMatches[i][0].length;
