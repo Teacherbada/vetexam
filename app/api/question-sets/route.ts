@@ -166,6 +166,20 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ success: true, questionSetId, totalQuestions: normalizedQuestions.length, message: `已確認匯入 ${normalizedQuestions.length} 題。` });
   } catch (error) {
+    const errorCode = typeof error === "object" && error !== null && "code" in error
+      ? String((error as { code?: unknown }).code)
+      : "";
+
+    if (errorCode === "23505") {
+      return NextResponse.json(
+        {
+          error: "這份 PDF 已經存在於相同的題庫範圍，不需要再次匯入。",
+          code: "DUPLICATE_FILE",
+        },
+        { status: 409 }
+      );
+    }
+
     console.error("Create question set error:", error);
     return NextResponse.json({ error: "匯入題庫失敗", detail: error instanceof Error ? error.message : "未知錯誤" }, { status: 500 });
   }
