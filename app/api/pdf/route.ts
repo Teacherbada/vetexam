@@ -39,9 +39,10 @@ export async function POST(request: Request) {
 
     /*
      * ============================================================
-     * Better Auth 登入狀態
+     * Better Auth 登入
      * ============================================================
      */
+
     const session = await auth.api.getSession({
       headers: request.headers,
     });
@@ -56,78 +57,55 @@ export async function POST(request: Request) {
     }
 
     const userId = session.user.id;
-
-    /*
-     * ============================================================
-     * ADMIN
-     * ============================================================
-     */
-    const adminUserId = process.env.ADMIN_USER_ID?.trim();
-
-    const isAdmin =
-      !!adminUserId &&
-      adminUserId === userId;
-
-    console.log("PDF API: userId", userId);
-    console.log("PDF API: isAdmin", isAdmin);
-
     const sql = neon(databaseUrl);
 
     /*
      * ============================================================
      * 會員方案
-     *
-     * ADMIN 不需要 PRO。
-     * 一般使用者仍然需要 PRO。
      * ============================================================
      */
-    if (!isAdmin) {
-      const subscriptions = await sql`
-        SELECT
-          plan,
-          status,
-          expires_at
-        FROM subscriptions
-        WHERE user_id = ${userId}
-        LIMIT 1
-      `;
 
-      const subscription = subscriptions[0];
+    const subscriptions = await sql`
+      SELECT
+        plan,
+        status,
+        expires_at
+      FROM subscriptions
+      WHERE user_id = ${userId}
+      LIMIT 1
+    `;
 
-      const isPro =
-        subscription?.plan === "pro" &&
-        subscription?.status === "active" &&
-        (
-          subscription?.expires_at === null ||
-          subscription?.expires_at === undefined ||
-          new Date(subscription.expires_at) > new Date()
-        );
+    const subscription = subscriptions[0];
 
-      if (!isPro) {
-        return NextResponse.json(
-          {
-            error: "目前只有 PRO 會員可以上傳 PDF 題庫。",
-            code: "PRO_REQUIRED",
-          },
-          { status: 403 }
-        );
-      }
+    const isPro =
+      subscription?.plan === "pro" &&
+      subscription?.status === "active" &&
+      (
+        subscription?.expires_at === null ||
+        subscription?.expires_at === undefined ||
+        new Date(subscription.expires_at) > new Date()
+      );
+
+    if (!isPro) {
+      return NextResponse.json(
+        {
+          error: "目前只有 PRO 會員可以上傳 PDF 題庫。",
+          code: "PRO_REQUIRED",
+        },
+        { status: 403 }
+      );
     }
 
     /*
      * ============================================================
-     * 取得上傳資料
-     *
-     * 同時支援：
-     * examSubject / exam_subject
-     * examYear / exam_year
+     * FormData
      * ============================================================
      */
+
     const formData = await request.formData();
 
     const file = formData.get("file");
     const visibilityValue = formData.get("visibility");
-
     const examYearValue =
       formData.get("examYear") ??
       formData.get("exam_year");
@@ -147,22 +125,41 @@ export async function POST(request: Request) {
 
     /*
      * ============================================================
-     * 國考年份
+     * 年份
+     *
+     * 前端顯示：
+     * 115
+     *
+     * API / DB：
+     * 2026
+     *
+     * 同時接受：
+     * 115 → 2026
+     * 114 → 2025
+     *
+     * 如果前端已經送西元年，也可以接受。
      * ============================================================
      */
-    const examYear =
-      examYearValue === null ||
-      examYearValue === ""
-        ? null
-        : Number(examYearValue);
+
+    let examYear = Number(examYearValue);
+
+    if (!Number.isInteger(examYear)) {
+      return NextResponse.json(
+        {
+          error: "請選擇有效的國考年份。",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (examYear >= 80 && examYear <= 200) {
+      examYear += 1911;
+    }
 
     if (
-      examYear !== null &&
-      (
-        !Number.isInteger(examYear) ||
-        examYear < 80 ||
-        examYear > 200
-      )
+      !Number.isInteger(examYear) ||
+      examYear < 1990 ||
+      examYear > 2100
     ) {
       return NextResponse.json(
         {
@@ -174,39 +171,39 @@ export async function POST(request: Request) {
 
     /*
      * ============================================================
-     * 國考科目
+     * 科目
      * ============================================================
      */
+
     const examSubject =
       typeof examSubjectValue === "string"
         ? examSubjectValue.trim()
         : "";
 
+    if (!examSubject) {
+      return NextResponse.json(
+        {
+          error: "請選擇國考科目。",
+        },
+        { status: 400 }
+      );
+    }
+
     /*
      * ============================================================
      * 公開 / 私人
      *
-     * ADMIN：
-     *   可以 public / private
-     *
-     * 一般使用者：
-     *   強制 private
+     * 一般使用者目前只能 private。
+     * ADMIN_USER_ID 可以使用特殊管理流程。
      * ============================================================
      */
+
     let visibility: Visibility = "private";
 
-    if (isAdmin) {
-      if (
-        visibilityValue === "public" ||
-        visibilityValue === "private"
-      ) {
-        visibility =
-          visibilityValue as Visibility;
-      }
-    } else {
-      visibility = "private";
+    if (visibilityValue === "public") {
+      const adminUserId = process.env.ADMIN_USER_ID;
 
-      if (visibilityValue === "public") {
+      if (!adminUserId || adminUserId !== userId) {
         return NextResponse.json(
           {
             error: "目前只有管理員可以建立公開題庫。",
@@ -215,28 +212,21 @@ export async function POST(request: Request) {
           { status: 403 }
         );
       }
+
+      visibility = "public";
     }
 
-    console.log(
-      "PDF API: 國考年份",
-      examYear
-    );
-
-    console.log(
-      "PDF API: 國考科目",
-      examSubject
-    );
-
-    console.log(
-      "PDF API: 題庫可見性",
-      visibility
-    );
+    console.log("PDF API: 國考年份", examYear);
+    console.log("PDF API: 國考科目", examSubject);
+    console.log("PDF API: 題庫可見性", visibility);
+    console.log("PDF API: owner_id", userId);
 
     /*
      * ============================================================
      * PDF 檔案檢查
      * ============================================================
      */
+
     if (file.type !== "application/pdf") {
       return NextResponse.json(
         {
@@ -259,8 +249,7 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           error: "PDF 檔案太大",
-          detail:
-            "目前單一 PDF 最大限制為 10 MB。",
+          detail: "目前單一 PDF 最大限制為 10 MB。",
         },
         { status: 413 }
       );
@@ -274,41 +263,34 @@ export async function POST(request: Request) {
 
     /*
      * ============================================================
-     * 計算 PDF SHA-256
+     * SHA-256
      * ============================================================
      */
-    const arrayBuffer =
-      await file.arrayBuffer();
 
-    const pdfBytes =
-      new Uint8Array(arrayBuffer);
+    const arrayBuffer = await file.arrayBuffer();
+    const pdfBytes = new Uint8Array(arrayBuffer);
 
-    const fileHash =
-      createHash("sha256")
-        .update(pdfBytes)
-        .digest("hex");
+    const fileHash = createHash("sha256")
+      .update(pdfBytes)
+      .digest("hex");
 
-    console.log(
-      "PDF API: SHA-256",
-      fileHash
-    );
+    console.log("PDF API: SHA-256", fileHash);
 
     /*
      * ============================================================
      * PDF.js
      * ============================================================
      */
+
     const pdfjsLib = await import(
       "pdfjs-dist/legacy/build/pdf.mjs"
     );
 
-    const loadingTask =
-      pdfjsLib.getDocument({
-        data: pdfBytes,
-      });
+    const loadingTask = pdfjsLib.getDocument({
+      data: pdfBytes,
+    });
 
-    const pdf =
-      await loadingTask.promise;
+    const pdf = await loadingTask.promise;
 
     console.log(
       "PDF API: PDF 頁數",
@@ -329,8 +311,18 @@ export async function POST(request: Request) {
     /*
      * ============================================================
      * 讀取 PDF 全文
+     *
+     * 這裡特別重要：
+     *
+     * 不再單純使用 item.str.join(" ")
+     *
+     * 因為圖片、雙欄排版、PDF 排版物件會造成文字順序
+     * 與題號位置異常。
+     *
+     * 先保留 PDF.js 的 item 順序，再加入換行。
      * ============================================================
      */
+
     let fullText = "";
 
     for (
@@ -338,23 +330,76 @@ export async function POST(request: Request) {
       pageNumber <= pdf.numPages;
       pageNumber++
     ) {
-      const page =
-        await pdf.getPage(pageNumber);
+      const page = await pdf.getPage(pageNumber);
 
       const textContent =
         await page.getTextContent();
 
-      const pageText =
-        textContent.items
-          .map((item: any) =>
-            "str" in item
-              ? item.str
-              : ""
-          )
-          .join(" ");
+      const items = textContent.items
+        .filter(
+          (item: any) =>
+            typeof item.str === "string" &&
+            item.str.trim() !== ""
+        )
+        .map((item: any) => ({
+          text: item.str.trim(),
+          x: Number(item.transform?.[4] ?? 0),
+          y: Number(item.transform?.[5] ?? 0),
+        }));
+
+      /*
+       * 依 Y 座標重新建立近似閱讀順序。
+       *
+       * 對於：
+       * - 圖片題
+       * - 雙欄 PDF
+       * - 題目跨行
+       * - PDF.js 把文字拆碎
+       *
+       * 都比單純 join(" ") 穩定。
+       */
+
+      const sortedItems = [...items].sort(
+        (a, b) => {
+          const yDiff = Math.abs(a.y - b.y);
+
+          if (yDiff < 4) {
+            return a.x - b.x;
+          }
+
+          return b.y - a.y;
+        }
+      );
+
+      const lines: string[] = [];
+
+      for (const item of sortedItems) {
+        if (!item.text) {
+          continue;
+        }
+
+        const previous =
+          lines[lines.length - 1];
+
+        if (!previous) {
+          lines.push(item.text);
+          continue;
+        }
+
+        /*
+         * PDF.js 的 Y 座標已經被排序。
+         * 這裡使用空白保留同一行文字。
+         */
+        lines[lines.length - 1] =
+          `${previous} ${item.text}`.trim();
+      }
+
+      const pageText = lines.join("\n");
 
       fullText +=
-        pageText + "\n";
+        `\n\n===== PDF PAGE ${pageNumber} =====\n\n` +
+        pageText +
+        "\n";
 
       console.log(
         `PDF API: 第 ${pageNumber} 頁文字長度`,
@@ -362,8 +407,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const text =
-      fullText.trim();
+    const text = fullText.trim();
 
     console.log(
       "PDF API: 總文字長度",
@@ -372,14 +416,14 @@ export async function POST(request: Request) {
 
     console.log(
       "PDF RAW TEXT:",
-      text.substring(0, 5000)
+      text.substring(0, 8000)
     );
 
     if (!text) {
       return NextResponse.json(
         {
           error:
-            "PDF 有成功讀取，但沒有偵測到文字。目前尚未支援掃描圖片型 PDF OCR。",
+            "PDF 有成功讀取，但沒有偵測到文字。目前尚未支援純掃描圖片型 PDF OCR。",
         },
         { status: 400 }
       );
@@ -390,8 +434,8 @@ export async function POST(request: Request) {
      * 題目解析
      * ============================================================
      */
-    const questions =
-      parseQuestions(text);
+
+    const questions = parseQuestions(text);
 
     console.log(
       "PDF API: 成功辨識",
@@ -403,9 +447,8 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           error:
-            "沒有辨識到選擇題。請確認 PDF 是文字型 PDF，且題目格式可以辨識。",
-          textPreview:
-            text.substring(0, 3000),
+            "沒有辨識到選擇題。請確認 PDF 題目格式。",
+          textPreview: text.substring(0, 5000),
         },
         { status: 400 }
       );
@@ -413,148 +456,115 @@ export async function POST(request: Request) {
 
     /*
      * ============================================================
-     * 重複 PDF 判定
+     * 同一使用者：
      *
-     * 規則：
+     * 同一 PDF → 不重複建立
      *
-     * 1. 同一個一般使用者：
-     *    同一份 PDF → 使用自己原本的題庫
+     * 不同使用者：
+     * 可以使用同一 PDF。
      *
-     * 2. 不同一般使用者：
-     *    可以上傳相同 PDF
-     *
-     * 3. 已存在公開國考題庫：
-     *    一般使用者 → 不建立私人副本
-     *
-     * 4. ADMIN：
-     *    完全忽略以上限制
-     *    可以重新匯入
-     *    可以建立 public
-     *    不會因其他使用者上傳相同 PDF 而被擋
+     * 這裡不再阻擋別人的 private PDF。
      * ============================================================
      */
-    if (!isAdmin) {
-      /*
-       * ------------------------------------------------------------
-       * 先找「自己的私人題庫」
-       * ------------------------------------------------------------
-       */
-      const ownPrivateSets = await sql`
-        SELECT
-          id,
-          name,
-          filename,
-          total_questions,
-          created_at,
-          file_hash,
-          visibility,
-          owner_id,
-          exam_year,
-          exam_subject
-        FROM question_sets
-        WHERE owner_id = ${userId}
-          AND file_hash = ${fileHash}
-          AND visibility = 'private'
-        ORDER BY created_at DESC
-        LIMIT 1
-      `;
 
-      if (ownPrivateSets.length > 0) {
-        const existingSet =
-          ownPrivateSets[0];
+    const existingSets = await sql`
+      SELECT
+        id,
+        name,
+        filename,
+        total_questions,
+        created_at,
+        file_hash,
+        visibility,
+        owner_id,
+        exam_year,
+        exam_subject
+      FROM question_sets
+      WHERE
+        file_hash = ${fileHash}
+        AND owner_id = ${userId}
+      LIMIT 1
+    `;
 
-        console.log(
-          "PDF API: 使用者自己已經匯入過",
-          existingSet.id
-        );
+    if (existingSets.length > 0) {
+      const existingSet =
+        existingSets[0];
 
-        const existingQuestions =
-          await sql`
-            SELECT
-              question_number,
-              subject,
-              question,
-              option_a,
-              option_b,
-              option_c,
-              option_d,
-              answer,
-              explanation
-            FROM questions
-            WHERE question_set_id =
-              ${existingSet.id}
-            ORDER BY question_number ASC
-          `;
+      console.log(
+        "PDF API: 使用者已經匯入過這份 PDF",
+        existingSet.id
+      );
 
-        const questionsForResponse:
-          ParsedQuestion[] =
-            existingQuestions.map(
-              (q: any) => ({
-                id:
-                  Number(
-                    q.question_number
-                  ),
-                subject:
-                  q.subject ??
-                  existingSet.exam_subject ??
-                  "",
-                question:
-                  q.question,
-                options: [
-                  q.option_a ?? "",
-                  q.option_b ?? "",
-                  q.option_c ?? "",
-                  q.option_d ?? "",
-                ],
-                answer:
-                  q.answer ?? "",
-                explanation:
-                  q.explanation ?? "",
-              })
-            );
+      const existingQuestions =
+        await sql`
+          SELECT
+            question_number,
+            subject,
+            question,
+            option_a,
+            option_b,
+            option_c,
+            option_d,
+            answer,
+            explanation
+          FROM questions
+          WHERE question_set_id = ${existingSet.id}
+          ORDER BY question_number ASC
+        `;
 
-        return NextResponse.json({
-          success: true,
-          duplicate: true,
-          duplicateType:
-            "own_private",
-          message:
-            "這份 PDF 已經匯入過，直接使用你原本的私人題庫。",
-          questionSetId:
-            Number(existingSet.id),
-          visibility:
-            existingSet.visibility,
-          ownerId:
-            existingSet.owner_id,
-          examYear:
-            existingSet.exam_year === null
-              ? null
-              : Number(
-                  existingSet.exam_year
-                ),
-          examSubject:
-            existingSet.exam_subject,
-          total:
-            questionsForResponse.length,
-          questions:
-            questionsForResponse,
-          textLength:
-            text.length,
-          totalPages:
-            pdf.numPages,
-        });
-      }
+      const questionsForResponse:
+        ParsedQuestion[] =
+        existingQuestions.map((q: any) => ({
+          id: Number(q.question_number),
+          subject:
+            q.subject ??
+            existingSet.exam_subject ??
+            "",
+          question: q.question,
+          options: [
+            q.option_a ?? "",
+            q.option_b ?? "",
+            q.option_c ?? "",
+            q.option_d ?? "",
+          ],
+          answer: q.answer ?? "",
+          explanation: q.explanation ?? "",
+        }));
 
-      /*
-       * ------------------------------------------------------------
-       * 再檢查是否已經存在「公開國考題庫」
-       *
-       * 注意：
-       * 只擋 public。
-       *
-       * 不會擋其他人的 private。
-       * ------------------------------------------------------------
-       */
+      return NextResponse.json({
+        success: true,
+        duplicate: true,
+        message:
+          "這份 PDF 已經匯入過，直接使用原本的私人題庫。",
+        questionSetId:
+          Number(existingSet.id),
+        visibility:
+          existingSet.visibility,
+        ownerId:
+          existingSet.owner_id,
+        examYear:
+          Number(existingSet.exam_year),
+        examSubject:
+          existingSet.exam_subject,
+        total:
+          questionsForResponse.length,
+        questions:
+          questionsForResponse,
+        textLength: text.length,
+        totalPages: pdf.numPages,
+      });
+    }
+
+    /*
+     * ============================================================
+     * 管理員公開題庫：
+     *
+     * 如果同一份 PDF 已存在公開國考題庫，
+     * 管理員可以取得它，而不是被其他使用者 private 題庫影響。
+     * ============================================================
+     */
+
+    if (userId === process.env.ADMIN_USER_ID) {
       const publicSets = await sql`
         SELECT
           id,
@@ -568,43 +578,83 @@ export async function POST(request: Request) {
           exam_year,
           exam_subject
         FROM question_sets
-        WHERE file_hash = ${fileHash}
+        WHERE
+          file_hash = ${fileHash}
           AND visibility = 'public'
-        ORDER BY created_at DESC
         LIMIT 1
       `;
 
       if (publicSets.length > 0) {
-        const existingPublicSet =
+        const publicSet =
           publicSets[0];
 
-        console.log(
-          "PDF API: 發現已存在的公開國考題庫",
-          existingPublicSet.id
-        );
+        const publicQuestions =
+          await sql`
+            SELECT
+              question_number,
+              subject,
+              question,
+              option_a,
+              option_b,
+              option_c,
+              option_d,
+              answer,
+              explanation
+            FROM questions
+            WHERE question_set_id = ${publicSet.id}
+            ORDER BY question_number ASC
+          `;
 
-        return NextResponse.json(
-          {
-            error:
-              "這份 PDF 已經存在於公開國考題庫，不需要再次匯入。",
-            code:
-              "PUBLIC_QUESTION_SET_EXISTS",
-            questionSetId:
-              Number(
-                existingPublicSet.id
+        const questionsForResponse:
+          ParsedQuestion[] =
+          publicQuestions.map(
+            (q: any) => ({
+              id: Number(
+                q.question_number
               ),
-            examYear:
-              existingPublicSet.exam_year ===
-              null
-                ? null
-                : Number(
-                    existingPublicSet.exam_year
-                  ),
-            examSubject:
-              existingPublicSet.exam_subject,
-          },
-          { status: 409 }
-        );
+              subject:
+                q.subject ??
+                publicSet.exam_subject ??
+                "",
+              question:
+                q.question,
+              options: [
+                q.option_a ?? "",
+                q.option_b ?? "",
+                q.option_c ?? "",
+                q.option_d ?? "",
+              ],
+              answer:
+                q.answer ?? "",
+              explanation:
+                q.explanation ?? "",
+            })
+          );
+
+        return NextResponse.json({
+          success: true,
+          duplicate: true,
+          message:
+            "這份 PDF 已經存在於公開國考題庫。",
+          questionSetId:
+            Number(publicSet.id),
+          visibility:
+            publicSet.visibility,
+          ownerId:
+            publicSet.owner_id,
+          examYear:
+            Number(publicSet.exam_year),
+          examSubject:
+            publicSet.exam_subject,
+          total:
+            questionsForResponse.length,
+          questions:
+            questionsForResponse,
+          textLength:
+            text.length,
+          totalPages:
+            pdf.numPages,
+        });
       }
     }
 
@@ -613,28 +663,19 @@ export async function POST(request: Request) {
      * 建立題庫名稱
      * ============================================================
      */
+
     const setName =
       file.name
         .replace(/\.pdf$/i, "")
         .trim() ||
-      (
-        examYear !== null &&
-        examSubject
-          ? `${examYear} 年 ${examSubject}`
-          : "PDF 題庫"
-      );
+      `${examYear} 年 ${examSubject}`;
 
     /*
      * ============================================================
      * 建立 question_sets
-     *
-     * ADMIN：
-     *   public / private 都可以
-     *
-     * 一般使用者：
-     *   private
      * ============================================================
      */
+
     const insertedSets =
       await sql`
         INSERT INTO question_sets (
@@ -655,7 +696,7 @@ export async function POST(request: Request) {
           ${visibility},
           ${userId},
           ${examYear},
-          ${examSubject || null}
+          ${examSubject}
         )
         RETURNING
           id,
@@ -666,40 +707,19 @@ export async function POST(request: Request) {
       `;
 
     const questionSetId =
-      Number(
-        insertedSets[0].id
-      );
+      Number(insertedSets[0].id);
 
     console.log(
       "PDF API: 建立題庫",
       questionSetId
     );
 
-    console.log(
-      "PDF API: 年份:",
-      insertedSets[0].exam_year
-    );
-
-    console.log(
-      "PDF API: 科目:",
-      insertedSets[0].exam_subject
-    );
-
-    console.log(
-      "PDF API: visibility:",
-      insertedSets[0].visibility
-    );
-
-    console.log(
-      "PDF API: owner_id:",
-      insertedSets[0].owner_id
-    );
-
     /*
      * ============================================================
-     * 將題目寫入 questions
+     * 寫入 questions
      * ============================================================
      */
+
     for (const question of questions) {
       await sql`
         INSERT INTO questions (
@@ -717,7 +737,7 @@ export async function POST(request: Request) {
         VALUES (
           ${questionSetId},
           ${question.id},
-          ${examSubject || question.subject},
+          ${examSubject},
           ${question.question},
           ${question.options[0] ?? ""},
           ${question.options[1] ?? ""},
@@ -735,70 +755,26 @@ export async function POST(request: Request) {
       "題寫入 Neon"
     );
 
-    /*
-     * ============================================================
-     * 成功
-     * ============================================================
-     */
     return NextResponse.json({
       success: true,
       duplicate: false,
       message:
-        visibility === "public"
-          ? "PDF 已成功匯入公開國考題庫。"
-          : "PDF 匯入成功，題目已永久保存。",
+        "PDF 匯入成功，題目已永久保存。",
       questionSetId,
       visibility,
       ownerId: userId,
-      isAdmin,
       examYear,
-      examSubject:
-        examSubject || null,
-      total:
-        questions.length,
+      examSubject,
+      total: questions.length,
       questions,
-      textLength:
-        text.length,
-      totalPages:
-        pdf.numPages,
+      textLength: text.length,
+      totalPages: pdf.numPages,
     });
   } catch (error) {
     console.error(
       "PDF parsing error:",
       error
     );
-
-    /*
-     * UNIQUE constraint：
-     * 同一個使用者同一份 PDF
-     *
-     * 即使兩個請求同時進來，
-     * DB unique index 仍然是最後一道保護。
-     */
-    if (
-      error instanceof Error &&
-      (
-        error.message.includes(
-          "idx_question_sets_owner_file_hash"
-        ) ||
-        error.message.includes(
-          "duplicate key"
-        ) ||
-        error.message.includes(
-          "unique constraint"
-        )
-      )
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            "這份 PDF 已經匯入過你的私人題庫。",
-          code:
-            "OWN_PRIVATE_DUPLICATE",
-        },
-        { status: 409 }
-      );
-    }
 
     return NextResponse.json(
       {
@@ -815,111 +791,181 @@ export async function POST(request: Request) {
 
 /*
  * ============================================================
- * PDF 題目解析
- * ============================================================
+ * PDF 題目解析器
  *
- * 支援：
+ * 重點：
  *
- * 1. 題目
- * 1、題目
- * 1) 題目
- * 1．題目
+ * 舊版：
+ *   題號必須出現在行首
  *
- * A. 選項
- * B. 選項
- * C. 選項
- * D. 選項
+ * 新版：
+ *   題號可以出現在：
  *
- * 也支援 PDF.js 把文字全部擠在同一行的情況。
+ *   1.
+ *   1、
+ *   1)
+ *   1．
+ *
+ *   甚至：
+ *
+ *   ...上一個選項 D... 2. 下一題...
+ *
+ * 這對圖片題、雙欄 PDF、PDF.js 排版非常重要。
  * ============================================================
  */
+
 function parseQuestions(
   text: string
 ): ParsedQuestion[] {
   const normalized =
-    text
-      .replace(/\r\n/g, "\n")
-      .replace(/\r/g, "\n")
-      .replace(/\u00a0/g, " ")
-      .replace(/[ \t]+/g, " ")
-      .replace(/\n{3,}/g, "\n\n")
-      .trim();
+    normalizePdfText(text);
+
+  /*
+   * 找所有題號。
+   *
+   * 不再要求 ^ 或 \n。
+   *
+   * 但前面必須不是數字，
+   * 避免把：
+   *
+   * 2026.123
+   *
+   * 之類誤判。
+   */
 
   const questionStartRegex =
-    /(?=(?:^|\n)\s*\d+\s*[.、)．]\s+)/g;
+    /(?:^|(?<=[\s>。！？：:；;）)]))(\d{1,3})\s*[.、)．]\s*/g;
 
-  const blocks =
-    normalized
-      .split(questionStartRegex)
-      .filter(
-        (block) =>
-          block.trim().length > 0
-      );
+  const matches = [
+    ...normalized.matchAll(
+      questionStartRegex
+    ),
+  ];
 
-  const questions:
-    ParsedQuestion[] = [];
+  const questions: ParsedQuestion[] = [];
 
-  for (const block of blocks) {
-    const question =
-      parseQuestionBlock(block);
-
-    if (question) {
-      questions.push(question);
-    }
-  }
-
-  if (questions.length === 0) {
+  if (matches.length === 0) {
     return parseQuestionsInline(
       normalized
     );
   }
 
-  return questions;
-}
+  for (
+    let index = 0;
+    index < matches.length;
+    index++
+  ) {
+    const match = matches[index];
 
-function parseQuestionsInline(
-  text: string
-): ParsedQuestion[] {
-  const questionBlocks =
-    text.split(
-      /(?=\b\d{1,3}\s*[.、)．]\s*[^\d])/g
-    );
+    const questionNumber =
+      Number(match[1]);
 
-  const questions:
-    ParsedQuestion[] = [];
+    const start =
+      (match.index ?? 0) +
+      match[0].length;
 
-  for (const block of questionBlocks) {
+    const next =
+      matches[index + 1];
+
+    const end =
+      next?.index ??
+      normalized.length;
+
+    const content =
+      normalized
+        .substring(start, end)
+        .trim();
+
     const question =
-      parseQuestionBlock(block);
+      parseQuestionContent(
+        questionNumber,
+        content
+      );
 
     if (question) {
       questions.push(question);
     }
   }
 
-  return questions;
+  /*
+   * 題號可能重複或順序異常。
+   *
+   * 去除完全重複的題號。
+   */
+
+  const unique =
+    new Map<number, ParsedQuestion>();
+
+  for (const question of questions) {
+    if (!unique.has(question.id)) {
+      unique.set(
+        question.id,
+        question
+      );
+    }
+  }
+
+  return [...unique.values()].sort(
+    (a, b) => a.id - b.id
+  );
 }
 
-function parseQuestionBlock(
-  block: string
-): ParsedQuestion | null {
-  const match =
-    block.match(
-      /^\s*(\d+)\s*[.、)．]\s*([\s\S]+)$/
-    );
+/*
+ * ============================================================
+ * 文字正規化
+ * ============================================================
+ */
 
-  if (!match) {
+function normalizePdfText(
+  text: string
+): string {
+  return text
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .replace(/\u00a0/g, " ")
+    .replace(/[ \t]+/g, " ")
+    .replace(
+      /===== PDF PAGE \d+ =====/g,
+      "\n"
+    )
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+/*
+ * ============================================================
+ * 題目內容解析
+ * ============================================================
+ */
+
+function parseQuestionContent(
+  questionNumber: number,
+  content: string
+): ParsedQuestion | null {
+  if (!content) {
     return null;
   }
 
-  const questionNumber =
-    Number(match[1]);
-
-  const content =
-    match[2].trim();
+  /*
+   * 支援：
+   *
+   * A.
+   * A、
+   * A)
+   * A．
+   * A:
+   * A：
+   *
+   * 以及 PDF 常見的：
+   *
+   * （A）
+   * (A)
+   *
+   * 避免英文單字中的 A 被誤判。
+   */
 
   const optionRegex =
-    /(?:^|\s|\n)([A-D])\s*[.、:：)．]\s*/gi;
+    /(?:^|[\s\n])(?:[（(]\s*)?([A-D])(?:\s*[）)])?\s*[.、:：．]\s*/gi;
 
   const optionMatches = [
     ...content.matchAll(
@@ -931,24 +977,35 @@ function parseQuestionBlock(
     return null;
   }
 
+  const firstOption =
+    optionMatches[0];
+
   const firstOptionIndex =
-    optionMatches[0].index;
+    firstOption.index;
 
   if (
-    firstOptionIndex ===
-    undefined
+    firstOptionIndex === undefined
   ) {
     return null;
   }
 
-  const questionText =
+  let questionText =
     content
       .substring(
         0,
         firstOptionIndex
       )
-      .replace(/\s+/g, " ")
       .trim();
+
+  /*
+   * 如果圖片 / PDF 排版造成一些孤立字元，
+   * 清理頭尾。
+   */
+
+  questionText =
+    cleanQuestionText(
+      questionText
+    );
 
   if (!questionText) {
     return null;
@@ -971,26 +1028,29 @@ function parseQuestionBlock(
     const next =
       optionMatches[i + 1];
 
-    const end = next
-      ? next.index ??
-        content.length
-      : content.length;
+    const end =
+      next?.index ??
+      content.length;
 
     const optionText =
-      content
-        .substring(
+      cleanOptionText(
+        content.substring(
           start,
           end
         )
-        .replace(/\s+/g, " ")
-        .trim();
+      );
 
     if (optionText) {
-      options.push(
-        optionText
-      );
+      options.push(optionText);
     }
   }
+
+  /*
+   * 國考一般為四選一。
+   *
+   * 如果超過四個，
+   * 只保留前四個。
+   */
 
   if (options.length < 2) {
     return null;
@@ -1009,4 +1069,99 @@ function parseQuestionBlock(
     answer: "",
     explanation: "",
   };
+}
+
+/*
+ * ============================================================
+ * 清理題目
+ * ============================================================
+ */
+
+function cleanQuestionText(
+  text: string
+): string {
+  return text
+    .replace(
+      /^(?:第\s*)?\d{1,3}\s*[.、)．]\s*/,
+      ""
+    )
+    .replace(
+      /===== PDF PAGE \d+ =====/g,
+      ""
+    )
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/*
+ * ============================================================
+ * 清理選項
+ * ============================================================
+ */
+
+function cleanOptionText(
+  text: string
+): string {
+  return text
+    .replace(
+      /===== PDF PAGE \d+ =====/g,
+      ""
+    )
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/*
+ * ============================================================
+ * fallback
+ *
+ * 如果 PDF 全部變成一行，
+ * 使用較寬鬆的題號偵測。
+ * ============================================================
+ */
+
+function parseQuestionsInline(
+  text: string
+): ParsedQuestion[] {
+  const questionBlocks =
+    text.split(
+      /(?<!\d)(\d{1,3})\s*[.、)．]\s*(?=[^\d])/g
+    );
+
+  const questions: ParsedQuestion[] =
+    [];
+
+  /*
+   * split() 會把題號本身拆出去，
+   * 所以用兩兩組合。
+   */
+
+  for (
+    let i = 1;
+    i < questionBlocks.length;
+    i += 2
+  ) {
+    const questionNumber =
+      Number(
+        questionBlocks[i]
+      );
+
+    const content =
+      questionBlocks[i + 1] ??
+      "";
+
+    const question =
+      parseQuestionContent(
+        questionNumber,
+        content
+      );
+
+    if (question) {
+      questions.push(question);
+    }
+  }
+
+  return questions.sort(
+    (a, b) => a.id - b.id
+  );
 }
