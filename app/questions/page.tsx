@@ -21,9 +21,21 @@ type Question = {
   explanation: string;
 };
 
+function shuffleQuestions(items: Question[]) {
+  const shuffled = [...items];
+
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+
+  return shuffled;
+}
+
 function QuestionsContent() {
   const searchParams = useSearchParams();
   const subject = searchParams.get("subject");
+  const order = searchParams.get("order") === "random" ? "random" : "original";
 
   const [questions, setQuestions] = useState<Question[]>([]);
   const [loading, setLoading] = useState(true);
@@ -66,12 +78,16 @@ function QuestionsContent() {
         const data = await response.json();
 
         if (!response.ok) {
-          throw new Error(
-            data.error || "取得題目失敗"
-          );
+          throw new Error(data.error || "取得題目失敗");
         }
 
-        setQuestions(data.questions ?? []);
+        const loadedQuestions: Question[] = data.questions ?? [];
+
+        setQuestions(
+          order === "random"
+            ? shuffleQuestions(loadedQuestions)
+            : loadedQuestions
+        );
         setCurrentIndex(0);
         setSelected("");
         setShowResult(false);
@@ -93,18 +109,15 @@ function QuestionsContent() {
     }
 
     loadQuestions();
-  }, [subject]);
+  }, [subject, order]);
 
-  const currentQuestion =
-    questions[currentIndex];
+  const currentQuestion = questions[currentIndex];
 
   if (loading) {
     return (
       <main className="min-h-screen bg-gray-100 p-10">
         <div className="mx-auto max-w-3xl rounded-xl bg-white p-8 text-center shadow">
-          <p className="text-xl font-bold">
-            題目載入中...
-          </p>
+          <p className="text-xl font-bold">題目載入中...</p>
         </div>
       </main>
     );
@@ -114,14 +127,8 @@ function QuestionsContent() {
     return (
       <main className="min-h-screen bg-gray-100 p-10">
         <div className="mx-auto max-w-3xl rounded-xl bg-white p-8 text-center shadow">
-          <h1 className="text-2xl font-bold text-red-600">
-            無法取得題目
-          </h1>
-
-          <p className="mt-4 text-gray-600">
-            {error}
-          </p>
-
+          <h1 className="text-2xl font-bold text-red-600">無法取得題目</h1>
+          <p className="mt-4 text-gray-600">{error}</p>
           <div className="mt-6">
             <HomeButton />
           </div>
@@ -134,14 +141,10 @@ function QuestionsContent() {
     return (
       <main className="min-h-screen bg-gray-100 p-10">
         <div className="mx-auto max-w-3xl rounded-xl bg-white p-8 text-center shadow">
-          <h1 className="text-2xl font-bold">
-            目前沒有這個科目的題目
-          </h1>
-
+          <h1 className="text-2xl font-bold">目前沒有這個科目的題目</h1>
           <p className="mt-4 text-gray-500">
             目前「{subject}」尚未匯入任何題目。
           </p>
-
           <div className="mt-6">
             <HomeButton />
           </div>
@@ -165,48 +168,33 @@ function QuestionsContent() {
     }
 
     addDailyProgress();
-
     setShowResult(true);
     setAnswered(true);
 
-    const correct =
-      selected === answer;
+    const correct = selected === answer;
 
-    saveProgress(
-      currentQuestion.id,
-      correct,
-      currentQuestion.subject
-    );
+    saveProgress(currentQuestion.id, correct, currentQuestion.subject);
 
     if (correct) {
       setScore((prev) => prev + 1);
     } else {
-      saveWrongQuestion(
-        currentQuestion,
-        selected
-      );
+      saveWrongQuestion(currentQuestion, selected);
     }
   }
 
   function exitQuiz() {
-    const confirmExit =
-      window.confirm(
-        "確定要退出測驗嗎？\n\n目前測驗進度將會重置。"
-      );
+    const confirmExit = window.confirm(
+      "確定要退出測驗嗎？\n\n目前測驗進度將會重置。"
+    );
 
     if (confirmExit) {
-      window.location.href = "/";
+      window.location.href = "/subjects";
     }
   }
 
   function nextQuestion() {
-    if (
-      currentIndex <
-      questions.length - 1
-    ) {
-      setCurrentIndex(
-        (prev) => prev + 1
-      );
+    if (currentIndex < questions.length - 1) {
+      setCurrentIndex((prev) => prev + 1);
       setSelected("");
       setShowResult(false);
       setAnswered(false);
@@ -216,9 +204,7 @@ function QuestionsContent() {
   }
 
   function favoriteQuestion() {
-    const updated =
-      toggleFavorite(currentQuestion);
-
+    const updated = toggleFavorite(currentQuestion);
     setFavorites(updated);
   }
 
@@ -226,27 +212,14 @@ function QuestionsContent() {
     return (
       <main className="min-h-screen bg-gray-100 p-10">
         <div className="mx-auto max-w-3xl rounded-xl bg-white p-8 text-center shadow">
-          <h1 className="text-4xl font-bold">
-            🎉 測驗完成
-          </h1>
-
+          <h1 className="text-4xl font-bold">🎉 測驗完成</h1>
           <p className="mt-6 text-2xl">
-            得分：
-            {score}
-            /
-            {questions.length}
+            得分：{score}/{questions.length}
           </p>
-
           <p className="mt-4 text-xl">
             正確率：
-            {Math.round(
-              (score /
-                questions.length) *
-                100
-            )}
-            %
+            {Math.round((score / questions.length) * 100)}%
           </p>
-
           <div className="mt-8">
             <HomeButton />
           </div>
@@ -255,112 +228,68 @@ function QuestionsContent() {
     );
   }
 
-  const isFavorite =
-    favorites.some(
-      (item) =>
-        item.id ===
-        currentQuestion.id
-    );
+  const isFavorite = favorites.some(
+    (item) => item.id === currentQuestion.id
+  );
 
   return (
     <main className="min-h-screen bg-gray-100 p-10">
       <div className="mx-auto max-w-3xl">
         <button
           onClick={exitQuiz}
-          className="
-            mb-6
-            rounded-lg
-            bg-red-500
-            px-5
-            py-2
-            text-white
-            hover:bg-red-600
-          "
+          className="mb-6 rounded-lg bg-red-500 px-5 py-2 text-white hover:bg-red-600"
         >
           🚪 退出測驗
         </button>
 
         <div className="rounded-xl bg-white p-8 shadow">
-          <p className="font-bold text-blue-600">
-            {currentQuestion.subject}
-            {" 第 "}
-            {currentIndex + 1}
-            {" / "}
-            {questions.length}
-            {" 題"}
-          </p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="font-bold text-blue-600">
+              {currentQuestion.subject} 第 {currentIndex + 1} / {questions.length} 題
+            </p>
+            <span className="rounded-full bg-gray-100 px-3 py-1 text-sm text-gray-600">
+              {order === "random" ? "🔀 隨機順序" : "🔢 原始順序"}
+            </span>
+          </div>
 
-          <p className="mt-2 text-gray-600">
-            目前得分：
-            {score}
-          </p>
+          <p className="mt-2 text-gray-600">目前得分：{score}</p>
 
           <h1 className="mt-4 text-3xl font-bold">
             {currentQuestion.question}
           </h1>
 
           <button
-            onClick={
-              favoriteQuestion
-            }
+            onClick={favoriteQuestion}
             className="mt-4 rounded-lg border px-4 py-2 hover:bg-gray-100"
           >
-            {isFavorite
-              ? "★ 已收藏"
-              : "☆ 收藏題目"}
+            {isFavorite ? "★ 已收藏" : "☆ 收藏題目"}
           </button>
 
           <div className="mt-8 space-y-4">
-            {currentQuestion.options.map(
-              (option, index) => {
-                const optionLetter =
-                  String.fromCharCode(
-                    65 + index
-                  );
+            {currentQuestion.options.map((option, index) => {
+              const optionLetter = String.fromCharCode(65 + index);
 
-                return (
-                  <button
-                    key={`${currentQuestion.id}-${index}`}
-                    disabled={answered}
-                    onClick={() =>
-                      setSelected(
-                        optionLetter
-                      )
-                    }
-                    className={`
-                      w-full
-                      rounded-lg
-                      border
-                      p-4
-                      text-left
-                      ${
-                        selected ===
-                        optionLetter
-                          ? "border-blue-500 bg-blue-100"
-                          : "hover:bg-gray-50"
-                      }
-                    `}
-                  >
-                    {optionLetter}.{" "}
-                    {option}
-                  </button>
-                );
-              }
-            )}
+              return (
+                <button
+                  key={`${currentQuestion.id}-${index}`}
+                  disabled={answered}
+                  onClick={() => setSelected(optionLetter)}
+                  className={`w-full rounded-lg border p-4 text-left ${
+                    selected === optionLetter
+                      ? "border-blue-500 bg-blue-100"
+                      : "hover:bg-gray-50"
+                  }`}
+                >
+                  {optionLetter}. {option}
+                </button>
+              );
+            })}
           </div>
 
           {!showResult && (
             <button
               onClick={checkAnswer}
-              className="
-                mt-8
-                rounded-lg
-                bg-blue-600
-                px-6
-                py-3
-                text-white
-                hover:bg-blue-700
-              "
+              className="mt-8 rounded-lg bg-blue-600 px-6 py-3 text-white hover:bg-blue-700"
             >
               確認答案
             </button>
@@ -369,40 +298,23 @@ function QuestionsContent() {
           {showResult && (
             <div className="mt-8 rounded-lg bg-gray-100 p-5">
               {selected === answer ? (
-                <p className="font-bold text-green-600">
-                  ✓ 答對了
-                </p>
+                <p className="font-bold text-green-600">✓ 答對了</p>
               ) : (
                 <p className="font-bold text-red-600">
-                  ✗ 答錯了，答案是{" "}
-                  {answer}
+                  ✗ 答錯了，答案是 {answer}
                 </p>
               )}
 
               <p className="mt-3">
-                <span className="font-bold">
-                  解析：
-                </span>{" "}
-                {currentQuestion.explanation ||
-                  "目前沒有提供解析。"}
+                <span className="font-bold">解析：</span>{" "}
+                {currentQuestion.explanation || "目前沒有提供解析。"}
               </p>
 
               <button
-                onClick={
-                  nextQuestion
-                }
-                className="
-                  mt-6
-                  rounded-lg
-                  bg-green-600
-                  px-6
-                  py-3
-                  text-white
-                  hover:bg-green-700
-                "
+                onClick={nextQuestion}
+                className="mt-6 rounded-lg bg-green-600 px-6 py-3 text-white hover:bg-green-700"
               >
-                {currentIndex <
-                questions.length - 1
+                {currentIndex < questions.length - 1
                   ? "下一題 →"
                   : "完成測驗"}
               </button>
