@@ -5,10 +5,21 @@ import { auth } from "@/lib/auth";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type ImageAsset = { y: number; dataUrl: string };
+type ImageAsset = {
+  y: number;
+  x: number;
+  width: number;
+  height: number;
+  dataUrl: string;
+};
 type Anchor = { number: number; y: number };
 
+// 保留舊版 image-object 擷取作為 fallback。
 const IMAGE_PADDING = 8;
+// 新版從 PDF 頁面重新渲染時，在圖片四周多保留少量 PDF 內容，
+// 用來包含貼在圖片邊緣的文字層數字。
+const RENDER_PADDING = 14;
+const RENDER_SCALE = 2;
 
 export async function POST(request: Request) {
   try {
@@ -48,11 +59,104 @@ export async function POST(request: Request) {
     const anchors = getQuestionAnchors(items);
     const image = findImageNearQuestion(questionNumber, anchors, images);
 
-    return NextResponse.json({ success: true, pageNumber, questionNumber, imageDataUrl: image?.dataUrl ?? null });
+    if (!image) {
+      return NextResponse.json({
+        success: true,
+        pageNumber,
+        questionNumber,
+        imageDataUrl: null,
+      });
+    }
+
+    // 主方案：重新渲染 PDF 的圖片區域，因此圖片旁邊屬於 PDF
+    // 文字層的數字也會一起保留下來。
+    try {
+      const renderedDataUrl = await renderPdfRegion(pdfjsLib, page, image, viewport);
+      if (renderedDataUrl) {
+        return NextResponse.json({
+          success: true,
+          pageNumber,
+          questionNumber,
+          imageDataUrl: renderedDataUrl,
+          extractionMode: "pdf-region-render",
+        });
+      }
+    } catch (renderError) {
+      console.warn("PDF region rendering failed; using image-object fallback:", renderError);
+    }
+
+    // fallback：保留原本已經能工作的 image-object 擷取方式。
+    return NextResponse.json({
+      success: true,
+      pageNumber,
+      questionNumber,
+      imageDataUrl: image.dataUrl,
+      extractionMode: "image-object-fallback",
+    });
   } catch (error) {
     console.error("PDF image extraction error:", error);
     return NextResponse.json({ error: "圖片擷取失敗", detail: error instanceof Error ? error.message : "未知錯誤" }, { status: 500 });
   }
+}
+
+async function renderPdfRegion(pdfjsLib: any, page: any, image: ImageAsset, viewport: any): Promise<string | null> {
+  // 使用 pdfjs-dist 已經帶入的 optional Node canvas。用字串動態 import
+  // 是為了不把原本的 TypeScript 編譯環境綁死在 canvas 型別上。
+  const dynamicImport = new Function("specifier", "return import(specifier)") as (specifier: string) => Promise<any>;
+  const canvasModule = await dynamicImport("@napi-rs/canvas");
+
+  if (canvasModule?.DOMMatrix && typeof globalThis.DOMMatrix === "undefined") {
+    (globalThis as any).DOMMatrix = canvasModule.DOMMatrix;
+  }
+  if (canvasModule?.ImageData && typeof globalThis.ImageData === "undefined") {
+    (globalThis as any).ImageData = canvasModule.ImageData;
+  }
+  if (canvasModule?.Path2D && typeof globalThis.Path2D === "undefined") {
+    (globalThis as any).Path2D = canvasModule.Path2D;
+  }
+
+  const renderViewport = page.getViewport({ scale: RENDER_SCALE });
+  const pageCanvas = canvasModule.createCanvas(
+    Math.ceil(renderViewport.width),
+    Math.ceil(renderViewport.height),
+  );
+  const pageContext = pageCanvas.getContext("2d");
+
+  await page.render({
+    canvasContext: pageContext,
+    viewport: renderViewport,
+  }).promise;
+
+  const cropLeft = Math.max(0, Math.floor((image.x - RENDER_PADDING) * RENDER_SCALE));
+  const cropTop = Math.max(0, Math.floor((image.y - RENDER_PADDING) * RENDER_SCALE));
+  const cropRight = Math.min(
+    pageCanvas.width,
+    Math.ceil((image.x + image.width + RENDER_PADDING) * RENDER_SCALE),
+  );
+  const cropBottom = Math.min(
+    pageCanvas.height,
+    Math.ceil((image.y + image.height + RENDER_PADDING) * RENDER_SCALE),
+  );
+
+  const cropWidth = cropRight - cropLeft;
+  const cropHeight = cropBottom - cropTop;
+  if (cropWidth <= 0 || cropHeight <= 0) return null;
+
+  const cropCanvas = canvasModule.createCanvas(cropWidth, cropHeight);
+  const cropContext = cropCanvas.getContext("2d");
+  cropContext.drawImage(
+    pageCanvas,
+    cropLeft,
+    cropTop,
+    cropWidth,
+    cropHeight,
+    0,
+    0,
+    cropWidth,
+    cropHeight,
+  );
+
+  return cropCanvas.toDataURL("image/png");
 }
 
 async function getImageAssets(pdfjsLib: any, page: any, operatorList: any, viewport: any): Promise<ImageAsset[]> {
@@ -89,12 +193,25 @@ async function getImageAssets(pdfjsLib: any, page: any, operatorList: any, viewp
 
     const dataUrl = imageObjectToDataUrl(image);
     if (!dataUrl) continue;
+
     try {
       const transform = pdfjsLib.Util.transform(viewport.transform, ctm);
-      const p1 = pdfjsLib.Util.applyTransform([0, 0], transform);
-      const p2 = pdfjsLib.Util.applyTransform([1, 1], transform);
-      assets.push({ y: (p1[1] + p2[1]) / 2, dataUrl });
-    } catch { assets.push({ y: 0, dataUrl }); }
+      const points = [
+        pdfjsLib.Util.applyTransform([0, 0], transform),
+        pdfjsLib.Util.applyTransform([1, 0], transform),
+        pdfjsLib.Util.applyTransform([0, 1], transform),
+        pdfjsLib.Util.applyTransform([1, 1], transform),
+      ];
+      const xs = points.map((point: number[]) => point[0]);
+      const ys = points.map((point: number[]) => point[1]);
+      const x = Math.min(...xs);
+      const y = Math.min(...ys);
+      const width = Math.max(...xs) - x;
+      const height = Math.max(...ys) - y;
+      assets.push({ y: y + height / 2, x, width, height, dataUrl });
+    } catch {
+      assets.push({ y: 0, x: 0, width: 0, height: 0, dataUrl });
+    }
   }
   return assets;
 }
@@ -201,5 +318,9 @@ function findImageNearQuestion(questionNumber: number, anchors: Anchor[], images
   const previous = targetIndex > 0 ? ordered[targetIndex - 1] : undefined;
   const next = targetIndex >= 0 && targetIndex < ordered.length - 1 ? ordered[targetIndex + 1] : undefined;
   const upper = previous?.y ?? target.y - 120, nextBoundary = next?.y ?? target.y + 5000;
-  return images.find((image) => { const y = image.y; if (targetIndex === 0) return y <= nextBoundary + 40; return y <= upper + 20 && y >= nextBoundary - 20; }) ?? null;
+  return images.find((image) => {
+    const y = image.y;
+    if (targetIndex === 0) return y <= nextBoundary + 40;
+    return y <= upper + 20 && y >= nextBoundary - 20;
+  }) ?? null;
 }
