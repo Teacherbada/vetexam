@@ -133,7 +133,7 @@ async function renderPdfRegion(pdfjsLib: any, page: any, image: ImageAsset, view
   );
   const cropBottom = Math.min(
     pageCanvas.height,
-    Math.ceil((image.y + image.height + RENDER_PADDING + 6) * RENDER_SCALE),
+    Math.ceil((image.y + image.height + RENDER_PADDING + 12) * RENDER_SCALE),
   );
 
   const cropWidth = cropRight - cropLeft;
@@ -311,11 +311,13 @@ function findImageNearQuestion(questionNumber: number, anchors: Anchor[], images
   if (!anchors.length || !images.length) return null;
   const same = anchors.filter((anchor) => anchor.number === questionNumber);
   if (!same.length) return null;
-  const target = same[0], ordered = [...anchors].sort((a, b) => b.y - a.y);
+  const target = same[0];
+  const ordered = [...anchors].sort((a, b) => b.y - a.y);
   const targetIndex = ordered.findIndex((anchor) => anchor.number === questionNumber && Math.abs(anchor.y - target.y) < 0.5);
   const previous = targetIndex > 0 ? ordered[targetIndex - 1] : undefined;
   const next = targetIndex >= 0 && targetIndex < ordered.length - 1 ? ordered[targetIndex + 1] : undefined;
-  const upper = previous?.y ?? target.y - 120, nextBoundary = next?.y ?? target.y + 5000;
+  const upper = previous?.y ?? target.y - 120;
+  const nextBoundary = next?.y ?? target.y + 5000;
   return images.find((image) => {
     const y = image.y;
     if (targetIndex === 0) return y <= nextBoundary + 40;
