@@ -52,7 +52,7 @@ function ImagePreview({ file, pageNumber, questionNumber, onImageLoaded }: Props
 
     load();
     return () => { cancelled = true; };
-  }, [currentFile, pageNumber, questionNumber, onImageLoaded]);
+  }, [file, pageNumber, questionNumber, onImageLoaded]);
 
   if (error) return <div className="mt-4 text-sm text-amber-700">🖼 {error}</div>;
   if (loading && !src) return <div className="mt-4 text-sm text-amber-700">🖼 正在載入圖片預覽…</div>;
