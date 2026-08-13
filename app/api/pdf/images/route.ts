@@ -100,8 +100,6 @@ export async function POST(request: Request) {
 }
 
 async function renderPdfRegion(pdfjsLib: any, page: any, image: ImageAsset, viewport: any): Promise<string | null> {
-  // 使用 pdfjs-dist 已經帶入的 optional Node canvas。用字串動態 import
-  // 是為了不把原本的 TypeScript 編譯環境綁死在 canvas 型別上。
   const dynamicImport = new Function("specifier", "return import(specifier)") as (specifier: string) => Promise<any>;
   const canvasModule = await dynamicImport("@napi-rs/canvas");
 
@@ -135,7 +133,7 @@ async function renderPdfRegion(pdfjsLib: any, page: any, image: ImageAsset, view
   );
   const cropBottom = Math.min(
     pageCanvas.height,
-    Math.ceil((image.y + image.height + RENDER_PADDING) * RENDER_SCALE),
+    Math.ceil((image.y + image.height + RENDER_PADDING + 6) * RENDER_SCALE),
   );
 
   const cropWidth = cropRight - cropLeft;
