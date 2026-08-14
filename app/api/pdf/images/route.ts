@@ -15,14 +15,9 @@ type ImageAsset = {
 type TextItem = { text: string; y: number; height: number };
 type Anchor = { number: number; y: number };
 
-// 保留舊版 image-object 擷取作為 fallback。
 const IMAGE_PADDING = 8;
-// 新版從 PDF 頁面重新渲染時，在圖片四周多保留少量 PDF 內容，
-// 用來包含貼在圖片邊緣的文字層數字。
 const RENDER_PADDING = 14;
 const RENDER_SCALE = 2;
-// 如果圖表下方緊接著選項，裁切到選項文字上緣，
-// 避免只靠固定 padding 猜測圖表底部。
 const OPTION_CROP_GAP = 4;
 
 export async function POST(request: Request) {
@@ -68,16 +63,9 @@ export async function POST(request: Request) {
     const image = findImageNearQuestion(questionNumber, anchors, images);
 
     if (!image) {
-      return NextResponse.json({
-        success: true,
-        pageNumber,
-        questionNumber,
-        imageDataUrl: null,
-      });
+      return NextResponse.json({ success: true, pageNumber, questionNumber, imageDataUrl: null });
     }
 
-    // 主方案：重新渲染 PDF 的圖片區域，因此圖片旁邊屬於 PDF
-    // 文字層的數字也會一起保留下來。
     try {
       const renderedDataUrl = await renderPdfRegion(pdfjsLib, page, image, viewport, items);
       if (renderedDataUrl) {
@@ -90,17 +78,24 @@ export async function POST(request: Request) {
         });
       }
     } catch (renderError) {
-      console.warn("PDF region rendering failed; using image-object fallback:", renderError);
+      console.error("PDF region rendering failed:", renderError);
+      return NextResponse.json({
+        error: "PDF 整頁 Render 失敗",
+        detail: renderError instanceof Error ? renderError.message : String(renderError),
+        renderErrorName: renderError instanceof Error ? renderError.name : "unknown",
+        renderErrorStack: renderError instanceof Error ? renderError.stack?.slice(0, 2000) : undefined,
+        pageNumber,
+        questionNumber,
+        diagnostic: "renderPdfRegion failed before fallback",
+      }, { status: 500 });
     }
 
-    // fallback：保留原本已經能工作的 image-object 擷取方式。
     return NextResponse.json({
-      success: true,
+      error: "PDF 整頁 Render 沒有產生圖片",
       pageNumber,
       questionNumber,
-      imageDataUrl: image.dataUrl,
-      extractionMode: "image-object-fallback",
-    });
+      diagnostic: "renderPdfRegion returned null before fallback",
+    }, { status: 500 });
   } catch (error) {
     console.error("PDF image extraction error:", error);
     return NextResponse.json({ error: "圖片擷取失敗", detail: error instanceof Error ? error.message : "未知錯誤" }, { status: 500 });
@@ -117,47 +112,22 @@ async function renderPdfRegion(
   const dynamicImport = new Function("specifier", "return import(specifier)") as (specifier: string) => Promise<any>;
   const canvasModule = await dynamicImport("@napi-rs/canvas");
 
-  if (canvasModule?.DOMMatrix && typeof globalThis.DOMMatrix === "undefined") {
-    (globalThis as any).DOMMatrix = canvasModule.DOMMatrix;
-  }
-  if (canvasModule?.ImageData && typeof globalThis.ImageData === "undefined") {
-    (globalThis as any).ImageData = canvasModule.ImageData;
-  }
-  if (canvasModule?.Path2D && typeof globalThis.Path2D === "undefined") {
-    (globalThis as any).Path2D = canvasModule.Path2D;
-  }
+  if (canvasModule?.DOMMatrix && typeof globalThis.DOMMatrix === "undefined") (globalThis as any).DOMMatrix = canvasModule.DOMMatrix;
+  if (canvasModule?.ImageData && typeof globalThis.ImageData === "undefined") (globalThis as any).ImageData = canvasModule.ImageData;
+  if (canvasModule?.Path2D && typeof globalThis.Path2D === "undefined") (globalThis as any).Path2D = canvasModule.Path2D;
 
   const renderViewport = page.getViewport({ scale: RENDER_SCALE });
-  const pageCanvas = canvasModule.createCanvas(
-    Math.ceil(renderViewport.width),
-    Math.ceil(renderViewport.height),
-  );
+  const pageCanvas = canvasModule.createCanvas(Math.ceil(renderViewport.width), Math.ceil(renderViewport.height));
   const pageContext = pageCanvas.getContext("2d");
 
-  await page.render({
-    canvasContext: pageContext,
-    viewport: renderViewport,
-  }).promise;
+  await page.render({ canvasContext: pageContext, viewport: renderViewport }).promise;
 
   const imageTop = image.y - image.height / 2;
   const imageBottom = image.y + image.height / 2;
+  const cropLeft = Math.max(0, Math.floor((image.x - RENDER_PADDING) * RENDER_SCALE));
+  const cropTop = Math.max(0, Math.floor((imageTop - RENDER_PADDING) * RENDER_SCALE));
+  const cropRight = Math.min(pageCanvas.width, Math.ceil((image.x + image.width + RENDER_PADDING) * RENDER_SCALE));
 
-  const cropLeft = Math.max(
-    0,
-    Math.floor((image.x - RENDER_PADDING) * RENDER_SCALE),
-  );
-  const cropTop = Math.max(
-    0,
-    Math.floor((imageTop - RENDER_PADDING) * RENDER_SCALE),
-  );
-  const cropRight = Math.min(
-    pageCanvas.width,
-    Math.ceil((image.x + image.width + RENDER_PADDING) * RENDER_SCALE),
-  );
-
-  // 優先尋找圖片下方的 A./B./C./D./E. 選項。
-  // 這些文字是可靠的「下一個區塊邊界」，比固定增加 24 更穩定；
-  // 圖表底部的非文字 vector / image 內容仍會被整頁 render 保留下來。
   const optionItems = textItems
     .filter((item) => /^[A-EＡ-Ｅ][.．、:：)]/.test(item.text))
     .map((item) => {
@@ -169,16 +139,10 @@ async function renderPdfRegion(
     .sort((a, b) => a.textTopY - b.textTopY);
 
   const firstOption = optionItems[0];
-  const optionBoundary = firstOption
-    ? firstOption.textTopY - OPTION_CROP_GAP
-    : Number.POSITIVE_INFINITY;
-
+  const optionBoundary = firstOption ? firstOption.textTopY - OPTION_CROP_GAP : Number.POSITIVE_INFINITY;
   const paddedImageBottom = imageBottom + RENDER_PADDING + 24;
   const cropBottomPdfUnits = Math.min(paddedImageBottom, optionBoundary);
-  const cropBottom = Math.min(
-    pageCanvas.height,
-    Math.ceil(cropBottomPdfUnits * RENDER_SCALE),
-  );
+  const cropBottom = Math.min(pageCanvas.height, Math.ceil(cropBottomPdfUnits * RENDER_SCALE));
 
   const cropWidth = cropRight - cropLeft;
   const cropHeight = cropBottom - cropTop;
@@ -186,18 +150,7 @@ async function renderPdfRegion(
 
   const cropCanvas = canvasModule.createCanvas(cropWidth, cropHeight);
   const cropContext = cropCanvas.getContext("2d");
-  cropContext.drawImage(
-    pageCanvas,
-    cropLeft,
-    cropTop,
-    cropWidth,
-    cropHeight,
-    0,
-    0,
-    cropWidth,
-    cropHeight,
-  );
-
+  cropContext.drawImage(pageCanvas, cropLeft, cropTop, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
   return cropCanvas.toDataURL("image/png");
 }
 
@@ -232,7 +185,6 @@ async function getImageAssets(pdfjsLib: any, page: any, operatorList: any, viewp
       } else if (args[0]?.data && args[0]?.width && args[0]?.height) image = args[0];
     } catch { image = null; }
     if (!image) continue;
-
     const dataUrl = imageObjectToDataUrl(image);
     if (!dataUrl) continue;
 
@@ -301,23 +253,16 @@ function imageObjectToDataUrl(image: any): string | null {
     const row = y * (rowSize + 1);
     scanlines[row] = 0;
     if (y < IMAGE_PADDING || y >= IMAGE_PADDING + height) {
-      for (let x = 0; x < paddedWidth; x++) {
-        const d = row + 1 + x * 4;
-        scanlines[d + 3] = 0;
-      }
+      for (let x = 0; x < paddedWidth; x++) scanlines[row + 1 + x * 4 + 3] = 0;
       continue;
     }
     const sourceRow = (y - IMAGE_PADDING) * width * 4;
     for (let x = 0; x < paddedWidth; x++) {
       const d = row + 1 + x * 4;
-      if (x < IMAGE_PADDING || x >= IMAGE_PADDING + width) {
-        scanlines[d + 3] = 0;
-      } else {
+      if (x < IMAGE_PADDING || x >= IMAGE_PADDING + width) scanlines[d + 3] = 0;
+      else {
         const s = sourceRow + (x - IMAGE_PADDING) * 4;
-        scanlines[d] = rgba[s];
-        scanlines[d + 1] = rgba[s + 1];
-        scanlines[d + 2] = rgba[s + 2];
-        scanlines[d + 3] = rgba[s + 3];
+        scanlines[d] = rgba[s]; scanlines[d + 1] = rgba[s + 1]; scanlines[d + 2] = rgba[s + 2]; scanlines[d + 3] = rgba[s + 3];
       }
     }
   }
