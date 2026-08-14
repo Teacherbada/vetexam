@@ -10,7 +10,6 @@
   },
   "dependencies": {
     "@napi-rs/canvas": "^1.0.5",
-    "@napi-rs/canvas-linux-x64-gnu": "^1.0.5",
     "@neondatabase/serverless": "^1.1.0",
     "better-auth": "^1.6.26",
     "next": "16.2.12",
@@ -19,6 +18,9 @@
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "unpdf": "^1.8.0"
+  },
+  "optionalDependencies": {
+    "@napi-rs/canvas-linux-x64-gnu": "1.0.6"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
