@@ -12,6 +12,7 @@ type ImageAsset = {
   height: number;
   dataUrl: string;
 };
+type TextItem = { text: string; y: number; height: number };
 type Anchor = { number: number; y: number };
 
 // 保留舊版 image-object 擷取作為 fallback。
@@ -20,6 +21,9 @@ const IMAGE_PADDING = 8;
 // 用來包含貼在圖片邊緣的文字層數字。
 const RENDER_PADDING = 14;
 const RENDER_SCALE = 2;
+// 如果圖表下方緊接著選項，裁切到選項文字上緣，
+// 避免只靠固定 padding 猜測圖表底部。
+const OPTION_CROP_GAP = 4;
 
 export async function POST(request: Request) {
   try {
@@ -52,9 +56,13 @@ export async function POST(request: Request) {
     const images = await getImageAssets(pdfjsLib, page, operatorList, viewport);
 
     const textContent = await page.getTextContent();
-    const items = textContent.items
+    const items: TextItem[] = textContent.items
       .filter((item: any) => typeof item.str === "string" && item.str.trim())
-      .map((item: any) => ({ text: item.str.trim(), y: Number(item.transform?.[5] ?? 0) }));
+      .map((item: any) => ({
+        text: item.str.trim(),
+        y: Number(item.transform?.[5] ?? 0),
+        height: Number(item.height ?? 0),
+      }));
 
     const anchors = getQuestionAnchors(items);
     const image = findImageNearQuestion(questionNumber, anchors, images);
@@ -71,7 +79,7 @@ export async function POST(request: Request) {
     // 主方案：重新渲染 PDF 的圖片區域，因此圖片旁邊屬於 PDF
     // 文字層的數字也會一起保留下來。
     try {
-      const renderedDataUrl = await renderPdfRegion(pdfjsLib, page, image, viewport);
+      const renderedDataUrl = await renderPdfRegion(pdfjsLib, page, image, viewport, items);
       if (renderedDataUrl) {
         return NextResponse.json({
           success: true,
@@ -99,7 +107,13 @@ export async function POST(request: Request) {
   }
 }
 
-async function renderPdfRegion(pdfjsLib: any, page: any, image: ImageAsset, viewport: any): Promise<string | null> {
+async function renderPdfRegion(
+  pdfjsLib: any,
+  page: any,
+  image: ImageAsset,
+  viewport: any,
+  textItems: TextItem[],
+): Promise<string | null> {
   const dynamicImport = new Function("specifier", "return import(specifier)") as (specifier: string) => Promise<any>;
   const canvasModule = await dynamicImport("@napi-rs/canvas");
 
@@ -140,9 +154,30 @@ async function renderPdfRegion(pdfjsLib: any, page: any, image: ImageAsset, view
     pageCanvas.width,
     Math.ceil((image.x + image.width + RENDER_PADDING) * RENDER_SCALE),
   );
+
+  // 優先尋找圖片下方的 A./B./C./D./E. 選項。
+  // 這些文字是可靠的「下一個區塊邊界」，比固定增加 24 更穩定；
+  // 圖表底部的非文字 vector / image 內容仍會被整頁 render 保留下來。
+  const optionItems = textItems
+    .filter((item) => /^[A-EＡ-Ｅ][.．、:：)]/.test(item.text))
+    .map((item) => {
+      const baselineY = viewport.height - item.y;
+      const textTopY = baselineY - Math.max(item.height, 0);
+      return { textTopY, text: item.text };
+    })
+    .filter((item) => item.textTopY > imageBottom)
+    .sort((a, b) => a.textTopY - b.textTopY);
+
+  const firstOption = optionItems[0];
+  const optionBoundary = firstOption
+    ? firstOption.textTopY - OPTION_CROP_GAP
+    : Number.POSITIVE_INFINITY;
+
+  const paddedImageBottom = imageBottom + RENDER_PADDING + 24;
+  const cropBottomPdfUnits = Math.min(paddedImageBottom, optionBoundary);
   const cropBottom = Math.min(
     pageCanvas.height,
-    Math.ceil((imageBottom + RENDER_PADDING + 24) * RENDER_SCALE),
+    Math.ceil(cropBottomPdfUnits * RENDER_SCALE),
   );
 
   const cropWidth = cropRight - cropLeft;
@@ -310,7 +345,7 @@ function crc32(data: Uint8Array) {
   return (crc ^ 0xffffffff) >>> 0;
 }
 
-function getQuestionAnchors(items: Array<{ text: string; y: number }>): Anchor[] {
+function getQuestionAnchors(items: TextItem[]): Anchor[] {
   const anchors: Anchor[] = [], regex = /^\s*(?:[（(]\s*)?(\d{1,3})(?:\s*[）)])?\s*(?:[.、．:：]|(?=\S))/;
   for (const item of items) { const match = item.text.match(regex); if (!match) continue; const number = Number(match[1]); if (number >= 1 && number <= 999) anchors.push({ number, y: item.y }); }
   return anchors;
