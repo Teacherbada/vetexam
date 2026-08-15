@@ -1,32 +1,20 @@
 import { NextResponse } from "next/server";
-import { deflateSync } from "zlib";
 import { auth } from "@/lib/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type ImageAsset = {
-  y: number;
-  x: number;
-  width: number;
-  height: number;
-  dataUrl: string;
-};
+type ImageAsset = { x: number; y: number; width: number; height: number; isMask: boolean };
 type TextItem = { text: string; y: number; height: number };
-type Anchor = { number: number; y: number; topY: number };
+type Anchor = { number: number; topY: number };
+type ImageContext = { page: any; pageNumber: number; viewport: any; images: ImageAsset[] };
 
-type ImageContext = {
-  page: any;
-  pageNumber: number;
-  viewport: any;
-  image: ImageAsset;
-  items: TextItem[];
-};
-
-const IMAGE_PADDING = 8;
-const RENDER_PADDING = 14;
+const RENDER_PADDING = 12;
 const RENDER_SCALE = 2;
-const OPTION_CROP_GAP = 4;
+const MIN_MASK_WIDTH = 28;
+const MIN_MASK_HEIGHT = 28;
+const MIN_MASK_AREA = 900;
+const MAX_LOOKAHEAD_PAGES = 3;
 
 export async function POST(request: Request) {
   try {
@@ -38,164 +26,143 @@ export async function POST(request: Request) {
     const pageNumber = Number(formData.get("pageNumber"));
     const questionNumber = Number(formData.get("questionNumber"));
 
-    if (!(file instanceof File) || file.type !== "application/pdf") {
-      return NextResponse.json({ error: "沒有收到有效的 PDF。" }, { status: 400 });
-    }
-    if (!Number.isInteger(pageNumber) || pageNumber < 1) {
-      return NextResponse.json({ error: "無效的 PDF 頁碼。" }, { status: 400 });
-    }
-    if (!Number.isInteger(questionNumber) || questionNumber < 1) {
-      return NextResponse.json({ error: "無效的題號。" }, { status: 400 });
-    }
+    if (!(file instanceof File) || file.type !== "application/pdf") return NextResponse.json({ error: "沒有收到有效的 PDF。" }, { status: 400 });
+    if (!Number.isInteger(pageNumber) || pageNumber < 1) return NextResponse.json({ error: "無效的 PDF 頁碼。" }, { status: 400 });
+    if (!Number.isInteger(questionNumber) || questionNumber < 1) return NextResponse.json({ error: "無效的題號。" }, { status: 400 });
 
     const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
-    const pdfBytes = new Uint8Array(await file.arrayBuffer());
-    const pdf = await pdfjsLib.getDocument({ data: pdfBytes }).promise;
+    const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
     if (pageNumber > pdf.numPages) return NextResponse.json({ error: "PDF 頁碼超出範圍。" }, { status: 400 });
 
-    const context = await findImageContext(pdfjsLib, pdf, pageNumber, questionNumber);
-    if (!context) {
-      return NextResponse.json({ success: true, pageNumber, questionNumber, imageDataUrl: null });
-    }
+    const contexts = await findImageContexts(pdfjsLib, pdf, pageNumber, questionNumber);
+    if (!contexts.length) return NextResponse.json({ success: true, pageNumber, questionNumber, imageDataUrl: null, imageCount: 0 });
 
     try {
-      const renderedDataUrl = await renderPdfRegion(pdfjsLib, context.page, context.image, context.viewport, context.items);
-      if (renderedDataUrl) {
-        return NextResponse.json({
-          success: true,
-          pageNumber,
-          imagePageNumber: context.pageNumber,
-          questionNumber,
-          imageDataUrl: renderedDataUrl,
-          extractionMode: "pdf-region-render",
-        });
-      }
+      const renderedDataUrl = await renderImageContexts(pdfjsLib, contexts);
+      if (!renderedDataUrl) throw new Error("沒有產生有效圖片。");
+      return NextResponse.json({
+        success: true,
+        pageNumber,
+        imagePageNumber: contexts[0].pageNumber,
+        questionNumber,
+        imageDataUrl: renderedDataUrl,
+        imageCount: contexts.reduce((sum, context) => sum + context.images.length, 0),
+        imagePageNumbers: contexts.map((context) => context.pageNumber),
+        extractionMode: "pdf-region-render-v2",
+      });
     } catch (renderError) {
       console.error("PDF region rendering failed:", renderError);
       return NextResponse.json({
-        error: "PDF 整頁 Render 失敗",
+        error: "PDF 圖片 Render 失敗",
         detail: renderError instanceof Error ? renderError.message : String(renderError),
-        renderErrorName: renderError instanceof Error ? renderError.name : "unknown",
-        renderErrorStack: renderError instanceof Error ? renderError.stack?.slice(0, 2000) : undefined,
         pageNumber,
-        imagePageNumber: context.pageNumber,
         questionNumber,
-        diagnostic: "renderPdfRegion failed before fallback",
+        imagePageNumbers: contexts.map((context) => context.pageNumber),
       }, { status: 500 });
     }
-
-    return NextResponse.json({
-      error: "PDF 整頁 Render 沒有產生圖片",
-      pageNumber,
-      imagePageNumber: context.pageNumber,
-      questionNumber,
-      diagnostic: "renderPdfRegion returned null before fallback",
-    }, { status: 500 });
   } catch (error) {
     console.error("PDF image extraction error:", error);
     return NextResponse.json({ error: "圖片擷取失敗", detail: error instanceof Error ? error.message : "未知錯誤" }, { status: 500 });
   }
 }
 
-async function findImageContext(pdfjsLib: any, pdf: any, questionPageNumber: number, questionNumber: number): Promise<ImageContext | null> {
-  const lastCandidatePage = Math.min(pdf.numPages, questionPageNumber + 2);
+async function findImageContexts(pdfjsLib: any, pdf: any, questionPageNumber: number, questionNumber: number): Promise<ImageContext[]> {
+  const contexts: ImageContext[] = [];
+  let targetFound = false;
 
-  for (let candidatePageNumber = questionPageNumber; candidatePageNumber <= lastCandidatePage; candidatePageNumber++) {
-    const page = await pdf.getPage(candidatePageNumber);
+  for (let pageNo = questionPageNumber; pageNo <= Math.min(pdf.numPages, questionPageNumber + MAX_LOOKAHEAD_PAGES); pageNo++) {
+    const page = await pdf.getPage(pageNo);
     const viewport = page.getViewport({ scale: 1 });
-    const operatorList = await page.getOperatorList();
-    const images = await getImageAssets(pdfjsLib, page, operatorList, viewport);
-    if (!images.length) continue;
-
     const textContent = await page.getTextContent();
     const items: TextItem[] = textContent.items
       .filter((item: any) => typeof item.str === "string" && item.str.trim())
-      .map((item: any) => ({
-        text: item.str.trim(),
-        y: Number(item.transform?.[5] ?? 0),
-        height: Number(item.height ?? 0),
-      }));
-
+      .map((item: any) => ({ text: item.str.trim(), y: Number(item.transform?.[5] ?? 0), height: Number(item.height ?? 0) }));
     const anchors = getQuestionAnchors(items, viewport.height);
+    const orderedAnchors = [...anchors].sort((a, b) => a.topY - b.topY);
+    const targetIndex = orderedAnchors.findIndex((anchor) => anchor.number === questionNumber);
+    const target = targetIndex >= 0 ? orderedAnchors[targetIndex] : undefined;
+    const next = targetIndex >= 0
+      ? orderedAnchors.slice(targetIndex + 1).find((anchor) => anchor.number !== questionNumber)
+      : orderedAnchors.find((anchor) => anchor.number !== questionNumber);
 
-    const samePageImage = findImageNearQuestion(questionNumber, anchors, images);
-    if (samePageImage) {
-      return { page, pageNumber: candidatePageNumber, viewport, image: samePageImage, items };
-    }
-
-    if (candidatePageNumber === questionPageNumber) continue;
-
-    const sameQuestionAnchor = anchors.find((anchor) => anchor.number === questionNumber);
-    if (sameQuestionAnchor) {
-      const image = images.find((candidate) => candidate.y <= sameQuestionAnchor.topY + 40);
-      if (image) return { page, pageNumber: candidatePageNumber, viewport, image, items };
-    }
-
-    const nextQuestionAnchor = anchors.find((anchor) => anchor.number !== questionNumber);
-    if (nextQuestionAnchor) {
-      const image = images.find((candidate) => candidate.y < nextQuestionAnchor.topY - 8);
-      if (image) return { page, pageNumber: candidatePageNumber, viewport, image, items };
+    const operatorList = await page.getOperatorList();
+    const images = await getImageAssets(pdfjsLib, page, operatorList, viewport);
+    if (!images.length) {
+      if (targetFound || (pageNo > questionPageNumber && next)) break;
       continue;
     }
 
-    if (candidatePageNumber === questionPageNumber + 1) {
-      return { page, pageNumber: candidatePageNumber, viewport, image: images[0], items };
+    let selected: ImageAsset[] = [];
+    if (target) {
+      targetFound = true;
+      const lower = target.topY - 12;
+      const upper = next ? next.topY - 12 : Number.POSITIVE_INFINITY;
+      selected = images.filter((image) => image.y >= lower && image.y <= upper);
+    } else if (pageNo > questionPageNumber && targetFound) {
+      // Continuation page: images before the next question belong to the previous question.
+      const boundary = next ? next.topY - 12 : Number.POSITIVE_INFINITY;
+      selected = images.filter((image) => image.y <= boundary);
+    } else if (pageNo === questionPageNumber) {
+      // If the parser missed the question anchor, do not blindly take every image.
+      selected = images.slice(0, 1);
     }
+
+    if (selected.length) contexts.push({ page, pageNumber: pageNo, viewport, images: selected });
+
+    // Once the next question is present after the target, stop. This prevents 46's image from leaking into 45.
+    if (targetFound && next && next.number !== questionNumber) break;
+    if (targetFound && pageNo > questionPageNumber && next) break;
   }
 
-  return null;
+  return contexts;
 }
 
-async function renderPdfRegion(
-  pdfjsLib: any,
-  page: any,
-  image: ImageAsset,
-  viewport: any,
-  textItems: TextItem[],
-): Promise<string | null> {
+async function renderImageContexts(pdfjsLib: any, contexts: ImageContext[]): Promise<string | null> {
   const dynamicImport = new Function("specifier", "return import(specifier)") as (specifier: string) => Promise<any>;
   const canvasModule = await dynamicImport("@napi-rs/canvas");
-
   if (canvasModule?.DOMMatrix && typeof globalThis.DOMMatrix === "undefined") (globalThis as any).DOMMatrix = canvasModule.DOMMatrix;
   if (canvasModule?.ImageData && typeof globalThis.ImageData === "undefined") (globalThis as any).ImageData = canvasModule.ImageData;
   if (canvasModule?.Path2D && typeof globalThis.Path2D === "undefined") (globalThis as any).Path2D = canvasModule.Path2D;
 
-  const renderViewport = page.getViewport({ scale: RENDER_SCALE });
-  const pageCanvas = canvasModule.createCanvas(Math.ceil(renderViewport.width), Math.ceil(renderViewport.height));
-  const pageContext = pageCanvas.getContext("2d");
+  const rendered: any[] = [];
+  for (const context of contexts) {
+    const viewport = context.page.getViewport({ scale: RENDER_SCALE });
+    const pageCanvas = canvasModule.createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
+    const pageContext = pageCanvas.getContext("2d");
+    await context.page.render({ canvasContext: pageContext, viewport }).promise;
 
-  await page.render({ canvasContext: pageContext, viewport: renderViewport }).promise;
+    const left = Math.max(0, Math.min(...context.images.map((image) => image.x)) - RENDER_PADDING);
+    const top = Math.max(0, Math.min(...context.images.map((image) => image.y - image.height / 2)) - RENDER_PADDING);
+    const right = Math.min(context.viewport.width, Math.max(...context.images.map((image) => image.x + image.width)) + RENDER_PADDING);
+    const bottom = Math.min(context.viewport.height, Math.max(...context.images.map((image) => image.y + image.height / 2)) + RENDER_PADDING);
 
-  const imageTop = image.y - image.height / 2;
-  const imageBottom = image.y + image.height / 2;
-  const cropLeft = Math.max(0, Math.floor((image.x - RENDER_PADDING) * RENDER_SCALE));
-  const cropTop = Math.max(0, Math.floor((imageTop - RENDER_PADDING) * RENDER_SCALE));
-  const cropRight = Math.min(pageCanvas.width, Math.ceil((image.x + image.width + RENDER_PADDING) * RENDER_SCALE));
+    const cropLeft = Math.max(0, Math.floor(left * RENDER_SCALE));
+    const cropTop = Math.max(0, Math.floor(top * RENDER_SCALE));
+    const cropRight = Math.min(pageCanvas.width, Math.ceil(right * RENDER_SCALE));
+    const cropBottom = Math.min(pageCanvas.height, Math.ceil(bottom * RENDER_SCALE));
+    const cropWidth = cropRight - cropLeft;
+    const cropHeight = cropBottom - cropTop;
+    if (cropWidth <= 0 || cropHeight <= 0) continue;
 
-  const optionItems = textItems
-    .filter((item) => /^[A-EＡ-Ｅ][.．、:：)]/.test(item.text))
-    .map((item) => {
-      const baselineY = viewport.height - item.y;
-      const textTopY = baselineY - Math.max(item.height, 0);
-      return { textTopY, text: item.text };
-    })
-    .filter((item) => item.textTopY > imageBottom)
-    .sort((a, b) => a.textTopY - b.textTopY);
+    const cropCanvas = canvasModule.createCanvas(cropWidth, cropHeight);
+    cropCanvas.getContext("2d").drawImage(pageCanvas, cropLeft, cropTop, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
+    rendered.push(cropCanvas);
+  }
 
-  const firstOption = optionItems[0];
-  const optionBoundary = firstOption ? firstOption.textTopY - OPTION_CROP_GAP : Number.POSITIVE_INFINITY;
-  const paddedImageBottom = imageBottom + RENDER_PADDING + 24;
-  const cropBottomPdfUnits = Math.min(paddedImageBottom, optionBoundary);
-  const cropBottom = Math.min(pageCanvas.height, Math.ceil(cropBottomPdfUnits * RENDER_SCALE));
+  if (!rendered.length) return null;
+  if (rendered.length === 1) return rendered[0].toDataURL("image/png");
 
-  const cropWidth = cropRight - cropLeft;
-  const cropHeight = cropBottom - cropTop;
-  if (cropWidth <= 0 || cropHeight <= 0) return null;
-
-  const cropCanvas = canvasModule.createCanvas(cropWidth, cropHeight);
-  const cropContext = cropCanvas.getContext("2d");
-  cropContext.drawImage(pageCanvas, cropLeft, cropTop, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
-  return cropCanvas.toDataURL("image/png");
+  const gap = 24;
+  const width = Math.max(...rendered.map((canvas) => canvas.width));
+  const height = rendered.reduce((sum, canvas) => sum + canvas.height, 0) + gap * (rendered.length - 1);
+  const combined = canvasModule.createCanvas(width, height);
+  const ctx = combined.getContext("2d");
+  let y = 0;
+  for (const canvas of rendered) {
+    ctx.drawImage(canvas, 0, y);
+    y += canvas.height + gap;
+  }
+  return combined.toDataURL("image/png");
 }
 
 async function getImageAssets(pdfjsLib: any, page: any, operatorList: any, viewport: any): Promise<ImageAsset[]> {
@@ -229,28 +196,23 @@ async function getImageAssets(pdfjsLib: any, page: any, operatorList: any, viewp
       } else if (args[0]?.data && args[0]?.width && args[0]?.height) image = args[0];
     } catch { image = null; }
     if (!image) continue;
-    const dataUrl = imageObjectToDataUrl(image);
-    if (!dataUrl) continue;
 
-    try {
-      const transform = pdfjsLib.Util.transform(viewport.transform, ctm);
-      const points = [
-        pdfjsLib.Util.applyTransform([0, 0], transform),
-        pdfjsLib.Util.applyTransform([1, 0], transform),
-        pdfjsLib.Util.applyTransform([0, 1], transform),
-        pdfjsLib.Util.applyTransform([1, 1], transform),
-      ];
-      const xs = points.map((point: number[]) => point[0]);
-      const ys = points.map((point: number[]) => point[1]);
-      const x = Math.min(...xs);
-      const y = Math.min(...ys);
-      const width = Math.max(...xs) - x;
-      const height = Math.max(...ys) - y;
-      assets.push({ y: y + height / 2, x, width, height, dataUrl });
-    } catch {
-      assets.push({ y: 0, x: 0, width: 0, height: 0, dataUrl });
-    }
+    const transform = pdfjsLib.Util.transform(viewport.transform, ctm);
+    const points = [[0,0],[1,0],[0,1],[1,1]].map((point) => pdfjsLib.Util.applyTransform(point, transform));
+    const xs = points.map((point: number[]) => point[0]);
+    const ys = points.map((point: number[]) => point[1]);
+    const x = Math.min(...xs);
+    const y = Math.min(...ys);
+    const width = Math.max(...xs) - x;
+    const height = Math.max(...ys) - y;
+    const isMask = fn === pdfjsLib.OPS.paintImageMaskXObject || fn === pdfjsLib.OPS.paintImageMaskXObjectRepeat;
+
+    // Image masks are also used for font glyphs. Ignore tiny masks so letters/numbers are not treated as pictures.
+    if (isMask && (width < MIN_MASK_WIDTH || height < MIN_MASK_HEIGHT || width * height < MIN_MASK_AREA)) continue;
+    if (width < 6 || height < 6) continue;
+    assets.push({ x, y: y + height / 2, width, height, isMask });
   }
+
   return assets;
 }
 
@@ -262,99 +224,14 @@ function getPdfObject(objects: any, id: string): Promise<any | null> {
   });
 }
 
-function imageObjectToDataUrl(image: any): string | null {
-  if (typeof image?.src === "string" && image.src.startsWith("data:image/")) return image.src;
-  if (!image?.data || !image.width || !image.height) return null;
-
-  const width = Number(image.width), height = Number(image.height), kind = Number(image.kind);
-  const source = image.data instanceof Uint8Array || image.data instanceof Uint8ClampedArray ? image.data : new Uint8Array(image.data);
-  let rgba: Uint8Array;
-
-  if (kind === 3) rgba = Uint8Array.from(source);
-  else if (kind === 2) {
-    rgba = new Uint8Array(width * height * 4);
-    for (let s = 0, d = 0; s + 2 < source.length && d + 3 < rgba.length; s += 3) {
-      rgba[d++] = source[s]; rgba[d++] = source[s + 1]; rgba[d++] = source[s + 2]; rgba[d++] = 255;
-    }
-  } else if (kind === 1) {
-    rgba = new Uint8Array(width * height * 4);
-    let pixel = 0;
-    for (const byte of source) {
-      for (let bit = 7; bit >= 0 && pixel < width * height; bit--) {
-        const value = (byte & (1 << bit)) ? 255 : 0, d = pixel * 4;
-        rgba[d] = value; rgba[d + 1] = value; rgba[d + 2] = value; rgba[d + 3] = 255; pixel++;
-      }
-      if (pixel >= width * height) break;
-    }
-  } else return null;
-
-  const paddedWidth = width + IMAGE_PADDING * 2;
-  const paddedHeight = height + IMAGE_PADDING * 2;
-  const rowSize = paddedWidth * 4;
-  const scanlines = new Uint8Array((rowSize + 1) * paddedHeight);
-
-  for (let y = 0; y < paddedHeight; y++) {
-    const row = y * (rowSize + 1);
-    scanlines[row] = 0;
-    if (y < IMAGE_PADDING || y >= IMAGE_PADDING + height) {
-      for (let x = 0; x < paddedWidth; x++) scanlines[row + 1 + x * 4 + 3] = 0;
-      continue;
-    }
-    const sourceRow = (y - IMAGE_PADDING) * width * 4;
-    for (let x = 0; x < paddedWidth; x++) {
-      const d = row + 1 + x * 4;
-      if (x < IMAGE_PADDING || x >= IMAGE_PADDING + width) scanlines[d + 3] = 0;
-      else {
-        const s = sourceRow + (x - IMAGE_PADDING) * 4;
-        scanlines[d] = rgba[s]; scanlines[d + 1] = rgba[s + 1]; scanlines[d + 2] = rgba[s + 2]; scanlines[d + 3] = rgba[s + 3];
-      }
-    }
-  }
-
-  const png = new Uint8Array([
-    137,80,78,71,13,10,26,10,
-    ...pngChunk("IHDR", new Uint8Array([paddedWidth >>> 24, paddedWidth >>> 16, paddedWidth >>> 8, paddedWidth, paddedHeight >>> 24, paddedHeight >>> 16, paddedHeight >>> 8, paddedHeight, 8, 6, 0, 0, 0])),
-    ...pngChunk("IDAT", Uint8Array.from(deflateSync(scanlines))),
-    ...pngChunk("IEND", new Uint8Array()),
-  ]);
-  return `data:image/png;base64,${Buffer.from(png).toString("base64")}`;
-}
-
-function pngChunk(type: string, data: Uint8Array) {
-  const typeBytes = Buffer.from(type, "ascii"), payload = new Uint8Array(typeBytes.length + data.length);
-  payload.set(typeBytes); payload.set(data, typeBytes.length);
-  const out = new Uint8Array(12 + data.length), view = new DataView(out.buffer);
-  view.setUint32(0, data.length); out.set(payload, 4); view.setUint32(8 + data.length, crc32(payload));
-  return out;
-}
-
-function crc32(data: Uint8Array) {
-  let crc = 0xffffffff;
-  for (const byte of data) { crc ^= byte; for (let bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1)); }
-  return (crc ^ 0xffffffff) >>> 0;
-}
-
 function getQuestionAnchors(items: TextItem[], pageHeight: number): Anchor[] {
-  const anchors: Anchor[] = [], regex = /^\s*(?:[（(]\s*)?(\d{1,3})(?:\s*[）)])?\s*(?:[.、．:：]|(?=\S))/;
+  const anchors: Anchor[] = [];
+  const regex = /^\s*(?:[（(]\s*)?(\d{1,3})(?:\s*[）)])?\s*(?:[.、．:：]|(?=\S))/;
   for (const item of items) {
     const match = item.text.match(regex);
     if (!match) continue;
     const number = Number(match[1]);
-    if (number >= 1 && number <= 999) anchors.push({ number, y: item.y, topY: pageHeight - item.y });
+    if (number >= 1 && number <= 999) anchors.push({ number, topY: pageHeight - item.y });
   }
   return anchors;
-}
-
-function findImageNearQuestion(questionNumber: number, anchors: Anchor[], images: ImageAsset[]) {
-  if (!anchors.length || !images.length) return null;
-  const same = anchors.filter((anchor) => anchor.number === questionNumber);
-  if (!same.length) return null;
-  const target = same[0];
-  const ordered = [...anchors].sort((a, b) => a.topY - b.topY);
-  const targetIndex = ordered.findIndex((anchor) => anchor.number === questionNumber && Math.abs(anchor.topY - target.topY) < 0.5);
-  const previous = targetIndex > 0 ? ordered[targetIndex - 1] : undefined;
-  const next = targetIndex >= 0 && targetIndex < ordered.length - 1 ? ordered[targetIndex + 1] : undefined;
-  const upper = previous?.topY ?? Math.max(0, target.topY - 120);
-  const nextBoundary = next?.topY ?? target.topY + 5000;
-  return images.find((image) => image.y >= upper - 20 && image.y <= nextBoundary + 20) ?? null;
 }
