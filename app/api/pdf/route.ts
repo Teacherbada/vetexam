@@ -20,7 +20,7 @@ type ParsedQuestion = {
 };
 
 type Visibility = "public" | "private";
-type PageQuestionAnchor = { number: number; y: number };
+type PageQuestionAnchor = { number: number; y: number; topY: number };
 type ImagePosition = { y: number };
 
 export async function POST(request: Request) {
@@ -93,7 +93,7 @@ export async function POST(request: Request) {
           width: Number(item.width ?? 0),
         }));
 
-      pageAnchors.set(pageNumber, getQuestionAnchors(rawItems));
+      pageAnchors.set(pageNumber, getQuestionAnchors(rawItems, viewport.height));
 
       const items = rawItems.sort((a, b) => Math.abs(a.y - b.y) <= 3 ? a.x - b.x : b.y - a.y);
       const lines: Array<{ y: number; items: Array<{ text: string; x: number; width: number }> }> = [];
@@ -185,14 +185,14 @@ function getImagePositions(pdfjsLib: any, operatorList: any, viewport: any): Ima
   return positions.filter((position) => Number.isFinite(position.y));
 }
 
-function getQuestionAnchors(items: Array<{ text: string; x: number; y: number }>): PageQuestionAnchor[] {
+function getQuestionAnchors(items: Array<{ text: string; x: number; y: number }>, pageHeight: number): PageQuestionAnchor[] {
   const anchors: PageQuestionAnchor[] = [];
   const regex = /^\s*(?:[（(]\s*)?(\d{1,3})(?:\s*[）)])?\s*(?:[.、．:：]|(?=\S))/;
   for (const item of items) {
     const match = item.text.match(regex);
     if (!match) continue;
     const number = Number(match[1]);
-    if (number >= 1 && number <= 999) anchors.push({ number, y: item.y });
+    if (number >= 1 && number <= 999) anchors.push({ number, y: item.y, topY: pageHeight - item.y });
   }
   return anchors;
 }
@@ -204,7 +204,7 @@ function parseQuestions(text: string, imagePages: Set<number>, pageAnchors: Map<
     const prefix = normalized.slice(Math.max(0, (match.index ?? 0) - 2), (match.index ?? 0));
     return (match.index ?? 0) === 0 || /\n/.test(prefix);
   });
-  const questions: ParsedQuestion[] = [];
+  const questions: Array<ParsedQuestion & { pageNumber?: number }> = [];
   for (let index = 0; index < matches.length; index++) {
     const match = matches[index], number = Number(match[1]);
     if (number < 1 || number > 999) continue;
@@ -214,23 +214,65 @@ function parseQuestions(text: string, imagePages: Set<number>, pageAnchors: Map<
     const before = normalized.slice(0, match.index ?? 0), pageMatches = [...before.matchAll(/===== PDF PAGE (\d+) =====/g)];
     const pageNumber = pageMatches.length ? Number(pageMatches[pageMatches.length - 1][1]) : undefined;
     parsed.pageNumber = pageNumber;
-    parsed.hasImage = !!(pageNumber && imagePages.has(pageNumber) && isImageNearQuestion(number, pageAnchors.get(pageNumber) ?? [], pageImages.get(pageNumber) ?? []));
     questions.push(parsed);
   }
+
+  for (let index = 0; index < questions.length; index++) {
+    const question = questions[index];
+    const nextQuestion = questions[index + 1];
+    question.hasImage = !!(
+      question.pageNumber &&
+      hasImageForQuestion(
+        question.id,
+        question.pageNumber,
+        nextQuestion?.pageNumber,
+        pageAnchors,
+        pageImages,
+      )
+    );
+  }
+
   const seen = new Set<string>();
   return questions.filter((q) => { const key = `${q.id}|${q.question}`; if (seen.has(key)) return false; seen.add(key); return true; }).sort((a, b) => a.id - b.id);
+}
+
+function hasImageForQuestion(
+  questionNumber: number,
+  questionPage: number,
+  nextQuestionPage: number | undefined,
+  pageAnchors: Map<number, PageQuestionAnchor[]>,
+  pageImages: Map<number, ImagePosition[]>,
+): boolean {
+  if (isImageNearQuestion(questionNumber, pageAnchors.get(questionPage) ?? [], pageImages.get(questionPage) ?? [])) return true;
+
+  const lastCandidatePage = Math.min(nextQuestionPage ?? questionPage + 1, questionPage + 2);
+  for (let page = questionPage + 1; page <= lastCandidatePage; page++) {
+    const images = pageImages.get(page) ?? [];
+    if (!images.length) continue;
+    const anchors = pageAnchors.get(page) ?? [];
+    const sameQuestion = anchors.filter((anchor) => anchor.number === questionNumber);
+    if (sameQuestion.length && images.some((image) => image.y <= sameQuestion[0].topY + 40)) return true;
+
+    const boundary = anchors.find((anchor) => anchor.number !== questionNumber);
+    if (boundary) return images.some((image) => image.y < boundary.topY - 8);
+
+    if (page === questionPage + 1) return true;
+  }
+  return false;
 }
 
 function isImageNearQuestion(questionNumber: number, anchors: PageQuestionAnchor[], images: ImagePosition[]): boolean {
   if (!anchors.length || !images.length) return false;
   const sameQuestion = anchors.filter((anchor) => anchor.number === questionNumber);
   if (!sameQuestion.length) return false;
-  const target = sameQuestion[0], ordered = [...anchors].sort((a, b) => b.y - a.y);
-  const targetIndex = ordered.findIndex((anchor) => anchor.number === questionNumber && Math.abs(anchor.y - target.y) < 0.5);
+  const target = sameQuestion[0];
+  const ordered = [...anchors].sort((a, b) => a.topY - b.topY);
+  const targetIndex = ordered.findIndex((anchor) => anchor.number === questionNumber && Math.abs(anchor.topY - target.topY) < 0.5);
   const previous = targetIndex > 0 ? ordered[targetIndex - 1] : undefined;
   const next = targetIndex >= 0 && targetIndex < ordered.length - 1 ? ordered[targetIndex + 1] : undefined;
-  const upper = previous?.y ?? target.y - 120, nextBoundary = next?.y ?? target.y + 5000;
-  return images.some((image) => { const y = image.y; if (targetIndex === 0) return y <= nextBoundary + 40; return y <= upper + 20 && y >= nextBoundary - 20; });
+  const upper = previous?.topY ?? Math.max(0, target.topY - 120);
+  const nextBoundary = next?.topY ?? target.topY + 5000;
+  return images.some((image) => image.y >= upper - 20 && image.y <= nextBoundary + 20);
 }
 
 function parseQuestionContent(questionNumber: number, content: string): ParsedQuestion | null {
