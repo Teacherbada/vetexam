@@ -80,9 +80,13 @@ export async function POST(request: Request) {
     const text = fullText.trim();
     if (!text) return NextResponse.json({ error: "PDF 有成功讀取，但沒有偵測到文字。目前尚未支援純掃描圖片型 PDF OCR。" }, { status: 400 });
     const questions = parseQuestions(text, imagePages, pageAnchors, pageImages);
-    if (questions.length === 0) return NextResponse.json({ error: "沒有辨識到選擇題。請確認 PDF 題目格式。", detail: "目前已放寬國考常見的 1.、1、(1)、1) 與 A.、A、(A)、A)、E.、E、(E)、E) 格式。", textPreview:text.substring(0,5000) }, { status:400 });
+    if (questions.length === 0) return NextResponse.json({ error: "沒有辨識到選擇題。請確認 PDF 題目格式。", detail: "目前已支援常見的 1.、1、(1)、1) 與 A.、A、(A)、A)、E.、E、(E)、E) 格式。", textPreview:text.substring(0,5000) }, { status:400 });
     const imageQuestionCount=questions.filter(q=>q.hasImage).length;
-    return NextResponse.json({success:true,pendingConfirmation:true,message:`成功辨識 ${questions.length} 題${imageQuestionCount?`，其中 ${imageQuestionCount} 題精準定位到圖片`:""}，尚未寫入資料庫。請檢查後確認。`,fileHash,filename:file.name,visibility,examYear,examSubject,total:questions.length,questions,imagePages:[...imagePages],imageQuestionCount,imageQuestionNumbers:questions.filter(q=>q.hasImage).map(q=>q.id),textLength:text.length,totalPages:pdf.numPages});
+    const detectedOptionCounts=questions.map(q=>q.options.length);
+    const optionCountFrequency=new Map<number,number>();
+    for(const count of detectedOptionCounts) optionCountFrequency.set(count,(optionCountFrequency.get(count)??0)+1);
+    const detectedOptionCount=[...optionCountFrequency.entries()].sort((a,b)=>b[1]-a[1]||b[0]-a[0])[0]?.[0]??4;
+    return NextResponse.json({success:true,pendingConfirmation:true,message:`成功辨識 ${questions.length} 題${imageQuestionCount?`，其中 ${imageQuestionCount} 題偵測到圖片`:""}`,fileHash,filename:file.name,visibility,examYear,examSubject,total:questions.length,questions,imagePages:[...imagePages],imageQuestionCount,imageQuestionNumbers:questions.filter(q=>q.hasImage).map(q=>q.id),detectedOptionCount,textLength:text.length,totalPages:pdf.numPages});
   } catch(error) { console.error("PDF parsing error:",error); return NextResponse.json({error:"PDF 解析失敗",detail:error instanceof Error?error.message:"未知錯誤"},{status:500}); }
 }
 
@@ -97,9 +101,23 @@ function getImagePositions(pdfjsLib:any,operatorList:any,viewport:any):ImagePosi
 
 function getQuestionAnchors(items:Array<{text:string;x:number;y:number}>,pageHeight:number):PageQuestionAnchor[]{const anchors:PageQuestionAnchor[]=[];const regex=/^\s*(?:[（(]\s*)?(\d{1,3})(?:\s*[）)])?\s*(?:[.、．:：]|(?=\S))/;for(const item of items){const match=item.text.match(regex);if(!match)continue;const number=Number(match[1]);if(number>=1&&number<=999)anchors.push({number,y:item.y,topY:pageHeight-item.y});}return anchors;}
 
-function parseQuestions(text:string,imagePages:Set<number>,pageAnchors:Map<number,PageQuestionAnchor[]>,pageImages:Map<number,ImagePosition[]>):ParsedQuestion[]{const normalized=text.replace(/\r\n/g,"\n").replace(/\r/g,"\n").replace(/\u00a0/g," ").replace(/[ \t]+/g," ").replace(/\n{3,}/g,"\n\n").trim();const questionStartRegex=/^\s*(?:[（(]\s*)?(\d{1,3})(?:\s*[）)])?\s*(?:[.、．:：]|(?=\S))\s*/gm;const matches=[...normalized.matchAll(questionStartRegex)].filter(match=>{const prefix=normalized.slice(Math.max(0,(match.index??0)-2),match.index??0);return (match.index??0)===0||/\n/.test(prefix);});const questions:Array<ParsedQuestion&{pageNumber?:number}>=[];for(let index=0;index<matches.length;index++){const match=matches[index],number=Number(match[1]);if(number<1||number>999)continue;const start=(match.index??0)+match[0].length,end=matches[index+1]?.index??normalized.length;const parsed=parseQuestionContent(number,normalized.substring(start,end).trim());if(!parsed)continue;const before=normalized.slice(0,match.index??0),pageMatches=[...before.matchAll(/===== PDF PAGE (\d+) =====/g)];const pageNumber=pageMatches.length?Number(pageMatches[pageMatches.length-1][1]):undefined;parsed.pageNumber=pageNumber;questions.push(parsed);}for(let index=0;index<questions.length;index++){const question=questions[index],nextQuestion=questions[index+1];question.hasImage=!!(question.pageNumber&&hasImageForQuestion(question.id,question.pageNumber,nextQuestion?.pageNumber,pageAnchors,pageImages));}const seen=new Set<string>();return questions.filter(q=>{const key=`${q.id}|${q.question}`;if(seen.has(key))return false;seen.add(key);return true;}).sort((a,b)=>a.id-b.id);}
+function parseQuestions(text:string,imagePages:Set<number>,pageAnchors:Map<number,PageQuestionAnchor[]>,pageImages:Map<number,ImagePosition[]>):ParsedQuestion[]{const normalized=text.replace(/\r\n/g,"\n").replace(/\r/g,"\n").replace(/\u00a0/g," ").replace(/[ \t]+/g," ").replace(/\n{3,}/g,"\n\n").trim();const questionStartRegex=/^\s*(?:[（(]\s*)?(\d{1,3})(?:\s*[）)])?\s*(?:[.、．:：]|(?=\S))\s*/gm;const matches=[...normalized.matchAll(questionStartRegex)].filter(match=>{const prefix=normalized.slice(Math.max(0,(match.index??0)-2),match.index??0);return (match.index??0)===0||/\n/.test(prefix);});const questions:Array<ParsedQuestion&{pageNumber?:number}>=[];for(let index=0;index<matches.length;index++){const match=matches[index],number=Number(match[1]);if(number<1||number>999)continue;const start=(match.index??0)+match[0].length,end=matches[index+1]?.index??normalized.length;const parsed=parseQuestionContent(number,normalized.substring(start,end).trim());if(!parsed)continue;const before=normalized.slice(0,match.index??0),pageMatches=[...before.matchAll(/===== PDF PAGE (\d+) =====/g)];const pageNumber=pageMatches.length?Number(pageMatches[pageMatches.length-1][1]):undefined;parsed.pageNumber=pageNumber;questions.push(parsed);}for(let index=0;index<questions.length;index++){const question=questions[index],nextQuestion=questions[index+1];question.hasImage=!!(question.pageNumber&&hasImageForQuestion(question.id,question.question,question.pageNumber,nextQuestion?.pageNumber,pageAnchors,pageImages));}const seen=new Set<string>();return questions.filter(q=>{const key=`${q.id}|${q.question}`;if(seen.has(key))return false;seen.add(key);return true;}).sort((a,b)=>a.id-b.id);}
 
-function hasImageForQuestion(questionNumber:number,questionPage:number,nextQuestionPage:number|undefined,pageAnchors:Map<number,PageQuestionAnchor[]>,pageImages:Map<number,ImagePosition[]>):boolean{if(isImageNearQuestion(questionNumber,pageAnchors.get(questionPage)??[],pageImages.get(questionPage)??[]))return true;const lastCandidatePage=Math.min(nextQuestionPage??questionPage+1,questionPage+2);for(let page=questionPage+1;page<=lastCandidatePage;page++){const images=pageImages.get(page)??[];if(!images.length)continue;const anchors=pageAnchors.get(page)??[];const sameQuestion=anchors.filter(anchor=>anchor.number===questionNumber);if(sameQuestion.length&&images.some(image=>image.y<=sameQuestion[0].topY+40))return true;const boundary=anchors.find(anchor=>anchor.number!==questionNumber);if(boundary&&images.some(image=>image.y<boundary.topY-8))return true;if(page===questionPage+1&&(!anchors.length||!boundary))return false;}return false;}
+function hasImageCue(question:string){return /圖|圖片|照片|影像|病灶|顯示|呈現|如下|觀察|依圖|見圖|figure|fig\.?/i.test(question);}
+function hasImageForQuestion(questionNumber:number,questionText:string,questionPage:number,nextQuestionPage:number|undefined,pageAnchors:Map<number,PageQuestionAnchor[]>,pageImages:Map<number,ImagePosition[]>):boolean{
+  if(isImageNearQuestion(questionNumber,pageAnchors.get(questionPage)??[],pageImages.get(questionPage)??[]))return true;
+  if(!hasImageCue(questionText))return false;
+  const lastCandidatePage=Math.min(nextQuestionPage??questionPage+2,questionPage+2);
+  for(let page=questionPage+1;page<=lastCandidatePage;page++){
+    const images=pageImages.get(page)??[];
+    if(!images.length)continue;
+    const anchors=pageAnchors.get(page)??[];
+    const nextBoundary=anchors.filter(anchor=>anchor.number!==questionNumber).sort((a,b)=>a.topY-b.topY)[0];
+    if(nextBoundary){if(images.some(image=>image.y<nextBoundary.topY-8))return true;}
+    else return true;
+  }
+  return false;
+}
 
 function isImageNearQuestion(questionNumber:number,anchors:PageQuestionAnchor[],images:ImagePosition[]):boolean{if(!anchors.length||!images.length)return false;const sameQuestion=anchors.filter(anchor=>anchor.number===questionNumber);if(!sameQuestion.length)return false;const target=sameQuestion[0];const ordered=[...anchors].sort((a,b)=>a.topY-b.topY);const targetIndex=ordered.findIndex(anchor=>anchor.number===questionNumber&&Math.abs(anchor.topY-target.topY)<0.5);const previous=targetIndex>0?ordered[targetIndex-1]:undefined;const next=targetIndex>=0&&targetIndex<ordered.length-1?ordered[targetIndex+1]:undefined;const upper=previous?.topY??Math.max(0,target.topY-120);const nextBoundary=next?.topY??target.topY+5000;return images.some(image=>image.y>=upper-20&&image.y<=nextBoundary+20);}
 
@@ -109,7 +127,6 @@ function parseQuestionContent(questionNumber:number,content:string):ParsedQuesti
   const optionMatches=[...content.matchAll(optionRegex)].filter(match=>{
     const index=match.index??0;
     const remainder=content.slice(index);
-    // "A、B圖..." is part of the question stem, not option A.
     if(/^[AＡ]\s*[、.．:：]\s*[BＢ]\s*圖/.test(remainder))return false;
     if(/^[A-EＡ-Ｅ]\s*[、.．:：]\s*[A-EＡ-Ｅ]\s*圖/.test(remainder))return false;
     return true;
@@ -123,10 +140,10 @@ function parseQuestionContent(questionNumber:number,content:string):ParsedQuesti
   for(let i=0;i<optionMatches.length;i++){
     const start=(optionMatches[i].index??0)+optionMatches[i][0].length;
     const end=optionMatches[i+1]?.index??content.length;
-    options.push(clean(content.substring(start,end)));
+    const value=clean(content.substring(start,end));
+    if(value) options.push(value);
   }
-  if(options.filter(Boolean).length<2)return null;
-  while(options.length<5)options.push("");
+  if(options.length<2)return null;
   return{id:questionNumber,subject:"PDF 題庫",question:questionText,options:options.slice(0,5),answer:"",explanation:""};
 }
 
