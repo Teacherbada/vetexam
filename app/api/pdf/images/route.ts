@@ -48,7 +48,7 @@ export async function POST(request: Request) {
         imageDataUrl: renderedDataUrl,
         imageCount: contexts.reduce((sum, context) => sum + context.images.length, 0),
         imagePageNumbers: contexts.map((context) => context.pageNumber),
-        extractionMode: "pdf-region-render-v2",
+        extractionMode: "pdf-region-render-v3",
       });
     } catch (renderError) {
       console.error("PDF region rendering failed:", renderError);
@@ -88,7 +88,7 @@ async function findImageContexts(pdfjsLib: any, pdf: any, questionPageNumber: nu
     const operatorList = await page.getOperatorList();
     const images = await getImageAssets(pdfjsLib, page, operatorList, viewport);
     if (!images.length) {
-      if (targetFound || (pageNo > questionPageNumber && next)) break;
+      if (targetFound) break;
       continue;
     }
 
@@ -99,19 +99,13 @@ async function findImageContexts(pdfjsLib: any, pdf: any, questionPageNumber: nu
       const upper = next ? next.topY - 12 : Number.POSITIVE_INFINITY;
       selected = images.filter((image) => image.y >= lower && image.y <= upper);
     } else if (pageNo > questionPageNumber && targetFound) {
-      // Continuation page: images before the next question belong to the previous question.
       const boundary = next ? next.topY - 12 : Number.POSITIVE_INFINITY;
       selected = images.filter((image) => image.y <= boundary);
-    } else if (pageNo === questionPageNumber) {
-      // If the parser missed the question anchor, do not blindly take every image.
-      selected = images.slice(0, 1);
     }
 
     if (selected.length) contexts.push({ page, pageNumber: pageNo, viewport, images: selected });
 
-    // Once the next question is present after the target, stop. This prevents 46's image from leaking into 45.
     if (targetFound && next && next.number !== questionNumber) break;
-    if (targetFound && pageNo > questionPageNumber && next) break;
   }
 
   return contexts;
@@ -207,7 +201,6 @@ async function getImageAssets(pdfjsLib: any, page: any, operatorList: any, viewp
     const height = Math.max(...ys) - y;
     const isMask = fn === pdfjsLib.OPS.paintImageMaskXObject || fn === pdfjsLib.OPS.paintImageMaskXObjectRepeat;
 
-    // Image masks are also used for font glyphs. Ignore tiny masks so letters/numbers are not treated as pictures.
     if (isMask && (width < MIN_MASK_WIDTH || height < MIN_MASK_HEIGHT || width * height < MIN_MASK_AREA)) continue;
     if (width < 6 || height < 6) continue;
     assets.push({ x, y: y + height / 2, width, height, isMask });
