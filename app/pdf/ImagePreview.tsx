@@ -71,7 +71,7 @@ function ImagePreview({ file, pageNumber, questionNumber, onImageLoaded }: Props
           setSrc(data.imageDataUrl);
           onImageLoaded?.(data.imageDataUrl);
         } else {
-          setError("找到了圖片位置，但目前無法擷取圖片內容。");
+          setError("目前找不到這題可用的圖片內容。");
         }
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : "圖片擷取失敗");
@@ -97,8 +97,6 @@ function ImagePreview({ file, pageNumber, questionNumber, onImageLoaded }: Props
           <img
             src={src}
             alt={`第 ${questionNumber} 題 PDF 圖片`}
-            width={800}
-            height={500}
             loading="lazy"
             className="mx-auto block h-auto max-w-full rounded-xl object-contain"
           />
