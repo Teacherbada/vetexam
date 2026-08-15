@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createHash } from "node:crypto";
 import { auth } from "@/lib/auth";
 
 export const runtime = "nodejs";
@@ -8,13 +9,21 @@ type ImageAsset = { x: number; y: number; width: number; height: number; isMask:
 type TextItem = { text: string; y: number; height: number };
 type Anchor = { number: number; topY: number };
 type ImageContext = { page: any; pageNumber: number; viewport: any; images: ImageAsset[] };
+type PdfCacheEntry = { pdf: any; createdAt: number; hits: number };
 
 const RENDER_PADDING = 12;
-const RENDER_SCALE = 2;
+const RENDER_SCALE = 1.5;
 const MIN_MASK_WIDTH = 28;
 const MIN_MASK_HEIGHT = 28;
 const MIN_MASK_AREA = 900;
 const MAX_LOOKAHEAD_PAGES = 3;
+const PDF_CACHE_TTL_MS = 10 * 60 * 1000;
+const MAX_CACHED_PDFS = 2;
+
+// Vercel may reuse a warm Node.js instance. Keeping a very small in-memory cache
+// avoids reopening and reparsing the same PDF for every lazy-loaded question image.
+const pdfCache = new Map<string, PdfCacheEntry>();
+const imageCache = new Map<string, { dataUrl: string | null; createdAt: number }>();
 
 export async function POST(request: Request) {
   try {
@@ -30,16 +39,42 @@ export async function POST(request: Request) {
     if (!Number.isInteger(pageNumber) || pageNumber < 1) return NextResponse.json({ error: "無效的 PDF 頁碼。" }, { status: 400 });
     if (!Number.isInteger(questionNumber) || questionNumber < 1) return NextResponse.json({ error: "無效的題號。" }, { status: 400 });
 
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const pdfHash = createHash("sha256").update(bytes).digest("hex");
+    const cacheKey = `${pdfHash}:${pageNumber}:${questionNumber}`;
+    const cachedImage = getCachedImage(cacheKey);
+    if (cachedImage !== undefined) {
+      return NextResponse.json({
+        success: true,
+        pageNumber,
+        questionNumber,
+        imageDataUrl: cachedImage,
+        imageCount: cachedImage ? 1 : 0,
+        extractionMode: "pdf-region-render-v4-cache",
+      });
+    }
+
     const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
-    const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+    const pdf = await getCachedPdf(pdfjsLib, pdfHash, bytes);
     if (pageNumber > pdf.numPages) return NextResponse.json({ error: "PDF 頁碼超出範圍。" }, { status: 400 });
 
     const contexts = await findImageContexts(pdfjsLib, pdf, pageNumber, questionNumber);
-    if (!contexts.length) return NextResponse.json({ success: true, pageNumber, questionNumber, imageDataUrl: null, imageCount: 0 });
+    if (!contexts.length) {
+      setCachedImage(cacheKey, null);
+      return NextResponse.json({
+        success: true,
+        pageNumber,
+        questionNumber,
+        imageDataUrl: null,
+        imageCount: 0,
+        extractionMode: "pdf-region-render-v4-cache",
+      });
+    }
 
     try {
       const renderedDataUrl = await renderImageContexts(pdfjsLib, contexts);
       if (!renderedDataUrl) throw new Error("沒有產生有效圖片。");
+      setCachedImage(cacheKey, renderedDataUrl);
       return NextResponse.json({
         success: true,
         pageNumber,
@@ -48,7 +83,7 @@ export async function POST(request: Request) {
         imageDataUrl: renderedDataUrl,
         imageCount: contexts.reduce((sum, context) => sum + context.images.length, 0),
         imagePageNumbers: contexts.map((context) => context.pageNumber),
-        extractionMode: "pdf-region-render-v3",
+        extractionMode: "pdf-region-render-v4-cache",
       });
     } catch (renderError) {
       console.error("PDF region rendering failed:", renderError);
@@ -64,6 +99,48 @@ export async function POST(request: Request) {
     console.error("PDF image extraction error:", error);
     return NextResponse.json({ error: "圖片擷取失敗", detail: error instanceof Error ? error.message : "未知錯誤" }, { status: 500 });
   }
+}
+
+function getCachedImage(key: string): string | null | undefined {
+  const entry = imageCache.get(key);
+  if (!entry) return undefined;
+  if (Date.now() - entry.createdAt > PDF_CACHE_TTL_MS) {
+    imageCache.delete(key);
+    return undefined;
+  }
+  return entry.dataUrl;
+}
+
+function setCachedImage(key: string, dataUrl: string | null) {
+  imageCache.set(key, { dataUrl, createdAt: Date.now() });
+  while (imageCache.size > 80) {
+    const oldest = imageCache.keys().next().value;
+    if (!oldest) break;
+    imageCache.delete(oldest);
+  }
+}
+
+async function getCachedPdf(pdfjsLib: any, hash: string, bytes: Uint8Array): Promise<any> {
+  const existing = pdfCache.get(hash);
+  if (existing && Date.now() - existing.createdAt <= PDF_CACHE_TTL_MS) {
+    existing.hits += 1;
+    pdfCache.delete(hash);
+    pdfCache.set(hash, existing);
+    return existing.pdf;
+  }
+
+  if (existing) pdfCache.delete(hash);
+  const pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
+  pdfCache.set(hash, { pdf, createdAt: Date.now(), hits: 0 });
+
+  while (pdfCache.size > MAX_CACHED_PDFS) {
+    const oldest = pdfCache.keys().next().value;
+    if (!oldest) break;
+    const oldEntry = pdfCache.get(oldest);
+    try { await oldEntry?.pdf?.destroy?.(); } catch {}
+    pdfCache.delete(oldest);
+  }
+  return pdf;
 }
 
 async function findImageContexts(pdfjsLib: any, pdf: any, questionPageNumber: number, questionNumber: number): Promise<ImageContext[]> {
@@ -104,7 +181,6 @@ async function findImageContexts(pdfjsLib: any, pdf: any, questionPageNumber: nu
     }
 
     if (selected.length) contexts.push({ page, pageNumber: pageNo, viewport, images: selected });
-
     if (targetFound && next && next.number !== questionNumber) break;
   }
 
