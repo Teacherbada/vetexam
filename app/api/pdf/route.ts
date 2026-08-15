@@ -103,6 +103,31 @@ function hasImageForQuestion(questionNumber:number,questionPage:number,nextQuest
 
 function isImageNearQuestion(questionNumber:number,anchors:PageQuestionAnchor[],images:ImagePosition[]):boolean{if(!anchors.length||!images.length)return false;const sameQuestion=anchors.filter(anchor=>anchor.number===questionNumber);if(!sameQuestion.length)return false;const target=sameQuestion[0];const ordered=[...anchors].sort((a,b)=>a.topY-b.topY);const targetIndex=ordered.findIndex(anchor=>anchor.number===questionNumber&&Math.abs(anchor.topY-target.topY)<0.5);const previous=targetIndex>0?ordered[targetIndex-1]:undefined;const next=targetIndex>=0&&targetIndex<ordered.length-1?ordered[targetIndex+1]:undefined;const upper=previous?.topY??Math.max(0,target.topY-120);const nextBoundary=next?.topY??target.topY+5000;return images.some(image=>image.y>=upper-20&&image.y<=nextBoundary+20);}
 
-function parseQuestionContent(questionNumber:number,content:string):ParsedQuestion|null{if(!content)return null;const optionRegex=/^\s*(?:[（(]\s*)?([A-EＡ-Ｅ]|[1-5])\s*(?:[）)])?\s*(?:[.、．:：]|(?=\S))\s*/gim;const optionMatches=[...content.matchAll(optionRegex)];if(optionMatches.length<2)return null;const firstIndex=optionMatches[0].index;if(firstIndex==null)return null;const questionText=clean(content.substring(0,firstIndex));if(!questionText||questionText.length<2)return null;const options:string[]=[];for(let i=0;i<optionMatches.length;i++){const start=(optionMatches[i].index??0)+optionMatches[i][0].length,end=optionMatches[i+1]?.index??content.length;options.push(clean(content.substring(start,end)));}if(options.filter(Boolean).length<2)return null;while(options.length<5)options.push("");return{id:questionNumber,subject:"PDF 題庫",question:questionText,options:options.slice(0,5),answer:"",explanation:""};}
+function parseQuestionContent(questionNumber:number,content:string):ParsedQuestion|null{
+  if(!content)return null;
+  const optionRegex=/^\s*(?:[（(]\s*)?([A-EＡ-Ｅ]|[1-5])\s*(?:[）)])?\s*(?:[.、．:：]|(?=\S))\s*/gim;
+  const optionMatches=[...content.matchAll(optionRegex)].filter(match=>{
+    const index=match.index??0;
+    const remainder=content.slice(index);
+    // "A、B圖..." is part of the question stem, not option A.
+    if(/^[AＡ]\s*[、.．:：]\s*[BＢ]\s*圖/.test(remainder))return false;
+    if(/^[A-EＡ-Ｅ]\s*[、.．:：]\s*[A-EＡ-Ｅ]\s*圖/.test(remainder))return false;
+    return true;
+  });
+  if(optionMatches.length<2)return null;
+  const firstIndex=optionMatches[0].index;
+  if(firstIndex==null)return null;
+  const questionText=clean(content.substring(0,firstIndex));
+  if(!questionText||questionText.length<2)return null;
+  const options:string[]=[];
+  for(let i=0;i<optionMatches.length;i++){
+    const start=(optionMatches[i].index??0)+optionMatches[i][0].length;
+    const end=optionMatches[i+1]?.index??content.length;
+    options.push(clean(content.substring(start,end)));
+  }
+  if(options.filter(Boolean).length<2)return null;
+  while(options.length<5)options.push("");
+  return{id:questionNumber,subject:"PDF 題庫",question:questionText,options:options.slice(0,5),answer:"",explanation:""};
+}
 
 function clean(value:string){return value.replace(/===== PDF PAGE \d+ =====/g,"").replace(/\s+/g," ").trim();}
