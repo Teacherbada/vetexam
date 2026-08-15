@@ -61,10 +61,7 @@ export async function POST(request: Request) {
       const viewport = page.getViewport({ scale: 1 });
       const operatorList = await page.getOperatorList();
       const imagePositions = getImagePositions(pdfjsLib, operatorList, viewport);
-      if (imagePositions.length > 0) {
-        imagePages.add(pageNumber);
-        pageImages.set(pageNumber, imagePositions);
-      }
+      if (imagePositions.length > 0) { imagePages.add(pageNumber); pageImages.set(pageNumber, imagePositions); }
       const textContent = await page.getTextContent();
       const rawItems = textContent.items.filter((item:any)=>typeof item.str === "string" && item.str.trim() !== "").map((item:any)=>({ text:item.str.trim(), x:Number(item.transform?.[4]??0), y:Number(item.transform?.[5]??0), width:Number(item.width??0) }));
       pageAnchors.set(pageNumber, getQuestionAnchors(rawItems, viewport.height));
@@ -76,11 +73,7 @@ export async function POST(request: Request) {
         else lines.push({y:item.y,items:[{text:item.text,x:item.x,width:item.width}]});
       }
       lines.sort((a,b)=>b.y-a.y);
-      const pageText = lines.map(line=>{
-        let result=""; let previousEnd=-Infinity;
-        for (const item of line.items) { const separator=result && item.x-previousEnd>2?" ":""; result+=separator+item.text; previousEnd=item.x+item.width; }
-        return result.trim();
-      }).filter(Boolean).join("\n");
+      const pageText = lines.map(line=>{ let result=""; let previousEnd=-Infinity; for(const item of line.items){const separator=result&&item.x-previousEnd>2?" ":"";result+=separator+item.text;previousEnd=item.x+item.width;} return result.trim(); }).filter(Boolean).join("\n");
       fullText += `\n===== PDF PAGE ${pageNumber} =====\n${pageText}\n`;
     }
 
@@ -98,68 +91,18 @@ function normalizeExamYear(value:number){if(!Number.isInteger(value))return null
 function getImagePositions(pdfjsLib:any,operatorList:any,viewport:any):ImagePosition[]{
   const imageOps=new Set<number>([pdfjsLib.OPS.paintImageMaskXObject,pdfjsLib.OPS.paintImageXObject,pdfjsLib.OPS.paintInlineImageXObject,pdfjsLib.OPS.paintImageMaskXObjectRepeat,pdfjsLib.OPS.paintImageXObjectRepeat,pdfjsLib.OPS.paintJpegXObject].filter((value):value is number=>typeof value==="number"));
   const positions:ImagePosition[]=[]; let ctm=[1,0,0,1,0,0]; const stack:number[][]=[];
-  for(let i=0;i<operatorList.fnArray.length;i++){
-    const fn=operatorList.fnArray[i],args=operatorList.argsArray[i]??[];
-    if(fn===pdfjsLib.OPS.save){stack.push([...ctm]);continue;} if(fn===pdfjsLib.OPS.restore){ctm=stack.pop()??ctm;continue;} if(fn===pdfjsLib.OPS.transform&&args.length>=6){ctm=pdfjsLib.Util.transform(ctm,args.slice(0,6));continue;} if(!imageOps.has(fn))continue;
-    try{
-      const transform=pdfjsLib.Util.transform(viewport.transform,ctm); const points=[[0,0],[1,0],[0,1],[1,1]].map(point=>pdfjsLib.Util.applyTransform(point,transform));
-      const xs=points.map((point:number[])=>point[0]),ys=points.map((point:number[])=>point[1]); const x=Math.min(...xs),y=Math.min(...ys),width=Math.max(...xs)-x,height=Math.max(...ys)-y;
-      const isMask=fn===pdfjsLib.OPS.paintImageMaskXObject||fn===pdfjsLib.OPS.paintImageMaskXObjectRepeat;
-      if(isMask&&(width<MIN_DETECTED_IMAGE_WIDTH||height<MIN_DETECTED_IMAGE_HEIGHT||width*height<MIN_DETECTED_IMAGE_AREA))continue;
-      if(width<6||height<6)continue;
-      positions.push({y:y+height/2,width,height,isMask});
-    }catch{}
-  }
+  for(let i=0;i<operatorList.fnArray.length;i++){const fn=operatorList.fnArray[i],args=operatorList.argsArray[i]??[];if(fn===pdfjsLib.OPS.save){stack.push([...ctm]);continue;}if(fn===pdfjsLib.OPS.restore){ctm=stack.pop()??ctm;continue;}if(fn===pdfjsLib.OPS.transform&&args.length>=6){ctm=pdfjsLib.Util.transform(ctm,args.slice(0,6));continue;}if(!imageOps.has(fn))continue;try{const transform=pdfjsLib.Util.transform(viewport.transform,ctm);const points=[[0,0],[1,0],[0,1],[1,1]].map(point=>pdfjsLib.Util.applyTransform(point,transform));const xs=points.map((point:number[])=>point[0]),ys=points.map((point:number[])=>point[1]);const x=Math.min(...xs),y=Math.min(...ys),width=Math.max(...xs)-x,height=Math.max(...ys)-y;const isMask=fn===pdfjsLib.OPS.paintImageMaskXObject||fn===pdfjsLib.OPS.paintImageMaskXObjectRepeat;if(isMask&&(width<MIN_DETECTED_IMAGE_WIDTH||height<MIN_DETECTED_IMAGE_HEIGHT||width*height<MIN_DETECTED_IMAGE_AREA))continue;if(width<6||height<6)continue;positions.push({y:y+height/2,width,height,isMask});}catch{}}
   return positions.filter(position=>Number.isFinite(position.y));
 }
 
-function getQuestionAnchors(items:Array<{text:string;x:number;y:number}>,pageHeight:number):PageQuestionAnchor[]{
-  const anchors:PageQuestionAnchor[]=[]; const regex=/^\s*(?:[（(]\s*)?(\d{1,3})(?:\s*[）)])?\s*(?:[.、．:：]|(?=\S))/;
-  for(const item of items){const match=item.text.match(regex);if(!match)continue;const number=Number(match[1]);if(number>=1&&number<=999)anchors.push({number,y:item.y,topY:pageHeight-item.y});}
-  return anchors;
-}
+function getQuestionAnchors(items:Array<{text:string;x:number;y:number}>,pageHeight:number):PageQuestionAnchor[]{const anchors:PageQuestionAnchor[]=[];const regex=/^\s*(?:[（(]\s*)?(\d{1,3})(?:\s*[）)])?\s*(?:[.、．:：]|(?=\S))/;for(const item of items){const match=item.text.match(regex);if(!match)continue;const number=Number(match[1]);if(number>=1&&number<=999)anchors.push({number,y:item.y,topY:pageHeight-item.y});}return anchors;}
 
-function parseQuestions(text:string,imagePages:Set<number>,pageAnchors:Map<number,PageQuestionAnchor[]>,pageImages:Map<number,ImagePosition[]>):ParsedQuestion[]{
-  const normalized=text.replace(/\r\n/g,"\n").replace(/\r/g,"\n").replace(/\u00a0/g," ").replace(/[ \t]+/g," ").replace(/\n{3,}/g,"\n\n").trim();
-  const questionStartRegex=/^\s*(?:[（(]\s*)?(\d{1,3})(?:\s*[）)])?\s*(?:[.、．:：]|(?=\S))\s*/gm;
-  const matches=[...normalized.matchAll(questionStartRegex)].filter(match=>{const prefix=normalized.slice(Math.max(0,(match.index??0)-2),match.index??0);return (match.index??0)===0||/\n/.test(prefix);});
-  const questions:Array<ParsedQuestion&{pageNumber?:number}>=[];
-  for(let index=0;index<matches.length;index++){
-    const match=matches[index],number=Number(match[1]); if(number<1||number>999)continue;
-    const start=(match.index??0)+match[0].length,end=matches[index+1]?.index??normalized.length; const parsed=parseQuestionContent(number,normalized.substring(start,end).trim()); if(!parsed)continue;
-    const before=normalized.slice(0,match.index??0),pageMatches=[...before.matchAll(/===== PDF PAGE (\d+) =====/g)]; const pageNumber=pageMatches.length?Number(pageMatches[pageMatches.length-1][1]):undefined; parsed.pageNumber=pageNumber; questions.push(parsed);
-  }
-  for(let index=0;index<questions.length;index++){const question=questions[index],nextQuestion=questions[index+1];question.hasImage=!!(question.pageNumber&&hasImageForQuestion(question.id,question.pageNumber,nextQuestion?.pageNumber,pageAnchors,pageImages));}
-  const seen=new Set<string>(); return questions.filter(q=>{const key=`${q.id}|${q.question}`;if(seen.has(key))return false;seen.add(key);return true;}).sort((a,b)=>a.id-b.id);
-}
+function parseQuestions(text:string,imagePages:Set<number>,pageAnchors:Map<number,PageQuestionAnchor[]>,pageImages:Map<number,ImagePosition[]>):ParsedQuestion[]{const normalized=text.replace(/\r\n/g,"\n").replace(/\r/g,"\n").replace(/\u00a0/g," ").replace(/[ \t]+/g," ").replace(/\n{3,}/g,"\n\n").trim();const questionStartRegex=/^\s*(?:[（(]\s*)?(\d{1,3})(?:\s*[）)])?\s*(?:[.、．:：]|(?=\S))\s*/gm;const matches=[...normalized.matchAll(questionStartRegex)].filter(match=>{const prefix=normalized.slice(Math.max(0,(match.index??0)-2),match.index??0);return (match.index??0)===0||/\n/.test(prefix);});const questions:Array<ParsedQuestion&{pageNumber?:number}>=[];for(let index=0;index<matches.length;index++){const match=matches[index],number=Number(match[1]);if(number<1||number>999)continue;const start=(match.index??0)+match[0].length,end=matches[index+1]?.index??normalized.length;const parsed=parseQuestionContent(number,normalized.substring(start,end).trim());if(!parsed)continue;const before=normalized.slice(0,match.index??0),pageMatches=[...before.matchAll(/===== PDF PAGE (\d+) =====/g)];const pageNumber=pageMatches.length?Number(pageMatches[pageMatches.length-1][1]):undefined;parsed.pageNumber=pageNumber;questions.push(parsed);}for(let index=0;index<questions.length;index++){const question=questions[index],nextQuestion=questions[index+1];question.hasImage=!!(question.pageNumber&&hasImageForQuestion(question.id,question.pageNumber,nextQuestion?.pageNumber,pageAnchors,pageImages));}const seen=new Set<string>();return questions.filter(q=>{const key=`${q.id}|${q.question}`;if(seen.has(key))return false;seen.add(key);return true;}).sort((a,b)=>a.id-b.id);}
 
-function hasImageForQuestion(questionNumber:number,questionPage:number,nextQuestionPage:number|undefined,pageAnchors:Map<number,PageQuestionAnchor[]>,pageImages:Map<number,ImagePosition[]>):boolean{
-  if(isImageNearQuestion(questionNumber,pageAnchors.get(questionPage)??[],pageImages.get(questionPage)??[]))return true;
-  const lastCandidatePage=Math.min(nextQuestionPage??questionPage+1,questionPage+2);
-  for(let page=questionPage+1;page<=lastCandidatePage;page++){
-    const images=pageImages.get(page)??[]; if(!images.length)continue; const anchors=pageAnchors.get(page)??[]; const sameQuestion=anchors.filter(anchor=>anchor.number===questionNumber);
-    if(sameQuestion.length&&images.some(image=>image.y<=sameQuestion[0].topY+40))return true;
-    const boundary=anchors.find(anchor=>anchor.number!==questionNumber); if(boundary&&images.some(image=>image.y<boundary.topY-8))return true;
-    if(page===questionPage+1&&(!anchors.length||!boundary))return false;
-  }
-  return false;
-}
+function hasImageForQuestion(questionNumber:number,questionPage:number,nextQuestionPage:number|undefined,pageAnchors:Map<number,PageQuestionAnchor[]>,pageImages:Map<number,ImagePosition[]>):boolean{if(isImageNearQuestion(questionNumber,pageAnchors.get(questionPage)??[],pageImages.get(questionPage)??[]))return true;const lastCandidatePage=Math.min(nextQuestionPage??questionPage+1,questionPage+2);for(let page=questionPage+1;page<=lastCandidatePage;page++){const images=pageImages.get(page)??[];if(!images.length)continue;const anchors=pageAnchors.get(page)??[];const sameQuestion=anchors.filter(anchor=>anchor.number===questionNumber);if(sameQuestion.length&&images.some(image=>image.y<=sameQuestion[0].topY+40))return true;const boundary=anchors.find(anchor=>anchor.number!==questionNumber);if(boundary&&images.some(image=>image.y<boundary.topY-8))return true;if(page===questionPage+1&&(!anchors.length||!boundary))return false;}return false;}
 
-function isImageNearQuestion(questionNumber:number,anchors:PageQuestionAnchor[],images:ImagePosition[]):boolean{
-  if(!anchors.length||!images.length)return false; const sameQuestion=anchors.filter(anchor=>anchor.number===questionNumber); if(!sameQuestion.length)return false; const target=sameQuestion[0]; const ordered=[...anchors].sort((a,b)=>a.topY-b.topY); const targetIndex=ordered.findIndex(anchor=>anchor.number===questionNumber&&Math.abs(anchor.topY-target.topY)<0.5); const previous=targetIndex>0?ordered[targetIndex-1]:undefined; const next=targetIndex>=0&&targetIndex<ordered.length-1?ordered[targetIndex+1]:undefined; const upper=previous?.topY??Math.max(0,target.topY-120); const nextBoundary=next?.topY??target.topY+5000; return images.some(image=>image.y>=upper-20&&image.y<=nextBoundary+20);
-}
+function isImageNearQuestion(questionNumber:number,anchors:PageQuestionAnchor[],images:ImagePosition[]):boolean{if(!anchors.length||!images.length)return false;const sameQuestion=anchors.filter(anchor=>anchor.number===questionNumber);if(!sameQuestion.length)return false;const target=sameQuestion[0];const ordered=[...anchors].sort((a,b)=>a.topY-b.topY);const targetIndex=ordered.findIndex(anchor=>anchor.number===questionNumber&&Math.abs(anchor.topY-target.topY)<0.5);const previous=targetIndex>0?ordered[targetIndex-1]:undefined;const next=targetIndex>=0&&targetIndex<ordered.length-1?ordered[targetIndex+1]:undefined;const upper=previous?.topY??Math.max(0,target.topY-120);const nextBoundary=next?.topY??target.topY+5000;return images.some(image=>image.y>=upper-20&&image.y<=nextBoundary+20);}
 
-function parseQuestionContent(questionNumber:number,content:string):ParsedQuestion|null{
-  if(!content)return null;
-  const optionRegex=/\s*(?:[（(]\s*)?([A-EＡ-Ｅ]|[1-5])\s*(?:[）)])?\s*(?:[.、．:：]|(?=\S))\s*/gim;
-  const optionMatches=[...content.matchAll(optionRegex)].filter(m=>{const index=m.index??0;return index===0||index<content.length;});
-  if(optionMatches.length<2)return null;
-  const firstIndex=optionMatches[0].index; if(firstIndex==null)return null;
-  const questionText=clean(content.substring(0,firstIndex)); if(!questionText||questionText.length<2)return null;
-  const options:string[]=[];
-  for(let i=0;i<optionMatches.length;i++){const start=(optionMatches[i].index??0)+optionMatches[i][0].length,end=optionMatches[i+1]?.index??content.length;options.push(clean(content.substring(start,end)));}
-  if(options.filter(Boolean).length<2)return null; while(options.length<5)options.push("");
-  return{id:questionNumber,subject:"PDF 題庫",question:questionText,options:options.slice(0,5),answer:"",explanation:""};
-}
+function parseQuestionContent(questionNumber:number,content:string):ParsedQuestion|null{if(!content)return null;const optionRegex=/^\s*(?:[（(]\s*)?([A-EＡ-Ｅ]|[1-5])\s*(?:[）)])?\s*(?:[.、．:：]|(?=\S))\s*/gim;const optionMatches=[...content.matchAll(optionRegex)];if(optionMatches.length<2)return null;const firstIndex=optionMatches[0].index;if(firstIndex==null)return null;const questionText=clean(content.substring(0,firstIndex));if(!questionText||questionText.length<2)return null;const options:string[]=[];for(let i=0;i<optionMatches.length;i++){const start=(optionMatches[i].index??0)+optionMatches[i][0].length,end=optionMatches[i+1]?.index??content.length;options.push(clean(content.substring(start,end)));}if(options.filter(Boolean).length<2)return null;while(options.length<5)options.push("");return{id:questionNumber,subject:"PDF 題庫",question:questionText,options:options.slice(0,5),answer:"",explanation:""};}
 
 function clean(value:string){return value.replace(/===== PDF PAGE \d+ =====/g,"").replace(/\s+/g," ").trim();}
