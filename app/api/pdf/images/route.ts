@@ -23,7 +23,7 @@ const MAX_CACHED_PDFS = 2;
 // Vercel may reuse a warm Node.js instance. Keeping a very small in-memory cache
 // avoids reopening and reparsing the same PDF for every lazy-loaded question image.
 const pdfCache = new Map<string, PdfCacheEntry>();
-const imageCache = new Map<string, { dataUrl: string | null; createdAt: number }>();
+const imageCache = new Map<string, { dataUrl: string; createdAt: number }>();
 
 export async function POST(request: Request) {
   try {
@@ -49,7 +49,7 @@ export async function POST(request: Request) {
         pageNumber,
         questionNumber,
         imageDataUrl: cachedImage,
-        imageCount: cachedImage ? 1 : 0,
+        imageCount: 1,
         extractionMode: "pdf-region-render-v4-cache",
       });
     }
@@ -60,7 +60,6 @@ export async function POST(request: Request) {
 
     const contexts = await findImageContexts(pdfjsLib, pdf, pageNumber, questionNumber);
     if (!contexts.length) {
-      setCachedImage(cacheKey, null);
       return NextResponse.json({
         success: true,
         pageNumber,
@@ -101,7 +100,7 @@ export async function POST(request: Request) {
   }
 }
 
-function getCachedImage(key: string): string | null | undefined {
+function getCachedImage(key: string): string | undefined {
   const entry = imageCache.get(key);
   if (!entry) return undefined;
   if (Date.now() - entry.createdAt > PDF_CACHE_TTL_MS) {
@@ -111,7 +110,7 @@ function getCachedImage(key: string): string | null | undefined {
   return entry.dataUrl;
 }
 
-function setCachedImage(key: string, dataUrl: string | null) {
+function setCachedImage(key: string, dataUrl: string) {
   imageCache.set(key, { dataUrl, createdAt: Date.now() });
   while (imageCache.size > 80) {
     const oldest = imageCache.keys().next().value;
