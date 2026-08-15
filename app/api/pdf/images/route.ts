@@ -23,7 +23,6 @@ const MAX_CACHED_PDFS = 2;
 const MAX_CACHED_PAGE_INDEXES = 12;
 const MAX_CACHED_RENDERED_PAGES = 6;
 
-// These caches are optimizations only. Correctness must not depend on a warm Vercel instance.
 const pdfCache = new Map<string, PdfCacheEntry>();
 const pageIndexCache = new Map<string, PageIndex>();
 const renderedPageCache = new Map<string, CanvasCacheEntry>();
@@ -48,7 +47,7 @@ export async function POST(request: Request) {
     const cacheKey = `${pdfHash}:${pageNumber}:${questionNumber}`;
     const cachedImage = getCachedImage(cacheKey);
     if (cachedImage !== undefined) {
-      return NextResponse.json({ success: true, pageNumber, questionNumber, imageDataUrl: cachedImage, imageCount: 1, extractionMode: "pdf-region-render-v6" });
+      return NextResponse.json({ success: true, pageNumber, questionNumber, imageDataUrl: cachedImage, imageCount: 1, extractionMode: "pdf-region-render-v7" });
     }
 
     const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
@@ -57,7 +56,7 @@ export async function POST(request: Request) {
 
     const contexts = await findImageContexts(pdf, pdfHash, pageNumber, questionNumber);
     if (!contexts.length) {
-      return NextResponse.json({ success: true, pageNumber, questionNumber, imageDataUrl: null, imageCount: 0, extractionMode: "pdf-region-render-v6" });
+      return NextResponse.json({ success: true, pageNumber, questionNumber, imageDataUrl: null, imageCount: 0, extractionMode: "pdf-region-render-v7" });
     }
 
     try {
@@ -72,7 +71,7 @@ export async function POST(request: Request) {
         imageDataUrl: renderedDataUrl,
         imageCount: contexts.reduce((sum, context) => sum + context.images.length, 0),
         imagePageNumbers: contexts.map((context) => context.pageNumber),
-        extractionMode: "pdf-region-render-v6",
+        extractionMode: "pdf-region-render-v7",
       });
     } catch (renderError) {
       console.error("PDF region rendering failed:", renderError);
@@ -151,57 +150,78 @@ async function getPageIndex(pdf: any, pdfHash: string, pageNumber: number): Prom
   return result;
 }
 
+/**
+ * Assign images by page regions instead of simply taking the first image after a question.
+ * A question owns the vertical interval from its anchor to the next question anchor.
+ * If the interval continues onto the next page, only images on continuation pages that
+ * occur before the next question are eligible. Images are grouped together so a question
+ * with two figures (such as Q40 A/B) remains one image context.
+ */
 async function findImageContexts(pdf: any, pdfHash: string, questionPageNumber: number, questionNumber: number): Promise<ImageContext[]> {
   const contexts: ImageContext[] = [];
-  let targetFound = false;
-  let targetPageHadAnchor = false;
-  let targetPageHadImage = false;
+  let foundTarget = false;
+  let continuationAllowed = false;
 
   for (let pageNo = questionPageNumber; pageNo <= Math.min(pdf.numPages, questionPageNumber + MAX_LOOKAHEAD_PAGES); pageNo++) {
     const index = await getPageIndex(pdf, pdfHash, pageNo);
     const targetIndex = index.anchors.findIndex((anchor) => anchor.number === questionNumber);
-    const target = targetIndex >= 0 ? index.anchors[targetIndex] : undefined;
-    const next = targetIndex >= 0
-      ? index.anchors.slice(targetIndex + 1).find((anchor) => anchor.number !== questionNumber)
-      : targetFound
-        ? index.anchors.find((anchor) => anchor.number !== questionNumber)
-        : undefined;
 
-    if (target) {
-      targetFound = true;
-      targetPageHadAnchor = true;
-      const lower = Math.max(0, target.topY - 12);
-      const upper = next ? next.topY - 12 : Number.POSITIVE_INFINITY;
-      const selected = index.images.filter((image) => image.y >= lower && image.y <= upper);
+    if (targetIndex >= 0) {
+      foundTarget = true;
+      const target = index.anchors[targetIndex];
+      const nextSamePage = index.anchors.slice(targetIndex + 1).find((anchor) => anchor.number > questionNumber);
+      const upper = nextSamePage ? nextSamePage.topY : Number.POSITIVE_INFINITY;
+      const selected = selectImagesInRegion(index.images, target.topY, upper);
+
       if (selected.length) {
         contexts.push({ page: index.page, pageNumber: pageNo, viewport: index.viewport, images: selected });
-        targetPageHadImage = true;
+        // A complete region on this page is authoritative. Do not steal the next page.
+        break;
       }
 
-      // If the target page already contains a real image, it is safe to stop here.
-      // If it does not, continue so a cross-page image can be attached to this question.
-      if (targetPageHadImage) break;
+      // No image in the target page's own question region. A cross-page figure is possible.
+      continuationAllowed = !nextSamePage;
+      if (!continuationAllowed) break;
       continue;
     }
 
-    if (targetFound) {
-      // Continuation page: use only real image assets before the next question.
-      const boundary = next ? next.topY - 12 : Number.POSITIVE_INFINITY;
-      const selected = index.images.filter((image) => image.y <= boundary);
+    if (!foundTarget) continue;
+
+    // We only reach this branch when Qn was the last question anchor on the previous page.
+    // If this page starts with another question, its content belongs to that next question.
+    if (index.anchors.length > 0) {
+      // Images before the first question on this continuation page can still belong to Qn.
+      const firstQuestion = index.anchors.find((anchor) => anchor.number > questionNumber);
+      if (!continuationAllowed) break;
+      const upper = firstQuestion ? firstQuestion.topY : Number.POSITIVE_INFINITY;
+      const selected = selectImagesInRegion(index.images, 0, upper);
+      if (selected.length) contexts.push({ page: index.page, pageNumber: pageNo, viewport: index.viewport, images: selected });
+      break;
+    }
+
+    if (continuationAllowed) {
+      const selected = selectImagesInRegion(index.images, 0, Number.POSITIVE_INFINITY);
       if (selected.length) {
         contexts.push({ page: index.page, pageNumber: pageNo, viewport: index.viewport, images: selected });
         break;
       }
-
-      // Once another question anchor is present and there is no real image before it,
-      // this page belongs to the next question, so do not steal its assets.
-      if (next) break;
     }
   }
 
-  // Avoid unused-state regressions while keeping the intent explicit for future debugging.
-  void targetPageHadAnchor;
   return contexts;
+}
+
+function selectImagesInRegion(images: ImageAsset[], top: number, bottom: number): ImageAsset[] {
+  if (!images.length) return [];
+  const selected = images.filter((image) => {
+    const imageTop = image.y;
+    const imageBottom = image.y + image.height;
+    const center = image.y + image.height / 2;
+    // Require the image center or a meaningful part of its bounding box to be inside
+    // the question region. This prevents a nearby image from crossing a question boundary.
+    return center >= top && center <= bottom && imageBottom > top && imageTop < bottom;
+  });
+  return selected.sort((a, b) => a.y - b.y || a.x - b.x);
 }
 
 async function renderImageContexts(contexts: ImageContext[], pdfHash: string): Promise<string | null> {
@@ -215,9 +235,9 @@ async function renderImageContexts(contexts: ImageContext[], pdfHash: string): P
   for (const context of contexts) {
     const pageCanvas = await getRenderedPageCanvas(context, pdfHash, canvasModule);
     const left = Math.max(0, Math.min(...context.images.map((image) => image.x)) - RENDER_PADDING);
-    const top = Math.max(0, Math.min(...context.images.map((image) => image.y - image.height / 2)) - RENDER_PADDING);
+    const top = Math.max(0, Math.min(...context.images.map((image) => image.y)) - RENDER_PADDING);
     const right = Math.min(context.viewport.width, Math.max(...context.images.map((image) => image.x + image.width)) + RENDER_PADDING);
-    const bottom = Math.min(context.viewport.height, Math.max(...context.images.map((image) => image.y + image.height / 2)) + RENDER_PADDING);
+    const bottom = Math.min(context.viewport.height, Math.max(...context.images.map((image) => image.y + image.height)) + RENDER_PADDING);
 
     const cropLeft = Math.max(0, Math.floor(left * RENDER_SCALE));
     const cropTop = Math.max(0, Math.floor(top * RENDER_SCALE));
@@ -271,9 +291,6 @@ async function getRenderedPageCanvas(context: ImageContext, pdfHash: string, can
 }
 
 async function getImageAssets(pdfjsLib: any, page: any, operatorList: any, viewport: any): Promise<ImageAsset[]> {
-  // Image masks are frequently used by PDFs for glyphs, bullets, and other text-like
-  // drawing operations. Treating them as question images caused false positives such as Q39.
-  // Real exam figures are expected to use regular image XObjects/inline images.
   const imageOps = new Set<number>([
     pdfjsLib.OPS.paintImageXObject,
     pdfjsLib.OPS.paintInlineImageXObject,
@@ -312,9 +329,8 @@ async function getImageAssets(pdfjsLib: any, page: any, operatorList: any, viewp
     const width = Math.max(...xs) - x;
     const height = Math.max(...ys) - y;
 
-    // Very small image objects are usually UI glyphs/icons rather than exam figures.
     if (width < MIN_REAL_IMAGE_WIDTH || height < MIN_REAL_IMAGE_HEIGHT) continue;
-    assets.push({ x, y: y + height / 2, width, height, isMask: false });
+    assets.push({ x, y, width, height, isMask: false });
   }
 
   return assets;
