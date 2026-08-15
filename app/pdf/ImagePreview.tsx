@@ -14,11 +14,36 @@ function ImagePreview({ file, pageNumber, questionNumber, onImageLoaded }: Props
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [extractionMode, setExtractionMode] = useState("");
+  const [shouldLoad, setShouldLoad] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const loadedKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
+    const element = containerRef.current;
+    if (!element) return;
+
+    if (typeof IntersectionObserver === "undefined") {
+      setShouldLoad(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setShouldLoad(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "500px 0px" },
+    );
+
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
     const currentFile = file;
-    if (!currentFile || !pageNumber || !questionNumber) return;
+    if (!shouldLoad || !currentFile || !pageNumber || !questionNumber) return;
 
     const loadKey = `${currentFile.name}:${currentFile.size}:${currentFile.lastModified}:${pageNumber}:${questionNumber}`;
     if (loadedKeyRef.current === loadKey) return;
@@ -57,22 +82,28 @@ function ImagePreview({ file, pageNumber, questionNumber, onImageLoaded }: Props
 
     load(currentFile, pageNumber, questionNumber);
     return () => { cancelled = true; };
-  }, [file, pageNumber, questionNumber, onImageLoaded]);
-
-  if (error) return <div className="mt-4 text-sm text-amber-700">🖼 {error}</div>;
-  if (loading && !src) return <div className="mt-4 text-sm text-amber-700">🖼 正在載入圖片預覽…</div>;
-  if (!src) return null;
+  }, [file, pageNumber, questionNumber, onImageLoaded, shouldLoad]);
 
   return (
-    <div className="mt-4 w-full">
-      <div className="mb-2 text-xs text-slate-400">
-        圖片擷取方式：{extractionMode || "未知"}
-      </div>
-      <img
-        src={src}
-        alt={`第 ${questionNumber} 題 PDF 圖片`}
-        className="mx-auto block h-auto w-auto max-w-full rounded-xl object-contain"
-      />
+    <div ref={containerRef} className="mt-4 w-full min-h-24 rounded-xl">
+      {error && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">圖片載入失敗：{error}</div>}
+      {loading && !src && <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">正在載入圖片預覽…</div>}
+      {!shouldLoad && !error && <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-400">圖片即將載入…</div>}
+      {src && (
+        <>
+          <div className="mb-2 text-xs text-slate-400">
+            圖片擷取方式：{extractionMode || "未知"}
+          </div>
+          <img
+            src={src}
+            alt={`第 ${questionNumber} 題 PDF 圖片`}
+            width={800}
+            height={500}
+            loading="lazy"
+            className="mx-auto block h-auto max-w-full rounded-xl object-contain"
+          />
+        </>
+      )}
     </div>
   );
 }
