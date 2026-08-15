@@ -47,7 +47,7 @@ export async function POST(request: Request) {
     const cacheKey = `${pdfHash}:${pageNumber}:${questionNumber}`;
     const cachedImage = getCachedImage(cacheKey);
     if (cachedImage !== undefined) {
-      return NextResponse.json({ success: true, pageNumber, questionNumber, imageDataUrl: cachedImage, imageCount: 1, extractionMode: "pdf-region-render-v7" });
+      return NextResponse.json({ success: true, pageNumber, questionNumber, imageDataUrl: cachedImage, imageCount: 1, extractionMode: "pdf-region-render-v8" });
     }
 
     const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
@@ -56,7 +56,7 @@ export async function POST(request: Request) {
 
     const contexts = await findImageContexts(pdf, pdfHash, pageNumber, questionNumber);
     if (!contexts.length) {
-      return NextResponse.json({ success: true, pageNumber, questionNumber, imageDataUrl: null, imageCount: 0, extractionMode: "pdf-region-render-v7" });
+      return NextResponse.json({ success: true, pageNumber, questionNumber, imageDataUrl: null, imageCount: 0, extractionMode: "pdf-region-render-v8" });
     }
 
     try {
@@ -71,7 +71,7 @@ export async function POST(request: Request) {
         imageDataUrl: renderedDataUrl,
         imageCount: contexts.reduce((sum, context) => sum + context.images.length, 0),
         imagePageNumbers: contexts.map((context) => context.pageNumber),
-        extractionMode: "pdf-region-render-v7",
+        extractionMode: "pdf-region-render-v8",
       });
     } catch (renderError) {
       console.error("PDF region rendering failed:", renderError);
@@ -175,11 +175,9 @@ async function findImageContexts(pdf: any, pdfHash: string, questionPageNumber: 
 
       if (selected.length) {
         contexts.push({ page: index.page, pageNumber: pageNo, viewport: index.viewport, images: selected });
-        // A complete region on this page is authoritative. Do not steal the next page.
         break;
       }
 
-      // No image in the target page's own question region. A cross-page figure is possible.
       continuationAllowed = !nextSamePage;
       if (!continuationAllowed) break;
       continue;
@@ -187,10 +185,7 @@ async function findImageContexts(pdf: any, pdfHash: string, questionPageNumber: 
 
     if (!foundTarget) continue;
 
-    // We only reach this branch when Qn was the last question anchor on the previous page.
-    // If this page starts with another question, its content belongs to that next question.
     if (index.anchors.length > 0) {
-      // Images before the first question on this continuation page can still belong to Qn.
       const firstQuestion = index.anchors.find((anchor) => anchor.number > questionNumber);
       if (!continuationAllowed) break;
       const upper = firstQuestion ? firstQuestion.topY : Number.POSITIVE_INFINITY;
@@ -217,8 +212,6 @@ function selectImagesInRegion(images: ImageAsset[], top: number, bottom: number)
     const imageTop = image.y;
     const imageBottom = image.y + image.height;
     const center = image.y + image.height / 2;
-    // Require the image center or a meaningful part of its bounding box to be inside
-    // the question region. This prevents a nearby image from crossing a question boundary.
     return center >= top && center <= bottom && imageBottom > top && imageTop < bottom;
   });
   return selected.sort((a, b) => a.y - b.y || a.x - b.x);
@@ -294,46 +287,106 @@ async function getImageAssets(pdfjsLib: any, page: any, operatorList: any, viewp
   const imageOps = new Set<number>([
     pdfjsLib.OPS.paintImageXObject,
     pdfjsLib.OPS.paintInlineImageXObject,
-    pdfjsLib.OPS.paintImageXObjectRepeat,
     pdfjsLib.OPS.paintJpegXObject,
+    pdfjsLib.OPS.paintImageXObjectRepeat,
   ].filter((value): value is number => typeof value === "number"));
 
   const assets: ImageAsset[] = [];
   let ctm = [1, 0, 0, 1, 0, 0];
   const stack: number[][] = [];
 
-  for (let i = 0; i < operatorList.fnArray.length; i++) {
-    const fn = operatorList.fnArray[i];
-    const args = operatorList.argsArray[i] ?? [];
-    if (fn === pdfjsLib.OPS.save) { stack.push([...ctm]); continue; }
-    if (fn === pdfjsLib.OPS.restore) { ctm = stack.pop() ?? ctm; continue; }
-    if (fn === pdfjsLib.OPS.transform && args.length >= 6) { ctm = pdfjsLib.Util.transform(ctm, args.slice(0, 6)); continue; }
-    if (!imageOps.has(fn)) continue;
-
-    let image: any = null;
-    const imageId = typeof args[0] === "string" ? args[0] : null;
-    try {
-      if (imageId) {
-        image = await getPdfObject(page.objs, imageId);
-        if (!image) image = await getPdfObject(page.commonObjs, imageId);
-      } else if (args[0]?.data && args[0]?.width && args[0]?.height) image = args[0];
-    } catch { image = null; }
-    if (!image) continue;
-
-    const transform = pdfjsLib.Util.transform(viewport.transform, ctm);
-    const points = [[0,0],[1,0],[0,1],[1,1]].map((point) => pdfjsLib.Util.applyTransform(point, transform));
+  const addImageRegion = (localTransform: number[], imageWidth = 1, imageHeight = 1) => {
+    const transform = pdfjsLib.Util.transform(viewport.transform, pdfjsLib.Util.transform(ctm, localTransform));
+    const points = [[0, 0], [imageWidth, 0], [0, imageHeight], [imageWidth, imageHeight]].map((point) => pdfjsLib.Util.applyTransform(point, transform));
     const xs = points.map((point: number[]) => point[0]);
     const ys = points.map((point: number[]) => point[1]);
     const x = Math.min(...xs);
     const y = Math.min(...ys);
     const width = Math.max(...xs) - x;
     const height = Math.max(...ys) - y;
-
-    if (width < MIN_REAL_IMAGE_WIDTH || height < MIN_REAL_IMAGE_HEIGHT) continue;
+    if (width < MIN_REAL_IMAGE_WIDTH || height < MIN_REAL_IMAGE_HEIGHT) return;
     assets.push({ x, y, width, height, isMask: false });
+  };
+
+  for (let i = 0; i < operatorList.fnArray.length; i++) {
+    const fn = operatorList.fnArray[i];
+    const args = operatorList.argsArray[i] ?? [];
+
+    if (fn === pdfjsLib.OPS.save) { stack.push([...ctm]); continue; }
+    if (fn === pdfjsLib.OPS.restore) { ctm = stack.pop() ?? ctm; continue; }
+
+    // Form XObjects introduce another transform/save scope. Without this, images
+    // inside a form can have correct content but completely wrong page coordinates.
+    if (fn === pdfjsLib.OPS.paintFormXObjectBegin) {
+      stack.push([...ctm]);
+      if (Array.isArray(args[0]) && args[0].length === 6) ctm = pdfjsLib.Util.transform(ctm, args[0]);
+      continue;
+    }
+    if (fn === pdfjsLib.OPS.paintFormXObjectEnd) {
+      ctm = stack.pop() ?? ctm;
+      continue;
+    }
+
+    if (fn === pdfjsLib.OPS.transform && args.length >= 6) {
+      ctm = pdfjsLib.Util.transform(ctm, args.slice(0, 6));
+      continue;
+    }
+
+    if (!imageOps.has(fn)) continue;
+
+    if (fn === pdfjsLib.OPS.paintImageXObjectRepeat) {
+      const scaleX = Number(args[1] || 1);
+      const scaleY = Number(args[2] || 1);
+      const positions = Array.isArray(args[3]) ? args[3] : [];
+      for (let p = 0; p + 1 < positions.length; p += 2) {
+        addImageRegion([scaleX, 0, 0, scaleY, Number(positions[p]), Number(positions[p + 1])]);
+      }
+      continue;
+    }
+
+    let imageWidth = 1;
+    let imageHeight = 1;
+    const imageId = typeof args[0] === "string" ? args[0] : null;
+
+    if (fn === pdfjsLib.OPS.paintJpegXObject || fn === pdfjsLib.OPS.paintImageXObject) {
+      imageWidth = Number(args[1] || 1);
+      imageHeight = Number(args[2] || 1);
+
+      // The operator arguments contain the source dimensions, while the transform
+      // determines where the normalized image is actually painted.
+      // The page object lookup is only used as a fallback for unusual PDFs.
+      if ((!imageWidth || !imageHeight) && imageId) {
+        try {
+          const image = await getPdfObject(page.objs, imageId) || await getPdfObject(page.commonObjs, imageId);
+          imageWidth = Number(image?.width || 1);
+          imageHeight = Number(image?.height || 1);
+        } catch {}
+      }
+    } else if (fn === pdfjsLib.OPS.paintInlineImageXObject) {
+      imageWidth = Number(args[0]?.width || 1);
+      imageHeight = Number(args[0]?.height || 1);
+    }
+
+    // PDF.js paints an image into the unit image space; the current transform is
+    // therefore the placement transform. Use a unit square here, not the raw pixel
+    // dimensions, otherwise a 2000x1500 source image would artificially enlarge the
+    // page-space bounding box.
+    addImageRegion([1, 0, 0, 1, 0, 0], 1, 1);
   }
 
-  return assets;
+  // Remove exact duplicates caused by nested/form operators while preserving separate
+  // figures that happen to use the same source image.
+  const unique: ImageAsset[] = [];
+  for (const asset of assets) {
+    const duplicate = unique.some((existing) =>
+      Math.abs(existing.x - asset.x) < 1 &&
+      Math.abs(existing.y - asset.y) < 1 &&
+      Math.abs(existing.width - asset.width) < 1 &&
+      Math.abs(existing.height - asset.height) < 1,
+    );
+    if (!duplicate) unique.push(asset);
+  }
+  return unique;
 }
 
 function getPdfObject(objects: any, id: string): Promise<any | null> {
