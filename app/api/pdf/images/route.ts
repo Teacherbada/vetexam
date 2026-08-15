@@ -13,7 +13,15 @@ type ImageAsset = {
   dataUrl: string;
 };
 type TextItem = { text: string; y: number; height: number };
-type Anchor = { number: number; y: number };
+type Anchor = { number: number; y: number; topY: number };
+
+type ImageContext = {
+  page: any;
+  pageNumber: number;
+  viewport: any;
+  image: ImageAsset;
+  items: TextItem[];
+};
 
 const IMAGE_PADDING = 8;
 const RENDER_PADDING = 14;
@@ -45,33 +53,18 @@ export async function POST(request: Request) {
     const pdf = await pdfjsLib.getDocument({ data: pdfBytes }).promise;
     if (pageNumber > pdf.numPages) return NextResponse.json({ error: "PDF 頁碼超出範圍。" }, { status: 400 });
 
-    const page = await pdf.getPage(pageNumber);
-    const viewport = page.getViewport({ scale: 1 });
-    const operatorList = await page.getOperatorList();
-    const images = await getImageAssets(pdfjsLib, page, operatorList, viewport);
-
-    const textContent = await page.getTextContent();
-    const items: TextItem[] = textContent.items
-      .filter((item: any) => typeof item.str === "string" && item.str.trim())
-      .map((item: any) => ({
-        text: item.str.trim(),
-        y: Number(item.transform?.[5] ?? 0),
-        height: Number(item.height ?? 0),
-      }));
-
-    const anchors = getQuestionAnchors(items);
-    const image = findImageNearQuestion(questionNumber, anchors, images);
-
-    if (!image) {
+    const context = await findImageContext(pdfjsLib, pdf, pageNumber, questionNumber);
+    if (!context) {
       return NextResponse.json({ success: true, pageNumber, questionNumber, imageDataUrl: null });
     }
 
     try {
-      const renderedDataUrl = await renderPdfRegion(pdfjsLib, page, image, viewport, items);
+      const renderedDataUrl = await renderPdfRegion(pdfjsLib, context.page, context.image, context.viewport, context.items);
       if (renderedDataUrl) {
         return NextResponse.json({
           success: true,
           pageNumber,
+          imagePageNumber: context.pageNumber,
           questionNumber,
           imageDataUrl: renderedDataUrl,
           extractionMode: "pdf-region-render",
@@ -85,6 +78,7 @@ export async function POST(request: Request) {
         renderErrorName: renderError instanceof Error ? renderError.name : "unknown",
         renderErrorStack: renderError instanceof Error ? renderError.stack?.slice(0, 2000) : undefined,
         pageNumber,
+        imagePageNumber: context.pageNumber,
         questionNumber,
         diagnostic: "renderPdfRegion failed before fallback",
       }, { status: 500 });
@@ -93,6 +87,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       error: "PDF 整頁 Render 沒有產生圖片",
       pageNumber,
+      imagePageNumber: context.pageNumber,
       questionNumber,
       diagnostic: "renderPdfRegion returned null before fallback",
     }, { status: 500 });
@@ -100,6 +95,55 @@ export async function POST(request: Request) {
     console.error("PDF image extraction error:", error);
     return NextResponse.json({ error: "圖片擷取失敗", detail: error instanceof Error ? error.message : "未知錯誤" }, { status: 500 });
   }
+}
+
+async function findImageContext(pdfjsLib: any, pdf: any, questionPageNumber: number, questionNumber: number): Promise<ImageContext | null> {
+  const lastCandidatePage = Math.min(pdf.numPages, questionPageNumber + 2);
+
+  for (let candidatePageNumber = questionPageNumber; candidatePageNumber <= lastCandidatePage; candidatePageNumber++) {
+    const page = await pdf.getPage(candidatePageNumber);
+    const viewport = page.getViewport({ scale: 1 });
+    const operatorList = await page.getOperatorList();
+    const images = await getImageAssets(pdfjsLib, page, operatorList, viewport);
+    if (!images.length) continue;
+
+    const textContent = await page.getTextContent();
+    const items: TextItem[] = textContent.items
+      .filter((item: any) => typeof item.str === "string" && item.str.trim())
+      .map((item: any) => ({
+        text: item.str.trim(),
+        y: Number(item.transform?.[5] ?? 0),
+        height: Number(item.height ?? 0),
+      }));
+
+    const anchors = getQuestionAnchors(items, viewport.height);
+
+    const samePageImage = findImageNearQuestion(questionNumber, anchors, images);
+    if (samePageImage) {
+      return { page, pageNumber: candidatePageNumber, viewport, image: samePageImage, items };
+    }
+
+    if (candidatePageNumber === questionPageNumber) continue;
+
+    const sameQuestionAnchor = anchors.find((anchor) => anchor.number === questionNumber);
+    if (sameQuestionAnchor) {
+      const image = images.find((candidate) => candidate.y <= sameQuestionAnchor.topY + 40);
+      if (image) return { page, pageNumber: candidatePageNumber, viewport, image, items };
+    }
+
+    const nextQuestionAnchor = anchors.find((anchor) => anchor.number !== questionNumber);
+    if (nextQuestionAnchor) {
+      const image = images.find((candidate) => candidate.y < nextQuestionAnchor.topY - 8);
+      if (image) return { page, pageNumber: candidatePageNumber, viewport, image, items };
+      continue;
+    }
+
+    if (candidatePageNumber === questionPageNumber + 1) {
+      return { page, pageNumber: candidatePageNumber, viewport, image: images[0], items };
+    }
+  }
+
+  return null;
 }
 
 async function renderPdfRegion(
@@ -290,9 +334,14 @@ function crc32(data: Uint8Array) {
   return (crc ^ 0xffffffff) >>> 0;
 }
 
-function getQuestionAnchors(items: TextItem[]): Anchor[] {
+function getQuestionAnchors(items: TextItem[], pageHeight: number): Anchor[] {
   const anchors: Anchor[] = [], regex = /^\s*(?:[（(]\s*)?(\d{1,3})(?:\s*[）)])?\s*(?:[.、．:：]|(?=\S))/;
-  for (const item of items) { const match = item.text.match(regex); if (!match) continue; const number = Number(match[1]); if (number >= 1 && number <= 999) anchors.push({ number, y: item.y }); }
+  for (const item of items) {
+    const match = item.text.match(regex);
+    if (!match) continue;
+    const number = Number(match[1]);
+    if (number >= 1 && number <= 999) anchors.push({ number, y: item.y, topY: pageHeight - item.y });
+  }
   return anchors;
 }
 
@@ -301,15 +350,11 @@ function findImageNearQuestion(questionNumber: number, anchors: Anchor[], images
   const same = anchors.filter((anchor) => anchor.number === questionNumber);
   if (!same.length) return null;
   const target = same[0];
-  const ordered = [...anchors].sort((a, b) => b.y - a.y);
-  const targetIndex = ordered.findIndex((anchor) => anchor.number === questionNumber && Math.abs(anchor.y - target.y) < 0.5);
+  const ordered = [...anchors].sort((a, b) => a.topY - b.topY);
+  const targetIndex = ordered.findIndex((anchor) => anchor.number === questionNumber && Math.abs(anchor.topY - target.topY) < 0.5);
   const previous = targetIndex > 0 ? ordered[targetIndex - 1] : undefined;
   const next = targetIndex >= 0 && targetIndex < ordered.length - 1 ? ordered[targetIndex + 1] : undefined;
-  const upper = previous?.y ?? target.y - 120;
-  const nextBoundary = next?.y ?? target.y + 5000;
-  return images.find((image) => {
-    const y = image.y;
-    if (targetIndex === 0) return y <= nextBoundary + 40;
-    return y <= upper + 20 && y >= nextBoundary - 20;
-  }) ?? null;
+  const upper = previous?.topY ?? Math.max(0, target.topY - 120);
+  const nextBoundary = next?.topY ?? target.topY + 5000;
+  return images.find((image) => image.y >= upper - 20 && image.y <= nextBoundary + 20) ?? null;
 }
