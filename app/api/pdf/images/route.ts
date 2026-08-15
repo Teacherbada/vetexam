@@ -8,8 +8,11 @@ export const dynamic = "force-dynamic";
 type ImageAsset = { x: number; y: number; width: number; height: number; isMask: boolean };
 type TextItem = { text: string; y: number; height: number };
 type Anchor = { number: number; topY: number };
+type PageIndex = { page: any; pageNumber: number; viewport: any; anchors: Anchor[]; images: ImageAsset[] };
 type ImageContext = { page: any; pageNumber: number; viewport: any; images: ImageAsset[] };
 type PdfCacheEntry = { pdf: any; createdAt: number; hits: number };
+
+type CanvasCacheEntry = { canvas: any; createdAt: number };
 
 const RENDER_PADDING = 12;
 const RENDER_SCALE = 1.5;
@@ -19,10 +22,14 @@ const MIN_MASK_AREA = 900;
 const MAX_LOOKAHEAD_PAGES = 3;
 const PDF_CACHE_TTL_MS = 10 * 60 * 1000;
 const MAX_CACHED_PDFS = 2;
+const MAX_CACHED_PAGE_INDEXES = 12;
+const MAX_CACHED_RENDERED_PAGES = 6;
 
-// Vercel may reuse a warm Node.js instance. Keeping a very small in-memory cache
-// avoids reopening and reparsing the same PDF for every lazy-loaded question image.
+// These caches are intentionally small. Vercel can reuse a warm function instance,
+// but a cache is only an optimization and must never be required for correctness.
 const pdfCache = new Map<string, PdfCacheEntry>();
+const pageIndexCache = new Map<string, PageIndex>();
+const renderedPageCache = new Map<string, CanvasCacheEntry>();
 const imageCache = new Map<string, { dataUrl: string; createdAt: number }>();
 
 export async function POST(request: Request) {
@@ -44,34 +51,20 @@ export async function POST(request: Request) {
     const cacheKey = `${pdfHash}:${pageNumber}:${questionNumber}`;
     const cachedImage = getCachedImage(cacheKey);
     if (cachedImage !== undefined) {
-      return NextResponse.json({
-        success: true,
-        pageNumber,
-        questionNumber,
-        imageDataUrl: cachedImage,
-        imageCount: 1,
-        extractionMode: "pdf-region-render-v4-cache",
-      });
+      return NextResponse.json({ success: true, pageNumber, questionNumber, imageDataUrl: cachedImage, imageCount: 1, extractionMode: "pdf-region-render-v5-cache" });
     }
 
     const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
     const pdf = await getCachedPdf(pdfjsLib, pdfHash, bytes);
     if (pageNumber > pdf.numPages) return NextResponse.json({ error: "PDF 頁碼超出範圍。" }, { status: 400 });
 
-    const contexts = await findImageContexts(pdfjsLib, pdf, pageNumber, questionNumber);
+    const contexts = await findImageContexts(pdf, pdfHash, pageNumber, questionNumber);
     if (!contexts.length) {
-      return NextResponse.json({
-        success: true,
-        pageNumber,
-        questionNumber,
-        imageDataUrl: null,
-        imageCount: 0,
-        extractionMode: "pdf-region-render-v4-cache",
-      });
+      return NextResponse.json({ success: true, pageNumber, questionNumber, imageDataUrl: null, imageCount: 0, extractionMode: "pdf-region-render-v5-cache" });
     }
 
     try {
-      const renderedDataUrl = await renderImageContexts(pdfjsLib, contexts);
+      const renderedDataUrl = await renderImageContexts(contexts, pdfHash);
       if (!renderedDataUrl) throw new Error("沒有產生有效圖片。");
       setCachedImage(cacheKey, renderedDataUrl);
       return NextResponse.json({
@@ -82,17 +75,11 @@ export async function POST(request: Request) {
         imageDataUrl: renderedDataUrl,
         imageCount: contexts.reduce((sum, context) => sum + context.images.length, 0),
         imagePageNumbers: contexts.map((context) => context.pageNumber),
-        extractionMode: "pdf-region-render-v4-cache",
+        extractionMode: "pdf-region-render-v5-cache",
       });
     } catch (renderError) {
       console.error("PDF region rendering failed:", renderError);
-      return NextResponse.json({
-        error: "PDF 圖片 Render 失敗",
-        detail: renderError instanceof Error ? renderError.message : String(renderError),
-        pageNumber,
-        questionNumber,
-        imagePageNumbers: contexts.map((context) => context.pageNumber),
-      }, { status: 500 });
+      return NextResponse.json({ error: "PDF 圖片 Render 失敗", detail: renderError instanceof Error ? renderError.message : String(renderError), pageNumber, questionNumber, imagePageNumbers: contexts.map((context) => context.pageNumber) }, { status: 500 });
     }
   } catch (error) {
     console.error("PDF image extraction error:", error);
@@ -142,51 +129,69 @@ async function getCachedPdf(pdfjsLib: any, hash: string, bytes: Uint8Array): Pro
   return pdf;
 }
 
-async function findImageContexts(pdfjsLib: any, pdf: any, questionPageNumber: number, questionNumber: number): Promise<ImageContext[]> {
+async function getPageIndex(pdf: any, pdfHash: string, pageNumber: number): Promise<PageIndex> {
+  const key = `${pdfHash}:${pageNumber}`;
+  const cached = pageIndexCache.get(key);
+  if (cached) return cached;
+
+  const page = await pdf.getPage(pageNumber);
+  const viewport = page.getViewport({ scale: 1 });
+  const textContent = await page.getTextContent();
+  const items: TextItem[] = textContent.items
+    .filter((item: any) => typeof item.str === "string" && item.str.trim())
+    .map((item: any) => ({ text: item.str.trim(), y: Number(item.transform?.[5] ?? 0), height: Number(item.height ?? 0) }));
+  const anchors = getQuestionAnchors(items, viewport.height).sort((a, b) => a.topY - b.topY);
+  const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const operatorList = await page.getOperatorList();
+  const images = await getImageAssets(pdfjsLib, page, operatorList, viewport);
+  const result = { page, pageNumber, viewport, anchors, images };
+  pageIndexCache.set(key, result);
+  while (pageIndexCache.size > MAX_CACHED_PAGE_INDEXES) {
+    const oldest = pageIndexCache.keys().next().value;
+    if (!oldest) break;
+    pageIndexCache.delete(oldest);
+  }
+  return result;
+}
+
+async function findImageContexts(pdf: any, pdfHash: string, questionPageNumber: number, questionNumber: number): Promise<ImageContext[]> {
   const contexts: ImageContext[] = [];
   let targetFound = false;
+  let targetPageHadAnchor = false;
 
   for (let pageNo = questionPageNumber; pageNo <= Math.min(pdf.numPages, questionPageNumber + MAX_LOOKAHEAD_PAGES); pageNo++) {
-    const page = await pdf.getPage(pageNo);
-    const viewport = page.getViewport({ scale: 1 });
-    const textContent = await page.getTextContent();
-    const items: TextItem[] = textContent.items
-      .filter((item: any) => typeof item.str === "string" && item.str.trim())
-      .map((item: any) => ({ text: item.str.trim(), y: Number(item.transform?.[5] ?? 0), height: Number(item.height ?? 0) }));
-    const anchors = getQuestionAnchors(items, viewport.height);
-    const orderedAnchors = [...anchors].sort((a, b) => a.topY - b.topY);
-    const targetIndex = orderedAnchors.findIndex((anchor) => anchor.number === questionNumber);
-    const target = targetIndex >= 0 ? orderedAnchors[targetIndex] : undefined;
+    const index = await getPageIndex(pdf, pdfHash, pageNo);
+    const targetIndex = index.anchors.findIndex((anchor) => anchor.number === questionNumber);
+    const target = targetIndex >= 0 ? index.anchors[targetIndex] : undefined;
     const next = targetIndex >= 0
-      ? orderedAnchors.slice(targetIndex + 1).find((anchor) => anchor.number !== questionNumber)
-      : orderedAnchors.find((anchor) => anchor.number !== questionNumber);
+      ? index.anchors.slice(targetIndex + 1).find((anchor) => anchor.number !== questionNumber)
+      : index.anchors.find((anchor) => anchor.number !== questionNumber);
 
-    const operatorList = await page.getOperatorList();
-    const images = await getImageAssets(pdfjsLib, page, operatorList, viewport);
-    if (!images.length) {
-      if (targetFound) break;
-      continue;
-    }
-
-    let selected: ImageAsset[] = [];
     if (target) {
       targetFound = true;
+      targetPageHadAnchor = true;
       const lower = target.topY - 12;
       const upper = next ? next.topY - 12 : Number.POSITIVE_INFINITY;
-      selected = images.filter((image) => image.y >= lower && image.y <= upper);
-    } else if (pageNo > questionPageNumber && targetFound) {
+      const selected = index.images.filter((image) => image.y >= lower && image.y <= upper);
+      if (selected.length) contexts.push({ page: index.page, pageNumber: pageNo, viewport: index.viewport, images: selected });
+    } else if (targetFound) {
+      // Continuation page: if there is a next question, prefer images before it.
+      // If coordinate systems in the PDF are unusual and that filter returns none,
+      // keep the page's real image assets rather than dropping a valid cross-page image.
       const boundary = next ? next.topY - 12 : Number.POSITIVE_INFINITY;
-      selected = images.filter((image) => image.y <= boundary);
+      let selected = index.images.filter((image) => image.y <= boundary);
+      if (!selected.length && index.images.length) selected = index.images;
+      if (selected.length) contexts.push({ page: index.page, pageNumber: pageNo, viewport: index.viewport, images: selected });
     }
 
-    if (selected.length) contexts.push({ page, pageNumber: pageNo, viewport, images: selected });
     if (targetFound && next && next.number !== questionNumber) break;
+    if (targetPageHadAnchor && pageNo > questionPageNumber && !index.images.length) break;
   }
 
   return contexts;
 }
 
-async function renderImageContexts(pdfjsLib: any, contexts: ImageContext[]): Promise<string | null> {
+async function renderImageContexts(contexts: ImageContext[], pdfHash: string): Promise<string | null> {
   const dynamicImport = new Function("specifier", "return import(specifier)") as (specifier: string) => Promise<any>;
   const canvasModule = await dynamicImport("@napi-rs/canvas");
   if (canvasModule?.DOMMatrix && typeof globalThis.DOMMatrix === "undefined") (globalThis as any).DOMMatrix = canvasModule.DOMMatrix;
@@ -195,11 +200,7 @@ async function renderImageContexts(pdfjsLib: any, contexts: ImageContext[]): Pro
 
   const rendered: any[] = [];
   for (const context of contexts) {
-    const viewport = context.page.getViewport({ scale: RENDER_SCALE });
-    const pageCanvas = canvasModule.createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
-    const pageContext = pageCanvas.getContext("2d");
-    await context.page.render({ canvasContext: pageContext, viewport }).promise;
-
+    const pageCanvas = await getRenderedPageCanvas(context, pdfHash, canvasModule);
     const left = Math.max(0, Math.min(...context.images.map((image) => image.x)) - RENDER_PADDING);
     const top = Math.max(0, Math.min(...context.images.map((image) => image.y - image.height / 2)) - RENDER_PADDING);
     const right = Math.min(context.viewport.width, Math.max(...context.images.map((image) => image.x + image.width)) + RENDER_PADDING);
@@ -232,6 +233,28 @@ async function renderImageContexts(pdfjsLib: any, contexts: ImageContext[]): Pro
     y += canvas.height + gap;
   }
   return combined.toDataURL("image/png");
+}
+
+async function getRenderedPageCanvas(context: ImageContext, pdfHash: string, canvasModule: any): Promise<any> {
+  const key = `${pdfHash}:${context.pageNumber}`;
+  const cached = renderedPageCache.get(key);
+  if (cached && Date.now() - cached.createdAt <= PDF_CACHE_TTL_MS) {
+    renderedPageCache.delete(key);
+    renderedPageCache.set(key, cached);
+    return cached.canvas;
+  }
+
+  const viewport = context.page.getViewport({ scale: RENDER_SCALE });
+  const pageCanvas = canvasModule.createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
+  const pageContext = pageCanvas.getContext("2d");
+  await context.page.render({ canvasContext: pageContext, viewport }).promise;
+  renderedPageCache.set(key, { canvas: pageCanvas, createdAt: Date.now() });
+  while (renderedPageCache.size > MAX_CACHED_RENDERED_PAGES) {
+    const oldest = renderedPageCache.keys().next().value;
+    if (!oldest) break;
+    renderedPageCache.delete(oldest);
+  }
+  return pageCanvas;
 }
 
 async function getImageAssets(pdfjsLib: any, page: any, operatorList: any, viewport: any): Promise<ImageAsset[]> {
