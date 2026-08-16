@@ -16,7 +16,11 @@ type ImageResponse = {
   detail?: string;
 };
 
-const MAX_PARALLEL_IMAGE_REQUESTS = 3;
+// Keep a small amount of parallelism. Each request currently uploads the PDF to
+// /api/pdf/images, where PDF.js may need to parse/index the document before the
+// image can be rendered. Too many concurrent requests can make the first images
+// appear to be stuck while several server-side PDF jobs compete at once.
+const MAX_PARALLEL_IMAGE_REQUESTS = 2;
 const imageRequestCache = new Map<string, Promise<ImageResponse>>();
 const imageDataCache = new Map<string, ImageResponse>();
 const imageRequestQueue: Array<{
@@ -103,7 +107,9 @@ function ImagePreview({ file, pageNumber, questionNumber, onImageLoaded }: Props
           observer.disconnect();
         }
       },
-      { rootMargin: "700px 0px" },
+      // Start shortly before the image reaches the viewport instead of queuing
+      // many hundreds of pixels worth of PDF renders at once.
+      { rootMargin: "250px 0px" },
     );
 
     observer.observe(element);
@@ -160,7 +166,8 @@ function ImagePreview({ file, pageNumber, questionNumber, onImageLoaded }: Props
           <img
             src={src}
             alt={`第 ${questionNumber} 題 PDF 圖片`}
-            loading="lazy"
+            decoding="async"
+            fetchPriority="high"
             className="mx-auto block h-auto max-w-full rounded-xl object-contain"
           />
         </>
