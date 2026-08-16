@@ -26,7 +26,7 @@ const MAX_CACHED_RENDERED_PAGES = 6;
 const pdfCache = new Map<string, PdfCacheEntry>();
 const pageIndexCache = new Map<string, PageIndex>();
 const renderedPageCache = new Map<string, CanvasCacheEntry>();
-const imageCache = new Map<string, { dataUrl: string; createdAt: number }>();
+const imageCache = new Map<string, { dataUrls: string[]; createdAt: number }>();
 
 export async function POST(request: Request) {
   try {
@@ -45,9 +45,17 @@ export async function POST(request: Request) {
     const bytes = new Uint8Array(await file.arrayBuffer());
     const pdfHash = createHash("sha256").update(bytes).digest("hex");
     const cacheKey = `${pdfHash}:${pageNumber}:${questionNumber}`;
-    const cachedImage = getCachedImage(cacheKey);
-    if (cachedImage !== undefined) {
-      return NextResponse.json({ success: true, pageNumber, questionNumber, imageDataUrl: cachedImage, imageCount: 1, extractionMode: "pdf-region-render-v8" });
+    const cachedImages = getCachedImage(cacheKey);
+    if (cachedImages !== undefined) {
+      return NextResponse.json({
+        success: true,
+        pageNumber,
+        questionNumber,
+        imageDataUrl: cachedImages[0] ?? null,
+        imageDataUrls: cachedImages,
+        imageCount: cachedImages.length,
+        extractionMode: "pdf-region-render-v9",
+      });
     }
 
     const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
@@ -56,22 +64,27 @@ export async function POST(request: Request) {
 
     const contexts = await findImageContexts(pdf, pdfHash, pageNumber, questionNumber);
     if (!contexts.length) {
-      return NextResponse.json({ success: true, pageNumber, questionNumber, imageDataUrl: null, imageCount: 0, extractionMode: "pdf-region-render-v8" });
+      return NextResponse.json({ success: true, pageNumber, questionNumber, imageDataUrl: null, imageDataUrls: [], imageCount: 0, extractionMode: "pdf-region-render-v9" });
     }
 
     try {
-      const renderedDataUrl = await renderImageContexts(contexts, pdfHash);
-      if (!renderedDataUrl) throw new Error("沒有產生有效圖片。");
-      setCachedImage(cacheKey, renderedDataUrl);
+      // Each detected figure is rendered/cropped independently. Previously all figures
+      // belonging to one question were merged into one tall PNG, which made a two-figure
+      // question (for example Q40 A/B) look like one image and made it impossible for the
+      // UI to know that the question actually contains two separate figures.
+      const renderedDataUrls = await renderImageContexts(contexts, pdfHash);
+      if (!renderedDataUrls.length) throw new Error("沒有產生有效圖片。");
+      setCachedImage(cacheKey, renderedDataUrls);
       return NextResponse.json({
         success: true,
         pageNumber,
         imagePageNumber: contexts[0].pageNumber,
         questionNumber,
-        imageDataUrl: renderedDataUrl,
-        imageCount: contexts.reduce((sum, context) => sum + context.images.length, 0),
+        imageDataUrl: renderedDataUrls[0] ?? null,
+        imageDataUrls: renderedDataUrls,
+        imageCount: renderedDataUrls.length,
         imagePageNumbers: contexts.map((context) => context.pageNumber),
-        extractionMode: "pdf-region-render-v8",
+        extractionMode: "pdf-region-render-v9",
       });
     } catch (renderError) {
       console.error("PDF region rendering failed:", renderError);
@@ -83,18 +96,18 @@ export async function POST(request: Request) {
   }
 }
 
-function getCachedImage(key: string): string | undefined {
+function getCachedImage(key: string): string[] | undefined {
   const entry = imageCache.get(key);
   if (!entry) return undefined;
   if (Date.now() - entry.createdAt > PDF_CACHE_TTL_MS) {
     imageCache.delete(key);
     return undefined;
   }
-  return entry.dataUrl;
+  return entry.dataUrls;
 }
 
-function setCachedImage(key: string, dataUrl: string) {
-  imageCache.set(key, { dataUrl, createdAt: Date.now() });
+function setCachedImage(key: string, dataUrls: string[]) {
+  imageCache.set(key, { dataUrls, createdAt: Date.now() });
   while (imageCache.size > 80) {
     const oldest = imageCache.keys().next().value;
     if (!oldest) break;
@@ -154,8 +167,7 @@ async function getPageIndex(pdf: any, pdfHash: string, pageNumber: number): Prom
  * Assign images by page regions instead of simply taking the first image after a question.
  * A question owns the vertical interval from its anchor to the next question anchor.
  * If the interval continues onto the next page, only images on continuation pages that
- * occur before the next question are eligible. Images are grouped together so a question
- * with two figures (such as Q40 A/B) remains one image context.
+ * occur before the next question are eligible. Multiple figures remain separate assets.
  */
 async function findImageContexts(pdf: any, pdfHash: string, questionPageNumber: number, questionNumber: number): Promise<ImageContext[]> {
   const contexts: ImageContext[] = [];
@@ -217,48 +229,40 @@ function selectImagesInRegion(images: ImageAsset[], top: number, bottom: number)
   return selected.sort((a, b) => a.y - b.y || a.x - b.x);
 }
 
-async function renderImageContexts(contexts: ImageContext[], pdfHash: string): Promise<string | null> {
+async function renderImageContexts(contexts: ImageContext[], pdfHash: string): Promise<string[]> {
   const dynamicImport = new Function("specifier", "return import(specifier)") as (specifier: string) => Promise<any>;
   const canvasModule = await dynamicImport("@napi-rs/canvas");
   if (canvasModule?.DOMMatrix && typeof globalThis.DOMMatrix === "undefined") (globalThis as any).DOMMatrix = canvasModule.DOMMatrix;
   if (canvasModule?.ImageData && typeof globalThis.ImageData === "undefined") (globalThis as any).ImageData = canvasModule.ImageData;
   if (canvasModule?.Path2D && typeof globalThis.Path2D === "undefined") (globalThis as any).Path2D = canvasModule.Path2D;
 
-  const rendered: any[] = [];
+  const rendered: string[] = [];
   for (const context of contexts) {
     const pageCanvas = await getRenderedPageCanvas(context, pdfHash, canvasModule);
-    const left = Math.max(0, Math.min(...context.images.map((image) => image.x)) - RENDER_PADDING);
-    const top = Math.max(0, Math.min(...context.images.map((image) => image.y)) - RENDER_PADDING);
-    const right = Math.min(context.viewport.width, Math.max(...context.images.map((image) => image.x + image.width)) + RENDER_PADDING);
-    const bottom = Math.min(context.viewport.height, Math.max(...context.images.map((image) => image.y + image.height)) + RENDER_PADDING);
 
-    const cropLeft = Math.max(0, Math.floor(left * RENDER_SCALE));
-    const cropTop = Math.max(0, Math.floor(top * RENDER_SCALE));
-    const cropRight = Math.min(pageCanvas.width, Math.ceil(right * RENDER_SCALE));
-    const cropBottom = Math.min(pageCanvas.height, Math.ceil(bottom * RENDER_SCALE));
-    const cropWidth = cropRight - cropLeft;
-    const cropHeight = cropBottom - cropTop;
-    if (cropWidth <= 0 || cropHeight <= 0) continue;
+    // Crop each detected figure independently. Do not build one bounding box around
+    // all figures, otherwise two separate figures become one combined image.
+    for (const image of context.images) {
+      const left = Math.max(0, image.x - RENDER_PADDING);
+      const top = Math.max(0, image.y - RENDER_PADDING);
+      const right = Math.min(context.viewport.width, image.x + image.width + RENDER_PADDING);
+      const bottom = Math.min(context.viewport.height, image.y + image.height + RENDER_PADDING);
 
-    const cropCanvas = canvasModule.createCanvas(cropWidth, cropHeight);
-    cropCanvas.getContext("2d").drawImage(pageCanvas, cropLeft, cropTop, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
-    rendered.push(cropCanvas);
+      const cropLeft = Math.max(0, Math.floor(left * RENDER_SCALE));
+      const cropTop = Math.max(0, Math.floor(top * RENDER_SCALE));
+      const cropRight = Math.min(pageCanvas.width, Math.ceil(right * RENDER_SCALE));
+      const cropBottom = Math.min(pageCanvas.height, Math.ceil(bottom * RENDER_SCALE));
+      const cropWidth = cropRight - cropLeft;
+      const cropHeight = cropBottom - cropTop;
+      if (cropWidth <= 0 || cropHeight <= 0) continue;
+
+      const cropCanvas = canvasModule.createCanvas(cropWidth, cropHeight);
+      cropCanvas.getContext("2d").drawImage(pageCanvas, cropLeft, cropTop, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
+      rendered.push(cropCanvas.toDataURL("image/png"));
+    }
   }
 
-  if (!rendered.length) return null;
-  if (rendered.length === 1) return rendered[0].toDataURL("image/png");
-
-  const gap = 24;
-  const width = Math.max(...rendered.map((canvas) => canvas.width));
-  const height = rendered.reduce((sum, canvas) => sum + canvas.height, 0) + gap * (rendered.length - 1);
-  const combined = canvasModule.createCanvas(width, height);
-  const ctx = combined.getContext("2d");
-  let y = 0;
-  for (const canvas of rendered) {
-    ctx.drawImage(canvas, 0, y);
-    y += canvas.height + gap;
-  }
-  return combined.toDataURL("image/png");
+  return rendered;
 }
 
 async function getRenderedPageCanvas(context: ImageContext, pdfHash: string, canvasModule: any): Promise<any> {
@@ -315,8 +319,6 @@ async function getImageAssets(pdfjsLib: any, page: any, operatorList: any, viewp
     if (fn === pdfjsLib.OPS.save) { stack.push([...ctm]); continue; }
     if (fn === pdfjsLib.OPS.restore) { ctm = stack.pop() ?? ctm; continue; }
 
-    // Form XObjects introduce another transform/save scope. Without this, images
-    // inside a form can have correct content but completely wrong page coordinates.
     if (fn === pdfjsLib.OPS.paintFormXObjectBegin) {
       stack.push([...ctm]);
       if (Array.isArray(args[0]) && args[0].length === 6) ctm = pdfjsLib.Util.transform(ctm, args[0]);
@@ -351,10 +353,6 @@ async function getImageAssets(pdfjsLib: any, page: any, operatorList: any, viewp
     if (fn === pdfjsLib.OPS.paintJpegXObject || fn === pdfjsLib.OPS.paintImageXObject) {
       imageWidth = Number(args[1] || 1);
       imageHeight = Number(args[2] || 1);
-
-      // The operator arguments contain the source dimensions, while the transform
-      // determines where the normalized image is actually painted.
-      // The page object lookup is only used as a fallback for unusual PDFs.
       if ((!imageWidth || !imageHeight) && imageId) {
         try {
           const image = await getPdfObject(page.objs, imageId) || await getPdfObject(page.commonObjs, imageId);
@@ -367,15 +365,9 @@ async function getImageAssets(pdfjsLib: any, page: any, operatorList: any, viewp
       imageHeight = Number(args[0]?.height || 1);
     }
 
-    // PDF.js paints an image into the unit image space; the current transform is
-    // therefore the placement transform. Use a unit square here, not the raw pixel
-    // dimensions, otherwise a 2000x1500 source image would artificially enlarge the
-    // page-space bounding box.
     addImageRegion([1, 0, 0, 1, 0, 0], 1, 1);
   }
 
-  // Remove exact duplicates caused by nested/form operators while preserving separate
-  // figures that happen to use the same source image.
   const unique: ImageAsset[] = [];
   for (const asset of assets) {
     const duplicate = unique.some((existing) =>
