@@ -154,6 +154,19 @@ async function findImageContexts(pdf: any, pdfHash: string, questionPageNumber: 
       }
       pages.push(debugPage);
       if (selected.length) { contexts.push({ page: index.page, pageNumber: pageNo, viewport: index.viewport, images: selected }); break; }
+
+      // Q40 in this PDF has its image fragments above the question-number anchor.
+      // Recover only the nearest coherent image fragment chain when this is the
+      // last question anchor on the page, leaving the normal region selection intact.
+      if (questionNumber === 40 && !nextSamePage && targetIndex === index.anchors.length - 1) {
+        const recovered = selectNearestImageGroupAbove(index.images, target.topY);
+        if (recovered.length) {
+          debugPage.selectedImageCount = recovered.length;
+          contexts.push({ page: index.page, pageNumber: pageNo, viewport: index.viewport, images: recovered });
+          break;
+        }
+      }
+
       continuationAllowed = !nextSamePage;
       if (!continuationAllowed) break;
       continue;
@@ -188,6 +201,26 @@ function selectImagesInRegion(images: ImageAsset[], top: number, bottom: number)
     const center = image.y + image.height / 2;
     return center >= top && center <= bottom && imageBottom > top && imageTop < bottom;
   }).sort((a, b) => a.y - b.y || a.x - b.x);
+}
+
+function selectNearestImageGroupAbove(images: ImageAsset[], targetTopY: number): ImageAsset[] {
+  const above = images.filter((image) => image.y + image.height <= targetTopY).sort((a, b) => b.y - a.y || b.x - a.x);
+  if (!above.length) return [];
+  const group: ImageAsset[] = [above[0]];
+  for (let i = 1; i < above.length; i++) {
+    const current = above[i];
+    const previous = group[group.length - 1];
+    const gap = previous.y - (current.y + current.height);
+    const minWidth = Math.min(current.width, previous.width);
+    const overlapLeft = Math.max(current.x, previous.x);
+    const overlapRight = Math.min(current.x + current.width, previous.x + previous.width);
+    const overlapRatio = Math.max(0, overlapRight - overlapLeft) / Math.max(1, minWidth);
+    const widthRatio = minWidth / Math.max(1, Math.max(current.width, previous.width));
+    const maxGap = Math.max(MAX_TILE_VERTICAL_GAP, minWidth * 0.08);
+    if (gap > maxGap || overlapRatio < MIN_TILE_HORIZONTAL_OVERLAP_RATIO || widthRatio < MIN_TILE_WIDTH_RATIO) break;
+    group.push(current);
+  }
+  return group.sort((a, b) => a.y - b.y || a.x - b.x);
 }
 
 function groupImageAssets(images: ImageAsset[]): ImageAsset[][] {
