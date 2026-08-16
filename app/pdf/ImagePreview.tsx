@@ -9,6 +9,75 @@ type Props = {
   onImageLoaded?: (imageDataUrl: string) => void;
 };
 
+type ImageResponse = {
+  imageDataUrl?: string | null;
+  extractionMode?: string;
+  error?: string;
+  detail?: string;
+};
+
+const MAX_PARALLEL_IMAGE_REQUESTS = 3;
+const imageRequestCache = new Map<string, Promise<ImageResponse>>();
+const imageDataCache = new Map<string, ImageResponse>();
+const imageRequestQueue: Array<{
+  key: string;
+  request: () => Promise<ImageResponse>;
+  resolve: (value: ImageResponse) => void;
+  reject: (reason: unknown) => void;
+}> = [];
+let activeImageRequests = 0;
+
+function pumpImageRequests() {
+  while (activeImageRequests < MAX_PARALLEL_IMAGE_REQUESTS && imageRequestQueue.length) {
+    const job = imageRequestQueue.shift();
+    if (!job) break;
+    activeImageRequests += 1;
+    job.request()
+      .then((value) => job.resolve(value))
+      .catch((error) => job.reject(error))
+      .finally(() => {
+        activeImageRequests -= 1;
+        pumpImageRequests();
+      });
+  }
+}
+
+function requestImagePreview(file: File, pageNumber: number, questionNumber: number, key: string): Promise<ImageResponse> {
+  const cached = imageDataCache.get(key);
+  if (cached) return Promise.resolve(cached);
+
+  const existing = imageRequestCache.get(key);
+  if (existing) return existing;
+
+  const promise = new Promise<ImageResponse>((resolve, reject) => {
+    imageRequestQueue.push({
+      key,
+      resolve,
+      reject,
+      request: async () => {
+        const fd = new FormData();
+        fd.append("file", file);
+        fd.append("pageNumber", String(pageNumber));
+        fd.append("questionNumber", String(questionNumber));
+        const response = await fetch("/api/pdf/images", { method: "POST", body: fd });
+        const data = (await response.json()) as ImageResponse;
+        if (!response.ok) throw new Error(data.detail || data.error || "圖片擷取失敗");
+        imageDataCache.set(key, data);
+        if (imageDataCache.size > 80) {
+          const oldest = imageDataCache.keys().next().value;
+          if (oldest) imageDataCache.delete(oldest);
+        }
+        return data;
+      },
+    });
+    pumpImageRequests();
+  });
+
+  imageRequestCache.set(key, promise);
+  promise.catch(() => imageRequestCache.delete(key));
+  return promise;
+}
+
 function ImagePreview({ file, pageNumber, questionNumber, onImageLoaded }: Props) {
   const [src, setSrc] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -34,7 +103,7 @@ function ImagePreview({ file, pageNumber, questionNumber, onImageLoaded }: Props
           observer.disconnect();
         }
       },
-      { rootMargin: "500px 0px" },
+      { rootMargin: "700px 0px" },
     );
 
     observer.observe(element);
@@ -56,13 +125,7 @@ function ImagePreview({ file, pageNumber, questionNumber, onImageLoaded }: Props
       setError("");
       setExtractionMode("");
       try {
-        const fd = new FormData();
-        fd.append("file", pdfFile);
-        fd.append("pageNumber", String(pdfPageNumber));
-        fd.append("questionNumber", String(pdfQuestionNumber));
-        const response = await fetch("/api/pdf/images", { method: "POST", body: fd });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.detail || data.error || "圖片擷取失敗");
+        const data = await requestImagePreview(pdfFile, pdfPageNumber, pdfQuestionNumber, loadKey);
         if (cancelled) return;
 
         setExtractionMode(typeof data.extractionMode === "string" ? data.extractionMode : "unknown");
