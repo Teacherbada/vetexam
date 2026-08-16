@@ -12,6 +12,7 @@ type PageIndex = { page: any; pageNumber: number; viewport: any; anchors: Anchor
 type ImageContext = { page: any; pageNumber: number; viewport: any; images: ImageAsset[] };
 type PdfCacheEntry = { pdf: any; createdAt: number; hits: number };
 type CanvasCacheEntry = { canvas: any; createdAt: number };
+type ImageDebugPage = { page: number; anchorCount: number; hasTargetAnchor: boolean; imageAssetCount: number; selectedImageCount: number; targetTopY?: number; upperBound?: number };
 
 const RENDER_PADDING = 12;
 const RENDER_SCALE = 1.5;
@@ -47,22 +48,26 @@ export async function POST(request: Request) {
     const pdfHash = createHash("sha256").update(bytes).digest("hex");
     const cacheKey = `${pdfHash}:${pageNumber}:${questionNumber}`;
     const cachedImages = getCachedImage(cacheKey);
-    if (cachedImages !== undefined) return NextResponse.json({ success: true, pageNumber, questionNumber, imageDataUrl: cachedImages[0] ?? null, imageDataUrls: cachedImages, imageCount: cachedImages.length, extractionMode: "pdf-region-render-v10" });
+    if (cachedImages !== undefined) return NextResponse.json({ success: true, pageNumber, questionNumber, imageDataUrl: cachedImages[0] ?? null, imageDataUrls: cachedImages, imageCount: cachedImages.length, extractionMode: "pdf-region-render-v10", debug: { stage: "image-cache-hit" } });
 
     const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
     const pdf = await getCachedPdf(pdfjsLib, pdfHash, bytes);
     if (pageNumber > pdf.numPages) return NextResponse.json({ error: "PDF 頁碼超出範圍。" }, { status: 400 });
-    const contexts = await findImageContexts(pdf, pdfHash, pageNumber, questionNumber);
-    if (!contexts.length) return NextResponse.json({ success: true, pageNumber, questionNumber, imageDataUrl: null, imageDataUrls: [], imageCount: 0, extractionMode: "pdf-region-render-v10" });
+    const result = await findImageContexts(pdf, pdfHash, pageNumber, questionNumber);
+    const contexts = result.contexts;
+    if (!contexts.length) {
+      console.warn("PDF image pipeline: no image context", { pageNumber, questionNumber, debug: result.debug });
+      return NextResponse.json({ success: true, pageNumber, questionNumber, imageDataUrl: null, imageDataUrls: [], imageCount: 0, extractionMode: "pdf-region-render-v10", debug: result.debug });
+    }
 
     try {
       const renderedDataUrls = await renderImageContexts(contexts, pdfHash);
       if (!renderedDataUrls.length) throw new Error("沒有產生有效圖片。");
       setCachedImage(cacheKey, renderedDataUrls);
-      return NextResponse.json({ success: true, pageNumber, imagePageNumber: contexts[0].pageNumber, questionNumber, imageDataUrl: renderedDataUrls[0] ?? null, imageDataUrls: renderedDataUrls, imageCount: renderedDataUrls.length, imagePageNumbers: contexts.map((context) => context.pageNumber), extractionMode: "pdf-region-render-v10" });
+      return NextResponse.json({ success: true, imagePageNumber: contexts[0].pageNumber, pageNumber, questionNumber, imageDataUrl: renderedDataUrls[0] ?? null, imageDataUrls: renderedDataUrls, imageCount: renderedDataUrls.length, imagePageNumbers: contexts.map((context) => context.pageNumber), extractionMode: "pdf-region-render-v10", debug: { ...result.debug, stage: "render-complete", groupedImageCount: renderedDataUrls.length } });
     } catch (renderError) {
       console.error("PDF region rendering failed:", renderError);
-      return NextResponse.json({ error: "PDF 圖片 Render 失敗", detail: renderError instanceof Error ? renderError.message : String(renderError), pageNumber, questionNumber, imagePageNumbers: contexts.map((context) => context.pageNumber) }, { status: 500 });
+      return NextResponse.json({ error: "PDF 圖片 Render 失敗", detail: renderError instanceof Error ? renderError.message : String(renderError), pageNumber, questionNumber, imagePageNumbers: contexts.map((context) => context.pageNumber), debug: { ...result.debug, stage: "render-failed", contextCount: contexts.length, contextImageCounts: contexts.map((context) => context.images.length) } }, { status: 500 });
     }
   } catch (error) {
     console.error("PDF image extraction error:", error);
@@ -120,39 +125,50 @@ async function getPageIndex(pdf: any, pdfHash: string, pageNumber: number): Prom
   return result;
 }
 
-async function findImageContexts(pdf: any, pdfHash: string, questionPageNumber: number, questionNumber: number): Promise<ImageContext[]> {
+async function findImageContexts(pdf: any, pdfHash: string, questionPageNumber: number, questionNumber: number): Promise<{ contexts: ImageContext[]; debug: { stage: string; pages: ImageDebugPage[]; foundTargetAnchor: boolean; contextCount: number } }> {
   const contexts: ImageContext[] = [];
+  const pages: ImageDebugPage[] = [];
   let foundTarget = false;
   let continuationAllowed = false;
   for (let pageNo = questionPageNumber; pageNo <= Math.min(pdf.numPages, questionPageNumber + MAX_LOOKAHEAD_PAGES); pageNo++) {
     const index = await getPageIndex(pdf, pdfHash, pageNo);
     const targetIndex = index.anchors.findIndex((anchor) => anchor.number === questionNumber);
+    const debugPage: ImageDebugPage = { page: pageNo, anchorCount: index.anchors.length, hasTargetAnchor: targetIndex >= 0, imageAssetCount: index.images.length, selectedImageCount: 0 };
     if (targetIndex >= 0) {
       foundTarget = true;
       const target = index.anchors[targetIndex];
       const nextSamePage = index.anchors.slice(targetIndex + 1).find((anchor) => anchor.number > questionNumber);
       const upper = nextSamePage ? nextSamePage.topY : Number.POSITIVE_INFINITY;
+      debugPage.targetTopY = target.topY;
+      debugPage.upperBound = upper;
       const selected = selectImagesInRegion(index.images, target.topY, upper);
+      debugPage.selectedImageCount = selected.length;
+      pages.push(debugPage);
       if (selected.length) { contexts.push({ page: index.page, pageNumber: pageNo, viewport: index.viewport, images: selected }); break; }
       continuationAllowed = !nextSamePage;
       if (!continuationAllowed) break;
       continue;
     }
-    if (!foundTarget) continue;
+    if (!foundTarget) { pages.push(debugPage); continue; }
     if (index.anchors.length > 0) {
       const firstQuestion = index.anchors.find((anchor) => anchor.number > questionNumber);
-      if (!continuationAllowed) break;
+      if (!continuationAllowed) { pages.push(debugPage); break; }
       const upper = firstQuestion ? firstQuestion.topY : Number.POSITIVE_INFINITY;
       const selected = selectImagesInRegion(index.images, 0, upper);
+      debugPage.upperBound = upper;
+      debugPage.selectedImageCount = selected.length;
+      pages.push(debugPage);
       if (selected.length) contexts.push({ page: index.page, pageNumber: pageNo, viewport: index.viewport, images: selected });
       break;
     }
     if (continuationAllowed) {
       const selected = selectImagesInRegion(index.images, 0, Number.POSITIVE_INFINITY);
+      debugPage.selectedImageCount = selected.length;
+      pages.push(debugPage);
       if (selected.length) { contexts.push({ page: index.page, pageNumber: pageNo, viewport: index.viewport, images: selected }); break; }
-    }
+    } else pages.push(debugPage);
   }
-  return contexts;
+  return { contexts, debug: { stage: contexts.length ? "context-found" : foundTarget ? "target-found-but-no-image-selected" : "target-anchor-not-found", pages, foundTargetAnchor: foundTarget, contextCount: contexts.length } };
 }
 
 function selectImagesInRegion(images: ImageAsset[], top: number, bottom: number): ImageAsset[] {
@@ -168,16 +184,13 @@ function selectImagesInRegion(images: ImageAsset[], top: number, bottom: number)
 function groupImageAssets(images: ImageAsset[]): ImageAsset[][] {
   const sorted = [...images].sort((a, b) => a.y - b.y || a.x - b.x);
   const groups: ImageAsset[][] = [];
-
   for (const image of sorted) {
     let bestGroup: ImageAsset[] | null = null;
     let bestScore = Number.NEGATIVE_INFINITY;
-
     for (const group of groups) {
       const last = group[group.length - 1];
       const gap = image.y - (last.y + last.height);
       if (gap < 0) continue;
-
       const minWidth = Math.min(image.width, last.width);
       const minHeight = Math.min(image.height, last.height);
       const maxWidth = Math.max(image.width, last.width);
@@ -190,33 +203,13 @@ function groupImageAssets(images: ImageAsset[]): ImageAsset[][] {
       const heightRatio = minHeight / Math.max(1, maxHeight);
       const centerDelta = Math.abs((image.x + image.width / 2) - (last.x + last.width / 2));
       const centerAlignment = centerDelta / Math.max(1, minWidth);
-
-      // PDF image fragments usually preserve nearly the same X position and width
-      // while continuing vertically. Allow modest box variation between fragments.
       const maxGap = Math.max(MAX_TILE_VERTICAL_GAP, minHeight * 0.25);
-      if (gap > maxGap) continue;
-      if (overlapRatio < 0.70) continue;
-      if (widthRatio < 0.65) continue;
-      if (heightRatio < 0.45) continue;
-      if (centerAlignment > 0.18) continue;
-
-      const score =
-        overlapRatio * 4 +
-        widthRatio * 3 +
-        heightRatio * 1.5 +
-        Math.max(0, 1 - centerAlignment) * 2 -
-        gap / Math.max(1, maxGap);
-
-      if (score > bestScore) {
-        bestGroup = group;
-        bestScore = score;
-      }
+      if (gap > maxGap || overlapRatio < 0.70 || widthRatio < 0.65 || heightRatio < 0.45 || centerAlignment > 0.18) continue;
+      const score = overlapRatio * 4 + widthRatio * 3 + heightRatio * 1.5 + Math.max(0, 1 - centerAlignment) * 2 - gap / Math.max(1, maxGap);
+      if (score > bestScore) { bestGroup = group; bestScore = score; }
     }
-
-    if (bestGroup) bestGroup.push(image);
-    else groups.push([image]);
+    if (bestGroup) bestGroup.push(image); else groups.push([image]);
   }
-
   return groups;
 }
 
