@@ -168,23 +168,55 @@ function selectImagesInRegion(images: ImageAsset[], top: number, bottom: number)
 function groupImageAssets(images: ImageAsset[]): ImageAsset[][] {
   const sorted = [...images].sort((a, b) => a.y - b.y || a.x - b.x);
   const groups: ImageAsset[][] = [];
+
   for (const image of sorted) {
     let bestGroup: ImageAsset[] | null = null;
-    let bestGap = Number.POSITIVE_INFINITY;
+    let bestScore = Number.NEGATIVE_INFINITY;
+
     for (const group of groups) {
       const last = group[group.length - 1];
       const gap = image.y - (last.y + last.height);
-      if (gap < 0 || gap > MAX_TILE_VERTICAL_GAP) continue;
+      if (gap < 0) continue;
+
+      const minWidth = Math.min(image.width, last.width);
+      const minHeight = Math.min(image.height, last.height);
+      const maxWidth = Math.max(image.width, last.width);
+      const maxHeight = Math.max(image.height, last.height);
       const overlapLeft = Math.max(image.x, last.x);
       const overlapRight = Math.min(image.x + image.width, last.x + last.width);
       const overlapWidth = Math.max(0, overlapRight - overlapLeft);
-      const overlapRatio = overlapWidth / Math.max(1, Math.min(image.width, last.width));
-      const widthRatio = Math.min(image.width, last.width) / Math.max(image.width, last.width);
-      if (overlapRatio < MIN_TILE_HORIZONTAL_OVERLAP_RATIO || widthRatio < MIN_TILE_WIDTH_RATIO) continue;
-      if (gap < bestGap) { bestGroup = group; bestGap = gap; }
+      const overlapRatio = overlapWidth / Math.max(1, minWidth);
+      const widthRatio = minWidth / Math.max(1, maxWidth);
+      const heightRatio = minHeight / Math.max(1, maxHeight);
+      const centerDelta = Math.abs((image.x + image.width / 2) - (last.x + last.width / 2));
+      const centerAlignment = centerDelta / Math.max(1, minWidth);
+
+      // PDF image fragments usually preserve nearly the same X position and width
+      // while continuing vertically. Allow modest box variation between fragments.
+      const maxGap = Math.max(MAX_TILE_VERTICAL_GAP, minHeight * 0.25);
+      if (gap > maxGap) continue;
+      if (overlapRatio < 0.70) continue;
+      if (widthRatio < 0.65) continue;
+      if (heightRatio < 0.45) continue;
+      if (centerAlignment > 0.18) continue;
+
+      const score =
+        overlapRatio * 4 +
+        widthRatio * 3 +
+        heightRatio * 1.5 +
+        Math.max(0, 1 - centerAlignment) * 2 -
+        gap / Math.max(1, maxGap);
+
+      if (score > bestScore) {
+        bestGroup = group;
+        bestScore = score;
+      }
     }
-    if (bestGroup) bestGroup.push(image); else groups.push([image]);
+
+    if (bestGroup) bestGroup.push(image);
+    else groups.push([image]);
   }
+
   return groups;
 }
 
