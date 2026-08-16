@@ -46,7 +46,6 @@ function pumpImageRequests() {
 function requestImagePreview(file: File, pageNumber: number, questionNumber: number, key: string): Promise<ImageResponse> {
   const cached = imageDataCache.get(key);
   if (cached) return Promise.resolve(cached);
-
   const existing = imageRequestCache.get(key);
   if (existing) return existing;
 
@@ -60,7 +59,7 @@ function requestImagePreview(file: File, pageNumber: number, questionNumber: num
         fd.append("file", file);
         fd.append("pageNumber", String(pageNumber));
         fd.append("questionNumber", String(questionNumber));
-        const response = await fetch("/api/pdf/images", { method: "POST", body: fd });
+        const response = await fetch("/api/pdf/images-v10", { method: "POST", body: fd });
         const data = (await response.json()) as ImageResponse;
         if (!response.ok) throw new Error(data.detail || data.error || "圖片擷取失敗");
         imageDataCache.set(key, data);
@@ -91,12 +90,7 @@ function ImagePreview({ file, pageNumber, questionNumber, onImageLoaded }: Props
   useEffect(() => {
     const element = containerRef.current;
     if (!element) return;
-
-    if (typeof IntersectionObserver === "undefined") {
-      setShouldLoad(true);
-      return;
-    }
-
+    if (typeof IntersectionObserver === "undefined") { setShouldLoad(true); return; }
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries.some((entry) => entry.isIntersecting)) {
@@ -106,7 +100,6 @@ function ImagePreview({ file, pageNumber, questionNumber, onImageLoaded }: Props
       },
       { rootMargin: "250px 0px" },
     );
-
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
@@ -114,11 +107,9 @@ function ImagePreview({ file, pageNumber, questionNumber, onImageLoaded }: Props
   useEffect(() => {
     const currentFile = file;
     if (!shouldLoad || !currentFile || !pageNumber || !questionNumber) return;
-
     const loadKey = `${currentFile.name}:${currentFile.size}:${currentFile.lastModified}:${pageNumber}:${questionNumber}`;
     if (loadedKeyRef.current === loadKey) return;
     loadedKeyRef.current = loadKey;
-
     let cancelled = false;
 
     async function load(pdfFile: File, pdfPageNumber: number, pdfQuestionNumber: number) {
@@ -128,14 +119,12 @@ function ImagePreview({ file, pageNumber, questionNumber, onImageLoaded }: Props
       try {
         const data = await requestImagePreview(pdfFile, pdfPageNumber, pdfQuestionNumber, loadKey);
         if (cancelled) return;
-
         setExtractionMode(typeof data.extractionMode === "string" ? data.extractionMode : "unknown");
         const nextSrcs = Array.isArray(data.imageDataUrls) && data.imageDataUrls.length
           ? data.imageDataUrls
           : data.imageDataUrl
             ? [data.imageDataUrl]
             : [];
-
         if (nextSrcs.length) {
           setSrcs(nextSrcs);
           onImageLoaded?.(nextSrcs[0]);
@@ -160,19 +149,10 @@ function ImagePreview({ file, pageNumber, questionNumber, onImageLoaded }: Props
       {!shouldLoad && !error && <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-400">圖片即將載入…</div>}
       {srcs.length > 0 && (
         <>
-          <div className="mb-2 text-xs text-slate-400">
-            圖片擷取方式：{extractionMode || "未知"} · 共 {srcs.length} 張
-          </div>
+          <div className="mb-2 text-xs text-slate-400">圖片擷取方式：{extractionMode || "未知"} · 共 {srcs.length} 張</div>
           <div className="space-y-4">
             {srcs.map((src, index) => (
-              <img
-                key={`${questionNumber}-${index}-${src.slice(-24)}`}
-                src={src}
-                alt={`第 ${questionNumber} 題 PDF 圖片 ${index + 1}`}
-                decoding="async"
-                fetchPriority={index === 0 ? "high" : "auto"}
-                className="mx-auto block h-auto max-w-full rounded-xl object-contain"
-              />
+              <img key={`${questionNumber}-${index}-${src.slice(-24)}`} src={src} alt={`第 ${questionNumber} 題 PDF 圖片 ${index + 1}`} decoding="async" fetchPriority={index === 0 ? "high" : "auto"} className="mx-auto block h-auto max-w-full rounded-xl object-contain" />
             ))}
           </div>
         </>
