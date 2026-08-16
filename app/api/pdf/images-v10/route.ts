@@ -12,7 +12,8 @@ type PageIndex = { page: any; pageNumber: number; viewport: any; anchors: Anchor
 type ImageContext = { page: any; pageNumber: number; viewport: any; images: ImageAsset[] };
 type PdfCacheEntry = { pdf: any; createdAt: number; hits: number };
 type CanvasCacheEntry = { canvas: any; createdAt: number };
-type ImageDebugPage = { page: number; anchorCount: number; hasTargetAnchor: boolean; imageAssetCount: number; selectedImageCount: number; targetTopY?: number; upperBound?: number };
+type ImageDebugAsset = ImageAsset & { centerY: number; intersectsRegion: boolean; centerInsideRegion: boolean };
+type ImageDebugPage = { page: number; anchorCount: number; hasTargetAnchor: boolean; imageAssetCount: number; selectedImageCount: number; targetTopY?: number; upperBound?: number; imageAssets?: ImageDebugAsset[] };
 
 const RENDER_PADDING = 12;
 const RENDER_SCALE = 1.5;
@@ -56,7 +57,7 @@ export async function POST(request: Request) {
     const result = await findImageContexts(pdf, pdfHash, pageNumber, questionNumber);
     const contexts = result.contexts;
     if (!contexts.length) {
-      console.warn("PDF image pipeline: no image context", { pageNumber, questionNumber, debug: result.debug });
+      console.warn("PDF image pipeline: no image context", JSON.stringify({ pageNumber, questionNumber, debug: result.debug }, null, 2));
       return NextResponse.json({ success: true, pageNumber, questionNumber, imageDataUrl: null, imageDataUrls: [], imageCount: 0, extractionMode: "pdf-region-render-v10", debug: result.debug });
     }
 
@@ -143,6 +144,14 @@ async function findImageContexts(pdf: any, pdfHash: string, questionPageNumber: 
       debugPage.upperBound = upper;
       const selected = selectImagesInRegion(index.images, target.topY, upper);
       debugPage.selectedImageCount = selected.length;
+      if (questionNumber === 40 && selected.length === 0) {
+        debugPage.imageAssets = index.images.map((image) => {
+          const imageTop = image.y;
+          const imageBottom = image.y + image.height;
+          const centerY = image.y + image.height / 2;
+          return { ...image, centerY, intersectsRegion: imageBottom > target.topY && imageTop < upper, centerInsideRegion: centerY >= target.topY && centerY <= upper };
+        });
+      }
       pages.push(debugPage);
       if (selected.length) { contexts.push({ page: index.page, pageNumber: pageNo, viewport: index.viewport, images: selected }); break; }
       continuationAllowed = !nextSamePage;
