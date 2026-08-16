@@ -11,15 +11,12 @@ type Props = {
 
 type ImageResponse = {
   imageDataUrl?: string | null;
+  imageDataUrls?: string[];
   extractionMode?: string;
   error?: string;
   detail?: string;
 };
 
-// Keep a small amount of parallelism. Each request currently uploads the PDF to
-// /api/pdf/images, where PDF.js may need to parse/index the document before the
-// image can be rendered. Too many concurrent requests can make the first images
-// appear to be stuck while several server-side PDF jobs compete at once.
 const MAX_PARALLEL_IMAGE_REQUESTS = 2;
 const imageRequestCache = new Map<string, Promise<ImageResponse>>();
 const imageDataCache = new Map<string, ImageResponse>();
@@ -83,7 +80,7 @@ function requestImagePreview(file: File, pageNumber: number, questionNumber: num
 }
 
 function ImagePreview({ file, pageNumber, questionNumber, onImageLoaded }: Props) {
-  const [src, setSrc] = useState<string | null>(null);
+  const [srcs, setSrcs] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [extractionMode, setExtractionMode] = useState("");
@@ -107,8 +104,6 @@ function ImagePreview({ file, pageNumber, questionNumber, onImageLoaded }: Props
           observer.disconnect();
         }
       },
-      // Start shortly before the image reaches the viewport instead of queuing
-      // many hundreds of pixels worth of PDF renders at once.
       { rootMargin: "250px 0px" },
     );
 
@@ -135,10 +130,15 @@ function ImagePreview({ file, pageNumber, questionNumber, onImageLoaded }: Props
         if (cancelled) return;
 
         setExtractionMode(typeof data.extractionMode === "string" ? data.extractionMode : "unknown");
+        const nextSrcs = Array.isArray(data.imageDataUrls) && data.imageDataUrls.length
+          ? data.imageDataUrls
+          : data.imageDataUrl
+            ? [data.imageDataUrl]
+            : [];
 
-        if (data.imageDataUrl) {
-          setSrc(data.imageDataUrl);
-          onImageLoaded?.(data.imageDataUrl);
+        if (nextSrcs.length) {
+          setSrcs(nextSrcs);
+          onImageLoaded?.(nextSrcs[0]);
         } else {
           setError("目前找不到這題可用的圖片內容。");
         }
@@ -156,20 +156,25 @@ function ImagePreview({ file, pageNumber, questionNumber, onImageLoaded }: Props
   return (
     <div ref={containerRef} className="mt-4 w-full min-h-24 rounded-xl">
       {error && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">圖片載入失敗：{error}</div>}
-      {loading && !src && <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">正在載入圖片預覽…</div>}
+      {loading && !srcs.length && <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">正在載入圖片預覽…</div>}
       {!shouldLoad && !error && <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-400">圖片即將載入…</div>}
-      {src && (
+      {srcs.length > 0 && (
         <>
           <div className="mb-2 text-xs text-slate-400">
-            圖片擷取方式：{extractionMode || "未知"}
+            圖片擷取方式：{extractionMode || "未知"} · 共 {srcs.length} 張
           </div>
-          <img
-            src={src}
-            alt={`第 ${questionNumber} 題 PDF 圖片`}
-            decoding="async"
-            fetchPriority="high"
-            className="mx-auto block h-auto max-w-full rounded-xl object-contain"
-          />
+          <div className="space-y-4">
+            {srcs.map((src, index) => (
+              <img
+                key={`${questionNumber}-${index}-${src.slice(-24)}`}
+                src={src}
+                alt={`第 ${questionNumber} 題 PDF 圖片 ${index + 1}`}
+                decoding="async"
+                fetchPriority={index === 0 ? "high" : "auto"}
+                className="mx-auto block h-auto max-w-full rounded-xl object-contain"
+              />
+            ))}
+          </div>
         </>
       )}
     </div>
