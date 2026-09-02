@@ -27,6 +27,8 @@ const MAX_CACHED_RENDERED_PAGES = 6;
 const MAX_TILE_VERTICAL_GAP = 24;
 const MIN_TILE_HORIZONTAL_OVERLAP_RATIO = 0.85;
 const MIN_TILE_WIDTH_RATIO = 0.85;
+const MAX_HORIZONTAL_FRAGMENT_GAP = 8;
+const MAX_HORIZONTAL_FRAGMENT_WIDTH_RATIO = 0.40;
 
 const pdfCache = new Map<string, PdfCacheEntry>();
 const pageIndexCache = new Map<string, PageIndex>();
@@ -156,8 +158,7 @@ async function findImageContexts(pdf: any, pdfHash: string, questionPageNumber: 
       if (selected.length) { contexts.push({ page: index.page, pageNumber: pageNo, viewport: index.viewport, images: selected }); break; }
 
       // Q40 in this PDF has its image fragments above the question-number anchor.
-      // Recover only the nearest coherent image fragment chain when this is the
-      // last question anchor on the page, leaving the normal region selection intact.
+      // Recover the nearest image row instead of assuming the images overlap vertically.
       if (questionNumber === 40 && !nextSamePage && targetIndex === index.anchors.length - 1) {
         const recovered = selectNearestImageGroupAbove(index.images, target.topY);
         if (recovered.length) {
@@ -204,26 +205,19 @@ function selectImagesInRegion(images: ImageAsset[], top: number, bottom: number)
 }
 
 function selectNearestImageGroupAbove(images: ImageAsset[], targetTopY: number): ImageAsset[] {
-  const above = images.filter((image) => image.y + image.height <= targetTopY).sort((a, b) => b.y - a.y || b.x - a.x);
+  const above = images.filter((image) => image.y + image.height <= targetTopY).sort((a, b) => (targetTopY - (b.y + b.height)) - (targetTopY - (a.y + a.height)));
   if (!above.length) return [];
-  const group: ImageAsset[] = [above[0]];
-  for (let i = 1; i < above.length; i++) {
-    const current = above[i];
-    const previous = group[group.length - 1];
-    const gap = previous.y - (current.y + current.height);
-    const minWidth = Math.min(current.width, previous.width);
-    const overlapLeft = Math.max(current.x, previous.x);
-    const overlapRight = Math.min(current.x + current.width, previous.x + previous.width);
-    const overlapRatio = Math.max(0, overlapRight - overlapLeft) / Math.max(1, minWidth);
-    const widthRatio = minWidth / Math.max(1, Math.max(current.width, previous.width));
-    const maxGap = Math.max(MAX_TILE_VERTICAL_GAP, minWidth * 0.08);
-    if (gap > maxGap || overlapRatio < MIN_TILE_HORIZONTAL_OVERLAP_RATIO || widthRatio < MIN_TILE_WIDTH_RATIO) break;
-    group.push(current);
-  }
-  return group.sort((a, b) => a.y - b.y || a.x - b.x);
+
+  const nearest = above[0];
+  const nearestCenterY = nearest.y + nearest.height / 2;
+  const rowTolerance = Math.max(MAX_TILE_VERTICAL_GAP, nearest.height * 0.20);
+
+  return above
+    .filter((image) => Math.abs((image.y + image.height / 2) - nearestCenterY) <= rowTolerance)
+    .sort((a, b) => a.y - b.y || a.x - b.x);
 }
 
-function groupImageAssets(images: ImageAsset[]): ImageAsset[][] {
+function groupImageAssets(images: ImageAsset[], pageWidth: number): ImageAsset[][] {
   const sorted = [...images].sort((a, b) => a.y - b.y || a.x - b.x);
   const groups: ImageAsset[][] = [];
   for (const image of sorted) {
@@ -231,24 +225,51 @@ function groupImageAssets(images: ImageAsset[]): ImageAsset[][] {
     let bestScore = Number.NEGATIVE_INFINITY;
     for (const group of groups) {
       const last = group[group.length - 1];
-      const gap = image.y - (last.y + last.height);
-      if (gap < 0) continue;
+      const verticalGap = image.y - (last.y + last.height);
+      const horizontalGap = image.x - (last.x + last.width);
+      const overlapLeft = Math.max(image.x, last.x);
+      const overlapRight = Math.min(image.x + image.width, last.x + last.width);
+      const overlapTop = Math.max(image.y, last.y);
+      const overlapBottom = Math.min(image.y + image.height, last.y + last.height);
+      const overlapWidth = Math.max(0, overlapRight - overlapLeft);
+      const overlapHeight = Math.max(0, overlapBottom - overlapTop);
       const minWidth = Math.min(image.width, last.width);
       const minHeight = Math.min(image.height, last.height);
       const maxWidth = Math.max(image.width, last.width);
       const maxHeight = Math.max(image.height, last.height);
-      const overlapLeft = Math.max(image.x, last.x);
-      const overlapRight = Math.min(image.x + image.width, last.x + last.width);
-      const overlapWidth = Math.max(0, overlapRight - overlapLeft);
-      const overlapRatio = overlapWidth / Math.max(1, minWidth);
+      const verticalOverlapRatio = overlapHeight / Math.max(1, minHeight);
+      const horizontalOverlapRatio = overlapWidth / Math.max(1, minWidth);
       const widthRatio = minWidth / Math.max(1, maxWidth);
       const heightRatio = minHeight / Math.max(1, maxHeight);
-      const centerDelta = Math.abs((image.x + image.width / 2) - (last.x + last.width / 2));
-      const centerAlignment = centerDelta / Math.max(1, minWidth);
-      const maxGap = Math.max(MAX_TILE_VERTICAL_GAP, minHeight * 0.25);
-      if (gap > maxGap || overlapRatio < 0.70 || widthRatio < 0.65 || heightRatio < 0.45 || centerAlignment > 0.18) continue;
-      const score = overlapRatio * 4 + widthRatio * 3 + heightRatio * 1.5 + Math.max(0, 1 - centerAlignment) * 2 - gap / Math.max(1, maxGap);
-      if (score > bestScore) { bestGroup = group; bestScore = score; }
+      const centerDeltaX = Math.abs((image.x + image.width / 2) - (last.x + last.width / 2));
+      const centerAlignmentX = centerDeltaX / Math.max(1, minWidth);
+
+      // Embedded/sub-image case: rectangles overlap, so they belong to the same
+      // visual figure and should be rendered as one bounding crop.
+      const overlaps = overlapWidth > 0 && overlapHeight > 0;
+      if (overlaps) {
+        const score = verticalOverlapRatio * 4 + horizontalOverlapRatio * 4 + widthRatio * 2 + heightRatio * 2;
+        if (score > bestScore) { bestGroup = group; bestScore = score; }
+        continue;
+      }
+
+      // Existing vertical tile grouping for one image split into stacked fragments.
+      const maxVerticalGap = Math.max(MAX_TILE_VERTICAL_GAP, minHeight * 0.25);
+      if (verticalGap >= 0 && verticalGap <= maxVerticalGap && horizontalOverlapRatio >= MIN_TILE_HORIZONTAL_OVERLAP_RATIO && widthRatio >= MIN_TILE_WIDTH_RATIO && centerAlignmentX <= 0.18) {
+        const score = horizontalOverlapRatio * 4 + widthRatio * 3 + heightRatio * 1.5 + Math.max(0, 1 - centerAlignmentX) * 2 - verticalGap / Math.max(1, maxVerticalGap);
+        if (score > bestScore) { bestGroup = group; bestScore = score; }
+        continue;
+      }
+
+      // New horizontal tile grouping: a single PDF image may be emitted as
+      // adjacent fragments. Only merge very small fragments with a tiny gap;
+      // full-size side-by-side figures such as Q40 A/B stay separate.
+      const maxHorizontalGap = MAX_HORIZONTAL_FRAGMENT_GAP;
+      const maxFragmentWidth = pageWidth * MAX_HORIZONTAL_FRAGMENT_WIDTH_RATIO;
+      if (horizontalGap >= 0 && horizontalGap <= maxHorizontalGap && verticalOverlapRatio >= 0.90 && heightRatio >= 0.85 && image.width <= maxFragmentWidth && last.width <= maxFragmentWidth) {
+        const score = verticalOverlapRatio * 5 + heightRatio * 3 - horizontalGap / Math.max(1, maxHorizontalGap);
+        if (score > bestScore) { bestGroup = group; bestScore = score; }
+      }
     }
     if (bestGroup) bestGroup.push(image); else groups.push([image]);
   }
@@ -264,7 +285,7 @@ async function renderImageContexts(contexts: ImageContext[], pdfHash: string): P
   const rendered: string[] = [];
   for (const context of contexts) {
     const pageCanvas = await getRenderedPageCanvas(context, pdfHash, canvasModule);
-    const groups = groupImageAssets(context.images);
+    const groups = groupImageAssets(context.images, context.viewport.width);
     for (const group of groups) {
       const left = Math.max(0, Math.min(...group.map((image) => image.x)) - RENDER_PADDING);
       const top = Math.max(0, Math.min(...group.map((image) => image.y)) - RENDER_PADDING);
