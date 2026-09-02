@@ -64,7 +64,6 @@ export async function POST(request: Request) {
       if (imagePositions.length > 0) { imagePages.add(pageNumber); pageImages.set(pageNumber, imagePositions); }
       const textContent = await page.getTextContent();
       const rawItems = textContent.items.filter((item:any)=>typeof item.str === "string" && item.str.trim() !== "").map((item:any)=>({ text:item.str.trim(), x:Number(item.transform?.[4]??0), y:Number(item.transform?.[5]??0), width:Number(item.width??0) }));
-      pageAnchors.set(pageNumber, getQuestionAnchors(rawItems, viewport.height));
       const items = rawItems.sort((a,b)=>Math.abs(a.y-b.y)<=3?a.x-b.x:b.y-a.y);
       const lines:Array<{y:number;items:Array<{text:string;x:number;width:number}>}> = [];
       for (const item of items) {
@@ -73,6 +72,8 @@ export async function POST(request: Request) {
         else lines.push({y:item.y,items:[{text:item.text,x:item.x,width:item.width}]});
       }
       lines.sort((a,b)=>b.y-a.y);
+      const anchorItems = lines.map(line=>({text:line.items.reduce((result,item,index)=>{const previous=line.items[index-1];const previousEnd=previous?previous.x+previous.width:-Infinity;const separator=result&&item.x-previousEnd>2?" ":"";return result+separator+item.text;},""),x:line.items[0]?.x??0,y:line.y}));
+      pageAnchors.set(pageNumber, getQuestionAnchors(anchorItems, viewport.height));
       const pageText = lines.map(line=>{ let result=""; let previousEnd=-Infinity; for(const item of line.items){const separator=result&&item.x-previousEnd>2?" ":"";result+=separator+item.text;previousEnd=item.x+item.width;} return result.trim(); }).filter(Boolean).join("\n");
       fullText += `\n===== PDF PAGE ${pageNumber} =====\n${pageText}\n`;
     }
@@ -95,7 +96,16 @@ function normalizeExamYear(value:number){if(!Number.isInteger(value))return null
 function getImagePositions(pdfjsLib:any,operatorList:any,viewport:any):ImagePosition[]{
   const imageOps=new Set<number>([pdfjsLib.OPS.paintImageMaskXObject,pdfjsLib.OPS.paintImageXObject,pdfjsLib.OPS.paintInlineImageXObject,pdfjsLib.OPS.paintImageMaskXObjectRepeat,pdfjsLib.OPS.paintImageXObjectRepeat,pdfjsLib.OPS.paintJpegXObject].filter((value):value is number=>typeof value==="number"));
   const positions:ImagePosition[]=[]; let ctm=[1,0,0,1,0,0]; const stack:number[][]=[];
-  for(let i=0;i<operatorList.fnArray.length;i++){const fn=operatorList.fnArray[i],args=operatorList.argsArray[i]??[];if(fn===pdfjsLib.OPS.save){stack.push([...ctm]);continue;}if(fn===pdfjsLib.OPS.restore){ctm=stack.pop()??ctm;continue;}if(fn===pdfjsLib.OPS.transform&&args.length>=6){ctm=pdfjsLib.Util.transform(ctm,args.slice(0,6));continue;}if(!imageOps.has(fn))continue;try{const transform=pdfjsLib.Util.transform(viewport.transform,ctm);const points=[[0,0],[1,0],[0,1],[1,1]].map(point=>pdfjsLib.Util.applyTransform(point,transform));const xs=points.map((point:number[])=>point[0]),ys=points.map((point:number[])=>point[1]);const x=Math.min(...xs),y=Math.min(...ys),width=Math.max(...xs)-x,height=Math.max(...ys)-y;const isMask=fn===pdfjsLib.OPS.paintImageMaskXObject||fn===pdfjsLib.OPS.paintImageMaskXObjectRepeat;if(isMask&&(width<MIN_DETECTED_IMAGE_WIDTH||height<MIN_DETECTED_IMAGE_HEIGHT||width*height<MIN_DETECTED_IMAGE_AREA))continue;if(width<6||height<6)continue;positions.push({y:y+height/2,width,height,isMask});}catch{}}
+  for(let i=0;i<operatorList.fnArray.length;i++){
+    const fn=operatorList.fnArray[i],args=operatorList.argsArray[i]??[];
+    if(fn===pdfjsLib.OPS.save){stack.push([...ctm]);continue;}
+    if(fn===pdfjsLib.OPS.restore){ctm=stack.pop()??ctm;continue;}
+    if(fn===pdfjsLib.OPS.paintFormXObjectBegin){stack.push([...ctm]);const matrix=args[0];if(Array.isArray(matrix)&&matrix.length>=6){ctm=pdfjsLib.Util.transform(ctm,matrix.slice(0,6));}continue;}
+    if(fn===pdfjsLib.OPS.paintFormXObjectEnd){ctm=stack.pop()??ctm;continue;}
+    if(fn===pdfjsLib.OPS.transform&&args.length>=6){ctm=pdfjsLib.Util.transform(ctm,args.slice(0,6));continue;}
+    if(!imageOps.has(fn))continue;
+    try{const transform=pdfjsLib.Util.transform(viewport.transform,ctm);const points=[[0,0],[1,0],[0,1],[1,1]].map(point=>pdfjsLib.Util.applyTransform(point,transform));const xs=points.map((point:number[])=>point[0]),ys=points.map((point:number[])=>point[1]);const x=Math.min(...xs),y=Math.min(...ys),width=Math.max(...xs)-x,height=Math.max(...ys)-y;const isMask=fn===pdfjsLib.OPS.paintImageMaskXObject||fn===pdfjsLib.OPS.paintImageMaskXObjectRepeat;if(isMask&&(width<MIN_DETECTED_IMAGE_WIDTH||height<MIN_DETECTED_IMAGE_HEIGHT||width*height<MIN_DETECTED_IMAGE_AREA))continue;if(width<6||height<6)continue;positions.push({y:y+height/2,width,height,isMask});}catch{}
+  }
   return positions.filter(position=>Number.isFinite(position.y));
 }
 
