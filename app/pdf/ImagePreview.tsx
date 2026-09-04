@@ -18,6 +18,7 @@ type ImageResponse = {
 };
 
 const MAX_PARALLEL_IMAGE_REQUESTS = 2;
+const IMAGE_REQUEST_TIMEOUT_MS = 60_000;
 const imageRequestCache = new Map<string, Promise<ImageResponse>>();
 const imageDataCache = new Map<string, ImageResponse>();
 const imageRequestQueue: Array<{
@@ -59,7 +60,7 @@ function requestImagePreview(file: File, pageNumber: number, questionNumber: num
         fd.append("file", file);
         fd.append("pageNumber", String(pageNumber));
         fd.append("questionNumber", String(questionNumber));
-        const response = await fetch("/api/pdf/images-v10", { method: "POST", body: fd });
+        const response = await fetch("/api/pdf/images-v10", { method: "POST", body: fd, signal: AbortSignal.timeout(IMAGE_REQUEST_TIMEOUT_MS) });
         const data = (await response.json()) as ImageResponse;
         if (!response.ok) throw new Error(data.detail || data.error || "圖片擷取失敗");
         imageDataCache.set(key, data);

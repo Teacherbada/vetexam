@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 type ImageAsset = { x: number; y: number; width: number; height: number; isMask: boolean };
-type TextItem = { text: string; y: number; height: number };
+type TextItem = { text: string; x: number; y: number; width: number; height: number };
 type Anchor = { number: number; topY: number };
 type PageIndex = { page: any; pageNumber: number; viewport: any; anchors: Anchor[]; images: ImageAsset[] };
 type ImageContext = { page: any; pageNumber: number; viewport: any; images: ImageAsset[] };
@@ -31,6 +31,7 @@ const MAX_HORIZONTAL_FRAGMENT_GAP = 8;
 const MAX_HORIZONTAL_FRAGMENT_WIDTH_RATIO = 0.40;
 
 const pdfCache = new Map<string, PdfCacheEntry>();
+const pendingPdfLoads = new Map<string, Promise<any>>();
 const pageIndexCache = new Map<string, PageIndex>();
 const renderedPageCache = new Map<string, CanvasCacheEntry>();
 const imageCache = new Map<string, { dataUrls: string[]; createdAt: number }>();
@@ -98,16 +99,22 @@ async function getCachedPdf(pdfjsLib: any, hash: string, bytes: Uint8Array): Pro
   const existing = pdfCache.get(hash);
   if (existing && Date.now() - existing.createdAt <= PDF_CACHE_TTL_MS) { existing.hits += 1; pdfCache.delete(hash); pdfCache.set(hash, existing); return existing.pdf; }
   if (existing) pdfCache.delete(hash);
-  const pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
-  pdfCache.set(hash, { pdf, createdAt: Date.now(), hits: 0 });
-  while (pdfCache.size > MAX_CACHED_PDFS) {
-    const oldest = pdfCache.keys().next().value;
-    if (!oldest) break;
-    const oldEntry = pdfCache.get(oldest);
-    try { await oldEntry?.pdf?.destroy?.(); } catch {}
-    pdfCache.delete(oldest);
-  }
-  return pdf;
+  const pending = pendingPdfLoads.get(hash);
+  if (pending) return pending;
+  const load = (async () => {
+    const pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
+    pdfCache.set(hash, { pdf, createdAt: Date.now(), hits: 0 });
+    while (pdfCache.size > MAX_CACHED_PDFS) {
+      const oldest = pdfCache.keys().next().value;
+      if (!oldest) break;
+      const oldEntry = pdfCache.get(oldest);
+      try { await oldEntry?.pdf?.destroy?.(); } catch {}
+      pdfCache.delete(oldest);
+    }
+    return pdf;
+  })();
+  pendingPdfLoads.set(hash, load);
+  try { return await load; } finally { pendingPdfLoads.delete(hash); }
 }
 
 async function getPageIndex(pdf: any, pdfHash: string, pageNumber: number): Promise<PageIndex> {
@@ -117,7 +124,7 @@ async function getPageIndex(pdf: any, pdfHash: string, pageNumber: number): Prom
   const page = await pdf.getPage(pageNumber);
   const viewport = page.getViewport({ scale: 1 });
   const textContent = await page.getTextContent();
-  const items: TextItem[] = textContent.items.filter((item: any) => typeof item.str === "string" && item.str.trim()).map((item: any) => ({ text: item.str.trim(), y: Number(item.transform?.[5] ?? 0), height: Number(item.height ?? 0) }));
+  const items: TextItem[] = textContent.items.filter((item: any) => typeof item.str === "string" && item.str.trim()).map((item: any) => ({ text: item.str.trim(), x: Number(item.transform?.[4] ?? 0), y: Number(item.transform?.[5] ?? 0), width: Number(item.width ?? 0), height: Number(item.height ?? 0) }));
   const anchors = getQuestionAnchors(items, viewport.height).sort((a, b) => a.topY - b.topY);
   const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
   const operatorList = await page.getOperatorList();
@@ -264,9 +271,10 @@ function groupImageAssets(images: ImageAsset[], pageWidth: number): ImageAsset[]
       // New horizontal tile grouping: a single PDF image may be emitted as
       // adjacent fragments. Only merge very small fragments with a tiny gap;
       // full-size side-by-side figures such as Q40 A/B stay separate.
-      const maxHorizontalGap = MAX_HORIZONTAL_FRAGMENT_GAP;
+      const maxHorizontalGap = Math.max(MAX_HORIZONTAL_FRAGMENT_GAP, Math.min(image.width, last.width) * 0.12);
       const maxFragmentWidth = pageWidth * MAX_HORIZONTAL_FRAGMENT_WIDTH_RATIO;
-      if (horizontalGap >= 0 && horizontalGap <= maxHorizontalGap && verticalOverlapRatio >= 0.90 && heightRatio >= 0.85 && image.width <= maxFragmentWidth && last.width <= maxFragmentWidth) {
+      const looksLikeTwoStandaloneFigures = image.width > maxFragmentWidth && last.width > maxFragmentWidth;
+      if (horizontalGap >= 0 && horizontalGap <= maxHorizontalGap && verticalOverlapRatio >= 0.90 && heightRatio >= 0.85 && !looksLikeTwoStandaloneFigures) {
         const score = verticalOverlapRatio * 5 + heightRatio * 3 - horizontalGap / Math.max(1, maxHorizontalGap);
         if (score > bestScore) { bestGroup = group; bestScore = score; }
       }
@@ -352,10 +360,6 @@ async function getImageAssets(pdfjsLib: any, page: any, operatorList: any, viewp
       for (let p = 0; p + 1 < positions.length; p += 2) addImageRegion([scaleX, 0, 0, scaleY, Number(positions[p]), Number(positions[p + 1])]);
       continue;
     }
-    const imageId = typeof args[0] === "string" ? args[0] : null;
-    if ((fn === pdfjsLib.OPS.paintJpegXObject || fn === pdfjsLib.OPS.paintImageXObject) && imageId && args.length < 3) {
-      try { await getPdfObject(page.objs, imageId) || await getPdfObject(page.commonObjs, imageId); } catch {}
-    }
     addImageRegion([1, 0, 0, 1, 0, 0], 1, 1);
   }
   const unique: ImageAsset[] = [];
@@ -366,19 +370,25 @@ async function getImageAssets(pdfjsLib: any, page: any, operatorList: any, viewp
   return unique;
 }
 
-function getPdfObject(objects: any, id: string): Promise<any | null> {
-  if (!objects || typeof objects.has !== "function" || !objects.has(id)) return Promise.resolve(null);
-  return new Promise((resolve) => { try { resolve(objects.get(id) ?? null); } catch { try { objects.get(id, (value: any) => resolve(value ?? null)); } catch { resolve(null); } } });
-}
-
 function getQuestionAnchors(items: TextItem[], pageHeight: number): Anchor[] {
   const anchors: Anchor[] = [];
   const regex = /^\s*(?:[（(]\s*)?(\d{1,3})(?:\s*[）)])?\s*(?:[.、．:：]|(?=\S))/;
+  const lines: Array<{ y: number; items: TextItem[] }> = [];
   for (const item of items) {
-    const match = item.text.match(regex);
+    const line = lines.find((candidate) => Math.abs(candidate.y - item.y) <= 3);
+    if (line) line.items.push(item); else lines.push({ y: item.y, items: [item] });
+  }
+  for (const line of lines) {
+    const ordered = [...line.items].sort((a, b) => a.x - b.x);
+    const text = ordered.reduce((result, item, index) => {
+      const previous = ordered[index - 1];
+      const separator = result && previous && item.x - (previous.x + previous.width) > 2 ? " " : "";
+      return result + separator + item.text;
+    }, "");
+    const match = text.match(regex);
     if (!match) continue;
     const number = Number(match[1]);
-    if (number >= 1 && number <= 999) anchors.push({ number, topY: pageHeight - item.y });
+    if (number >= 1 && number <= 999) anchors.push({ number, topY: pageHeight - line.y });
   }
   return anchors;
 }

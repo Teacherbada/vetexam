@@ -15,6 +15,12 @@ const nextConfig: NextConfig = {
       "./node_modules/@napi-rs/canvas/**/*",
       "./node_modules/@napi-rs/canvas-linux-x64-gnu/**/*",
     ],
+    "/api/pdf/images-v10": [
+      "./node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs",
+      "./node_modules/pdfjs-dist/legacy/build/pdf.mjs",
+      "./node_modules/@napi-rs/canvas/**/*",
+      "./node_modules/@napi-rs/canvas-linux-x64-gnu/**/*",
+    ],
   },
 };
 
