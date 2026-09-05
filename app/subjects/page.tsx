@@ -1,11 +1,23 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
+import { StudyIcon, type StudyIconName } from "@/components/dashboard/StudyUI";
+import { subjectPalette } from "@/app/analysis/analytics";
+import analysisStyles from "@/app/analysis/analysis.module.css";
+import styles from "./subjects.module.css";
 
 type Row = { subject: string; year: number | "all"; count: string };
 
 const subjects = ["獸醫病理學", "獸醫藥理學", "獸醫實驗診斷學", "獸醫普通疾病學", "獸醫傳染病學", "獸醫公共衛生學"];
+const subjectIcons: Record<string, StudyIconName> = {
+  獸醫病理學: "leaf",
+  獸醫藥理學: "file",
+  獸醫實驗診斷學: "search",
+  獸醫普通疾病學: "heart",
+  獸醫傳染病學: "target",
+  獸醫公共衛生學: "book",
+};
 const currentRocYear = new Date().getFullYear() - 1911;
 const years = Array.from({ length: 30 }, (_, i) => currentRocYear - i);
 
@@ -46,9 +58,23 @@ export default function SubjectsPage() {
   const totalCount = rows.reduce((sum, r) => sum + (r.count === "all" ? available[r.subject] ?? 0 : Number(r.count) || 0), 0);
   const invalid = rows.some((r) => !r.count || Number(r.count) < 1 || (r.count !== "all" && available[r.subject] !== undefined && Number(r.count) > available[r.subject]));
 
-  return <main className="min-h-screen bg-gray-100 p-6 md:p-10"><div className="mx-auto max-w-5xl">
-    <h1 className="mb-8 text-4xl font-bold">📚 選擇科目</h1>
-    <div className="grid gap-6 md:grid-cols-3">{subjects.map((subject) => <button key={subject} type="button" onClick={() => openSettings(subject)} className="rounded-xl bg-white p-8 text-left shadow transition hover:-translate-y-1 hover:bg-blue-600 hover:text-white"><h2 className="text-xl font-bold">{subject}</h2><p className="mt-2 text-sm opacity-70">設定科目、年份與題數</p></button>)}</div>
+  return <main className={`${analysisStyles.page} study-theme`}><div className={analysisStyles.container}>
+    <nav className={analysisStyles.breadcrumb} aria-label="麵包屑"><Link href="/" aria-label="回首頁"><StudyIcon name="home" />首頁</Link><span aria-hidden="true">/</span><span aria-current="page">選擇科目</span></nav>
+    <header className={analysisStyles.header}><div><h1>選擇科目</h1><p>選擇你想練習的科目，開始今天的刷題。</p></div></header>
+    <div className={styles.grid}>{subjects.map((subject) => <button
+      key={subject}
+      type="button"
+      onClick={() => openSettings(subject)}
+      aria-label={`選擇${subject}，設定練習`}
+      aria-haspopup="dialog"
+      className={styles.card}
+      style={{ "--subject-main": subjectPalette[subject].main, "--subject-light": subjectPalette[subject].light } as CSSProperties}
+    >
+      <span className={styles.icon}><StudyIcon name={subjectIcons[subject]} /></span>
+      <span className={styles.title}>{subject}</span>
+      <span className={styles.description}>設定科目、年份與題數</span>
+      <span className={styles.action}>開始練習 <StudyIcon name="arrow" /></span>
+    </button>)}</div>
   </div>
 
   {selectedSubject && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/25 p-4 backdrop-blur-[2px]">
