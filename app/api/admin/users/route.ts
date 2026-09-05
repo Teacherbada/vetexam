@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/admin";
+import { recordSystemError } from "@/lib/system-errors";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -35,6 +36,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ ...rows[0], page, pageSize: 20 });
   } catch (error) {
     console.error("Admin users error:", error);
+    await recordSystemError("admin_users_read", error);
     return NextResponse.json({ error: "讀取會員失敗。" }, { status: 500 });
   }
 }

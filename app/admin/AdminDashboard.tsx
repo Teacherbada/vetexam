@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import SystemHealth from "./SystemHealth";
 
 type Group = { label: string; count: number };
 type Data = {
@@ -29,7 +30,7 @@ export default function AdminDashboard() {
       .then(setData).catch(error => { if (!controller.signal.aborted) setError(error.message); });
     return () => controller.abort();
   }, []);
-  if (error) return <main className="p-8"><p role="alert">{error}</p><button className="mt-4 rounded border p-2" onClick={() => window.location.reload()}>重新載入</button></main>;
+  if (error) return <main className="space-y-6 bg-slate-50 p-8"><p role="alert">{error}</p><button className="mt-4 rounded border p-2" onClick={() => window.location.reload()}>重新載入</button><SystemHealth /></main>;
   if (!data) return <main className="p-8" role="status">載入中…</main>;
   const max = Math.max(1, ...data.dailyUsers.map(day => day.count));
   const x = (index: number) => 5 + index / Math.max(1, data.dailyUsers.length - 1) * 90;
@@ -45,6 +46,7 @@ export default function AdminDashboard() {
       <Breakdown title="Subscription plan／status（訂閱紀錄）" rows={data.plans.map(plan => ({ label: `${plan.plan} / ${plan.status}`, count: plan.count }))} />
       <Breakdown title="回報狀態" rows={data.reports.map(report => ({ label: report.status === "open" ? "待處理" : "已處理", count: report.count }))} />
     </div>
-    <section className="rounded-xl bg-white p-5"><h2 className="font-bold">追蹤狀態</h2><ul className="mt-3 space-y-2 text-sm text-slate-600"><li>Activity（DAU／WAU）：尚未追蹤</li><li>PDF 成功／失敗：尚未追蹤</li><li>System Errors：尚未追蹤</li></ul></section>
+    <SystemHealth />
+    <section className="rounded-xl bg-white p-5"><h2 className="font-bold">追蹤狀態</h2><ul className="mt-3 space-y-2 text-sm text-slate-600"><li>Activity（DAU／WAU）：尚未追蹤</li><li>PDF 成功／失敗：尚未追蹤</li><li>System Errors：僅追蹤 Admin 資料 API，見上方錯誤紀錄</li></ul></section>
   </div></main>;
 }

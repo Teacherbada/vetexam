@@ -1,5 +1,6 @@
 ﻿import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/admin";
+import { recordSystemError } from "@/lib/system-errors";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -17,9 +18,10 @@ export async function GET(request: Request) {
       admin.sql`SELECT COALESCE(NULLIF(trim(exam_subject), ''), '未分類') AS label, count(*)::int count FROM question_sets GROUP BY 1 ORDER BY count DESC, label`,
       admin.sql`SELECT COALESCE(exam_year::text, '未設定') AS label, count(*)::int count FROM question_sets GROUP BY 1 ORDER BY label DESC`
     ]);
-    return NextResponse.json({ users: users[0], banks: banks[0], questions: questions[0], plans, reports, dailyUsers, subjects, years, activityTracked: false, pdfTracking: false, errorTracking: false });
+    return NextResponse.json({ users: users[0], banks: banks[0], questions: questions[0], plans, reports, dailyUsers, subjects, years, activityTracked: false, pdfTracking: false, errorTracking: "admin-apis-only" });
   } catch (error) {
     console.error("Dashboard error:", error);
+    await recordSystemError("admin_dashboard_read", error);
     return NextResponse.json({ error: "Dashboard unavailable" }, { status: 500 });
   }
 }

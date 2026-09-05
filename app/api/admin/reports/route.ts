@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/admin";
+import { recordSystemError } from "@/lib/system-errors";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ ...rows[0], pageSize: 20 });
   } catch (error) {
     console.error("List reports error:", error);
+    await recordSystemError("admin_reports_read", error);
     return NextResponse.json({ error: "讀取回報失敗。" }, { status: 500 });
   }
 }
@@ -44,6 +46,7 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ report: rows[0] });
   } catch (error) {
     console.error("Update reports error:", error);
+    await recordSystemError("admin_reports_update", error);
     return NextResponse.json({ error: "更新回報失敗。" }, { status: 500 });
   }
 }
