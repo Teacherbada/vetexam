@@ -14,8 +14,11 @@
 .study-brand small { display: block; color: var(--text-secondary); font-size: 11px; font-weight: 400; letter-spacing: .4px; }
 .study-nav-label { font-size: 11px; color: var(--text-secondary); margin: 0 14px 12px; letter-spacing: 2px; }
 .study-sidebar nav, .study-mobile-nav nav { display: grid; gap: 7px; }
-.study-sidebar nav a, .study-mobile-nav nav a { display: flex; gap: 12px; align-items: center; min-height: 48px; padding: 12px; border-radius: 10px; color: #626E66; font-size: 13px; }
+.study-sidebar nav :is(a, .study-nav-link-disabled), .study-mobile-nav nav :is(a, .study-nav-link-disabled) { display: flex; gap: 12px; align-items: center; min-height: 48px; padding: 12px; border-radius: 10px; color: #626E66; font-size: 13px; }
 .study-sidebar nav a:hover, .study-mobile-nav nav a:hover { background: #F1F4EE; }
+.study-nav-link-disabled { cursor: not-allowed; opacity: .72; }
+.study-nav-link-disabled > span { flex: 1; }
+.study-nav-link-disabled small { padding: 3px 7px; border-radius: 999px; background: #F1F4EE; color: #63755E; font-size: 10px; font-weight: 600; white-space: nowrap; }
 .study-home nav a[aria-current] { color: #3F725F; background: var(--primary-light); font-weight: 600; }
 .study-sidebar-note { margin-top: auto; padding: 50px 12px 0; color: #63755E; }
 .study-sidebar-note p { margin-top: 12px; font-size: 13px; }

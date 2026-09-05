@@ -120,11 +120,11 @@ export default function Home() {
     "獸醫公共衛生學",
   ];
 
-  const navigation: { href: string; label: string; icon: StudyIconName }[] = [
+  const navigation: { href: string; label: string; icon: StudyIconName; comingSoon?: boolean }[] = [
     { href: "/", label: "首頁", icon: "home" },
     { href: "/subjects", label: "國考題庫", icon: "book" },
     ...(isAdmin ? [{ href: "/pdf", label: "國考解析", icon: "folder" as StudyIconName }] : []),
-    { href: "/manual", label: "手動建立題庫", icon: "file" },
+    { href: "/manual", label: "手動建立題庫", icon: "file", comingSoon: true },
     { href: "/wrong", label: "錯題本", icon: "wrong" },
     { href: "/favorites", label: "收藏題", icon: "heart" },
     { href: "/analysis", label: "學習紀錄 / 弱點分析", icon: "chart" },
@@ -135,7 +135,7 @@ export default function Home() {
   const remaining = Math.max(0, dailyGoal.target - todayProgress);
   const visibleSubjects = subjects.filter((subject) => subject.includes(search.trim()));
   const subjectHref = (subject: string) => `/questions?${new URLSearchParams({ subjects: subject, count: "20", order: "random" })}`;
-  const navLinks = navigation.map(({ href, label, icon }) => <Link key={href} href={href} aria-current={href === "/" ? "page" : undefined}><StudyIcon name={icon} />{label}</Link>);
+  const navLinks = navigation.map(({ href, label, icon, comingSoon }) => comingSoon ? <span key={href} className="study-nav-link-disabled" aria-disabled="true"><StudyIcon name={icon} /><span>{label}</span><small>敬請期待 ✨</small></span> : <Link key={href} href={href} aria-current={href === "/" ? "page" : undefined}><StudyIcon name={icon} />{label}</Link>);
 
   return (
     <div className="study-home" lang="zh-Hant">

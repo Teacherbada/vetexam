@@ -42,7 +42,7 @@ export async function POST(request: Request) {
     const subscriptions = await (await import("@neondatabase/serverless")).neon(databaseUrl)`SELECT plan, status, expires_at FROM subscriptions WHERE user_id = ${session.user.id} LIMIT 1`;
     const subscription = subscriptions[0];
     const isPro = subscription?.plan === "pro" && subscription?.status === "active" && (subscription?.expires_at == null || new Date(subscription.expires_at) > new Date());
-    if (!isPro) return NextResponse.json({ error: "目前只有 PRO 會員可以上傳 PDF 題庫。", code: "PRO_REQUIRED" }, { status: 403 });
+    if (!isPro && !isAdmin) return NextResponse.json({ error: "目前只有 PRO 會員可以上傳 PDF 題庫。", code: "PRO_REQUIRED" }, { status: 403 });
     if (file.type !== "application/pdf") return NextResponse.json({ error: "目前只接受 PDF 檔案" }, { status: 400 });
     if (file.size === 0) return NextResponse.json({ error: "PDF 檔案是空的" }, { status: 400 });
     if (file.size > MAX_FILE_SIZE) return NextResponse.json({ error: "PDF 檔案太大", detail: "目前單一 PDF 最大限制為 10 MB。" }, { status: 413 });

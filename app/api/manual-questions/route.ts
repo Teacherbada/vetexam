@@ -5,8 +5,6 @@ import { auth } from "@/lib/auth";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type Visibility = "public" | "private";
-
 type ManualQuestion = {
   question: string;
   options: string[];
@@ -85,39 +83,10 @@ export async function POST(request: Request) {
 
     const {
       name,
-      visibility,
-      examSubject,
-      examYear,
       questions,
     } = body;
 
-    const finalVisibility: Visibility =
-      visibility === "public"
-        ? "public"
-        : "private";
-
-    /*
-     * 公開國考題庫一定要有科目與年份
-     */
-    if (finalVisibility === "public") {
-      if (!examSubject) {
-        return NextResponse.json(
-          {
-            error: "公開國考題庫必須指定科目。",
-          },
-          { status: 400 }
-        );
-      }
-
-      if (!examYear) {
-        return NextResponse.json(
-          {
-            error: "公開國考題庫必須指定年份。",
-          },
-          { status: 400 }
-        );
-      }
-    }
+    const finalVisibility = "private";
 
     if (!Array.isArray(questions)) {
       return NextResponse.json(
@@ -255,8 +224,6 @@ export async function POST(request: Request) {
       typeof name === "string" &&
       name.trim()
         ? name.trim()
-        : finalVisibility === "public"
-        ? `${examYear} ${examSubject} 國考題庫`
         : "私人手動題庫";
 
     /*
@@ -278,8 +245,8 @@ export async function POST(request: Request) {
         ${cleanedQuestions.length},
         ${finalVisibility},
         ${userId},
-        ${finalVisibility === "public" ? examSubject : null},
-        ${finalVisibility === "public" ? Number(examYear) : null}
+        ${null},
+        ${null}
       )
       RETURNING
         id,
@@ -320,11 +287,7 @@ export async function POST(request: Request) {
         VALUES (
           ${questionSetId},
           ${index + 1},
-          ${
-            finalVisibility === "public"
-              ? examSubject
-              : "手動題庫"
-          },
+          ${"手動題庫"},
           ${question.question},
           ${question.options[0] ?? ""},
           ${question.options[1] ?? ""},
@@ -342,14 +305,8 @@ export async function POST(request: Request) {
       questionSetId,
       total: cleanedQuestions.length,
       visibility: finalVisibility,
-      examSubject:
-        finalVisibility === "public"
-          ? examSubject
-          : null,
-      examYear:
-        finalVisibility === "public"
-          ? Number(examYear)
-          : null,
+      examSubject: null,
+      examYear: null,
     });
   } catch (error) {
     console.error(
