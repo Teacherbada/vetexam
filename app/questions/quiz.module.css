@@ -1,0 +1,49 @@
+﻿.page { min-height: 100vh; background: var(--study-background); color: var(--text-primary); font-family: var(--study-font); padding: 24px 24px 100px; line-height: 1.7; }
+.container { max-width: 840px; margin: auto; }
+.page :is(button, a):focus-visible { outline: 3px solid #3F725F; outline-offset: 4px; }
+.page button { cursor: pointer; }
+.topbar, .meta, .progressLabel, .questionHeader, .actions { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.topbar { margin-bottom: 24px; }
+.topbar > span { display: flex; align-items: center; gap: 10px; font-size: 20px; font-weight: 600; }
+.topbar svg { color: var(--primary); }
+.topbar small { font-size: 12px; font-weight: 400; color: var(--text-secondary); margin-left: 10px; }
+.card, .state { background: white; border: 1px solid var(--border); border-radius: 18px; padding: 32px; box-shadow: var(--shadow-card); }
+.meta { color: #3F725F; font-size: 15px; font-weight: 600; flex-wrap: wrap; }
+.tag { color: var(--text-secondary); background: #F1F3ED; border-radius: 20px; padding: 4px 12px; font-size: 12px; font-weight: 400; }
+.progressLabel { font-size: 13px; color: var(--text-secondary); margin-top: 22px; flex-wrap: wrap; }
+.progressLabel strong { color: var(--text-primary); font-size: 18px; }
+.progress { height: 6px; background: #EEF0EE; border-radius: 10px; overflow: hidden; margin-top: 10px; }
+.progress > span { display: block; height: 100%; background: var(--primary); border-radius: inherit; transition: width 150ms; }
+.questionHeader { margin-top: 28px; font-size: 12px; color: var(--text-secondary); }
+.favorite { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; border-radius: 10px; padding: 8px 12px; border: 1px solid var(--border); font-size: 13px; }
+.favorite[aria-pressed="true"] { color: #3F725F; background: var(--primary-light); }
+.favorite:hover { background: var(--primary-light); }
+.favorite svg { width: 18px; }
+.question { font-size: 23px; font-weight: 600; line-height: 1.85; margin: 14px 0 28px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.options { display: grid; gap: 12px; }
+.option { display: flex; align-items: center; gap: 14px; width: 100%; padding: 18px; background: white; color: var(--text-primary); border: 1px solid var(--border); border-radius: 14px; text-align: left; transition: background 150ms, border-color 150ms; }
+.option:not(:disabled):hover { background: #F7F9F7; border-color: #A8C1B4; }
+.option:disabled { cursor: default; opacity: 1; }
+.letter { display: grid; place-items: center; width: 32px; height: 32px; flex-shrink: 0; border: 1px solid currentColor; border-radius: 9px; color: #68756D; font-size: 13px; }
+.optionText { flex: 1; white-space: pre-wrap; overflow-wrap: anywhere; min-width: 0; font-size: 16px; }
+.selected { border-color: var(--primary); background: var(--primary-light); }
+.correct { border-color: #63A47C; background: #EAF5EE; }
+.wrong { border-color: #D96C6C; background: #FBECEC; }
+.answerStatus { font-size: 12px; font-weight: 600; }
+.correct .answerStatus, .correctText { color: #356748; }
+.wrong .answerStatus, .wrongText { color: #A44343; }
+.explanation { margin-top: 24px; padding: 22px; background: #F7F9F7; border: 1px solid var(--border); border-radius: 14px; }
+.explanation > p:first-child { font-size: 15px; font-weight: 600; }
+.explanation h2 { font-size: 16px; font-weight: 600; margin: 16px 0 8px; }
+.explanationText { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 15px; line-height: 1.9; }
+.actions { flex-wrap: wrap; margin-top: 28px; }
+.actions p { color: var(--text-secondary); font-size: 12px; }
+.state { max-width: 680px; text-align: center; margin: 40px auto; }
+.state h1 { font-size: 28px; font-weight: 600; }
+.state > p { color: var(--text-secondary); margin-top: 12px; }
+.badge { display: inline-flex; padding: 18px; border-radius: 50%; color: #3F725F; background: var(--primary-light); margin-bottom: 20px; }
+.resultScore { font-size: 64px; font-weight: 600; color: #3F725F; margin-top: 24px; }
+.resultScore small { font-size: 24px; }
+.state .actions { justify-content: center; }
+@media (max-width: 600px) { .page { padding: 16px 14px 100px; } .card, .state { padding: 22px 18px; } .topbar small { display: none; } .question { font-size: 20px; } .option { flex-wrap: wrap; padding: 16px 12px; gap: 10px; } .answerStatus { width: 100%; padding-left: 42px; } .actions > button { width: 100%; } .progressLabel { gap: 6px; } .explanation { padding: 18px; } }
+@media (prefers-reduced-motion: reduce) { .option, .progress > span { transition: none; } }
