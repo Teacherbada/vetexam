@@ -22,6 +22,8 @@ export async function POST(request: Request) {
     if (!databaseUrl) return NextResponse.json({ error: "伺服器資料庫設定錯誤" }, { status: 500 });
     const session = await auth.api.getSession({ headers: request.headers });
     if (!session?.user?.id) return NextResponse.json({ error: "請先登入才能上傳 PDF。" }, { status: 401 });
+    const isAdmin = session?.user?.id === process.env.ADMIN_USER_ID?.trim();
+    if (!isAdmin) return NextResponse.json({ error: "目前 PDF 解析功能僅限管理員使用。", code: "ADMIN_REQUIRED" }, { status: 403 });
     const formData = await request.formData();
     const file = formData.get("file");
     const visibilityValue = formData.get("visibility");
