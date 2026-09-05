@@ -19,7 +19,7 @@ function shuffle(items: Question[]) {
 function QuestionsContent() {
   const searchParams = useSearchParams();
   const subjects = (searchParams.get("subjects") || "").split(",").map((x) => x.trim()).filter(Boolean);
-  const years = (searchParams.get("years") || "").split(",").map(Number).filter(Number.isInteger);
+  const years = (searchParams.get("years") || "").split(",").map((year) => year.trim()).filter(Boolean).map(Number).filter(Number.isInteger);
   const order = searchParams.get("order") === "random" ? "random" : "original";
   const count = Number(searchParams.get("count") || 500);
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -44,6 +44,7 @@ function QuestionsContent() {
         if (subjects.length) params.set("subjects", subjects.join(","));
         if (years.length) params.set("years", years.join(","));
         params.set("count", String(Math.min(Math.max(count || 500, 1), 500)));
+        params.set("order", order);
         const response = await fetch(`/api/quiz?${params.toString()}`, { cache: "no-store" });
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || "取得題目失敗");

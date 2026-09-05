@@ -33,6 +33,9 @@ export async function GET(request: Request) {
       : sql`qs.visibility = 'public'`;
     const subjectFilter = subjects.length ? sql`q.subject = ANY(${subjects})` : sql`TRUE`;
     const yearFilter = years.length ? sql`qs.exam_year = ANY(${years})` : sql`TRUE`;
+    const questionOrder = searchParams.get("order") === "random"
+      ? sql`RANDOM()`
+      : sql`qs.exam_year ASC NULLS LAST, qs.created_at ASC, q.question_number ASC`;
 
     const rows = await sql`
       SELECT q.id, q.question_set_id, q.question_number, q.subject, q.question,
@@ -41,7 +44,7 @@ export async function GET(request: Request) {
       FROM questions q
       INNER JOIN question_sets qs ON qs.id = q.question_set_id
       WHERE ${visibility} AND ${subjectFilter} AND ${yearFilter}
-      ORDER BY qs.exam_year ASC NULLS LAST, qs.created_at ASC, q.question_number ASC
+      ORDER BY ${questionOrder}
       LIMIT ${count}
     `;
 
