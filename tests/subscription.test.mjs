@@ -180,6 +180,9 @@ test("subscription page renders anonymous, unavailable and all membership states
     "@/components/dashboard/StudyUI": { StudyIcon: () => null },
     "@/app/analysis/analysis.module.css": { default: {} },
     "./subscription.module.css": { default: {} },
+    "@/lib/payment/view": { getBillingView: async () => ({ enabled: false, managed: false, terms: { currency: "TWD", amountMinor: 19900, trialDays: 30 } }) },
+    "./BillingActions": { default: () => createElement("button", { disabled: true }, "升級 Pro · 即將開放") },
+    "./RefreshSubscription": { default: () => createElement("button", {}, "重新整理狀態") },
     "@/lib/subscription": { getUserSubscription: async () => {
       if (unavailable) throw new Error("offline");
       return result;
@@ -201,7 +204,7 @@ test("subscription page renders anonymous, unavailable and all membership states
     [{ status: "expired" }, /你的 Pro 期間已結束/],
     [{ status: "trialing", trial_start: before, trial_end: now.toISOString() }, /你的 Pro 期間已結束/],
   ]) {
-    result = { subscription: { ...record, ...overrides }, access: evaluate(overrides) };
+    result = { user: { id: "member" }, subscription: { ...record, ...overrides }, access: evaluate(overrides) };
     const html = await render();
     assert.match(html, expected);
     assert.match(html, /href="\/" aria-label="回首頁"/);

@@ -16,6 +16,11 @@
 .proHeading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 22px; }
 .proHeading .badge { background: var(--warning-light); color: #80652C; }
 .subtitle { margin-top: 8px; font-size: 16px; }
+.price { font-size: 30px; font-weight: 600; margin-top: 20px; }
+.price small { color: var(--text-secondary); font-size: 14px; font-weight: 400; margin-left: 6px; }
+.billingActions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+.billingActions > p { width: 100%; }
+.returnCard { margin-top: 28px; }
 .features { list-style: none; padding: 0; margin: 28px 0; display: grid; gap: 22px; }
 .features li { display: flex; gap: 12px; align-items: start; font-size: 14px; }
 .features svg { color: var(--primary); margin-top: 3px; }

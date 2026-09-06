@@ -5,6 +5,9 @@ import { getUserSubscription } from "@/lib/subscription";
 import type { SubscriptionStatus } from "@/lib/subscription-state";
 import analysisStyles from "@/app/analysis/analysis.module.css";
 import styles from "./subscription.module.css";
+import { getBillingView } from "@/lib/payment/view";
+import BillingActions from "./BillingActions";
+import RefreshSubscription from "./RefreshSubscription";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,6 +35,8 @@ export default async function SubscriptionPage() {
   }
   const access = result?.access;
   const subscription = result?.subscription;
+  const billing = await getBillingView(result?.user.id);
+  const price = `NT$${new Intl.NumberFormat("zh-TW", { maximumFractionDigits: 2 }).format(billing.terms.amountMinor / 100)}`;
   const title = access?.hasProAccess
     ? access.status === "trialing" ? "Pro 免費試用中" : "目前方案：VetExam Pro"
     : "目前方案：免費版";
@@ -74,20 +79,22 @@ export default async function SubscriptionPage() {
               <div><dt>下一次續訂</dt><dd>{access.renewalCanceled ? "已取消自動續訂" : access.nextRenewalAt ? date(access.nextRenewalAt) : "目前沒有排定續訂"}</dd></div>
             </dl>
             <p className={styles.small}>時間以台灣時間顯示。重新整理可查看最新狀態。</p>
-            <a href="/subscription" className="study-button">重新整理狀態</a>
+            <RefreshSubscription />
+            {billing.managed && <BillingActions enabled={billing.enabled} managed canceled={access.renewalCanceled} canResume={billing.canResume} expired={access.status === "expired"} />}
           </>}
       </section>
       <section className={`study-card ${styles.card} ${styles.pro}`} aria-labelledby="pro-plan">
         <div className={styles.proHeading}><span className={styles.icon}><StudyIcon name="paw" /></span><span className={styles.badge}>即將開放</span></div>
         <h2 id="pro-plan">VetExam Pro</h2><p className={styles.subtitle}>讓你的國考準備更完整</p>
-        <p className={styles.description}>我們正在準備更完整的會員方案，陪你一步一步走向獸醫之路。</p>
+        <p className={styles.price}>{price}<small>／月</small></p>
+        <p className={styles.description}>新會員預計可免費試用 {billing.terms.trialDays} 天，須先綁定付款方式。試用結束後每月 {price} 自動續訂，可在到期前取消。</p>
         <ul className={styles.features}>
           <li><StudyIcon name="file" /><span>私人學習工具<small>方案內容即將公布</small></span></li>
-          <li><StudyIcon name="calendar" /><span>月繳與年繳方案<small>即將推出</small></span></li>
-          <li><StudyIcon name="leaf" /><span>Pro 免費試用<small>開放時間即將公布</small></span></li>
+          <li><StudyIcon name="calendar" /><span>每月訂閱<small>價格與續訂資訊清楚呈現</small></span></li>
+          <li><StudyIcon name="leaf" /><span>{billing.terms.trialDays} 天 Pro 免費試用<small>每位新會員限用一次 · 即將開放</small></span></li>
         </ul>
-        <button type="button" disabled className={`study-button study-button-primary ${styles.upgrade}`}>升級 Pro · 即將開放</button>
-        <p className={styles.small}>目前尚未開放購買，不會產生扣款。</p>
+        {!billing.managed && <BillingActions enabled={billing.enabled && Boolean(result) && !access?.hasProAccess} trialEligible={billing.trialEligible} expired={access?.status === "expired"} />}
+        <p className={styles.small}>{billing.enabled ? "付款方式將由付款平台安全管理。" : "目前尚未開放購買，不會產生扣款。"}</p>
       </section>
     </div>
     <footer className={styles.footer}><span>每一點累積，都讓你離夢想更近。</span><Link href="/feedback">會員問題與建議 <StudyIcon name="arrow" /></Link></footer>
