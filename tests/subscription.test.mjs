@@ -173,7 +173,17 @@ test("manual import delegates entitlement to the server guard before reading req
 test("subscription page renders anonymous, unavailable and all membership states truthfully", async () => {
   let result = null;
   let unavailable = false;
+  const presentationMocks = {
+    "react/jsx-runtime": jsxRuntime,
+    "next/link": { default: props => createElement("a", props) },
+    "./subscription.module.css": { default: {} },
+    "@/components/dashboard/StudyUI": { StudyIcon: () => null },
+    "./BillingActions": { default: () => createElement("button", { disabled: true }, "升級 Pro · 即將開放") },
+    "./plans": load("app/subscription/plans.ts"),
+  };
   const page = load("app/subscription/page.tsx", {
+    "./Pricing": load("app/subscription/Pricing.tsx", presentationMocks),
+    "./PlanInformation": load("app/subscription/PlanInformation.tsx", presentationMocks),
     "react/jsx-runtime": jsxRuntime,
     "next/link": { default: props => createElement("a", props) },
     "next/headers": { headers: async () => new Headers() },
@@ -190,6 +200,13 @@ test("subscription page renders anonymous, unavailable and all membership states
   });
   const render = async () => renderToStaticMarkup(await page.default());
   assert.match(await render(), /登入後查看你的方案/);
+  const publicHtml = await render();
+  for (const price of ["NT$199", "NT$1,095", "NT$2,189", "NT$1,194", "NT$2,388"]) assert.ok(publicHtml.includes(price));
+  assert.match(publicHtml, /需先綁定有效信用卡/);
+  assert.match(publicHtml, /首次實際付款成功後/);
+  assert.match(publicHtml, /mailto:vetexam.support.tw@gmail.com/);
+  assert.match(publicHtml, /tel:0988058090/);
+  assert.doesNotMatch(publicHtml, /PDF|私人題庫|AI 出題/);
   unavailable = true;
   assert.match(await render(), /暫時無法讀取會員資料/);
   assert.doesNotMatch(await render(), /目前方案：免費版/);
@@ -208,6 +225,6 @@ test("subscription page renders anonymous, unavailable and all membership states
     const html = await render();
     assert.match(html, expected);
     assert.match(html, /href="\/" aria-label="回首頁"/);
-    assert.match(html, /disabled=""[^>]*>升級 Pro · 即將開放/);
+    assert.match(html, /disabled=""[^>]*>開始 30 天免費試用 · 即將開放/);
   }
 });

@@ -8,10 +8,12 @@ import styles from "./subscription.module.css";
 import { getBillingView } from "@/lib/payment/view";
 import BillingActions from "./BillingActions";
 import RefreshSubscription from "./RefreshSubscription";
+import Pricing from "./Pricing";
+import PlanInformation from "./PlanInformation";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const metadata = { title: "會員方案 | VetExam" };
+export const metadata = { title: "PRO 訂閱方案 | VetExam", description: "查看 PRO 月繳、半年與年度方案、30 天免費試用條件及客服資訊。" };
 
 const labels: Record<SubscriptionStatus, string> = {
   free: "免費會員", trialing: "免費試用", active: "訂閱有效",
@@ -36,7 +38,6 @@ export default async function SubscriptionPage() {
   const access = result?.access;
   const subscription = result?.subscription;
   const billing = await getBillingView(result?.user.id);
-  const price = `NT$${new Intl.NumberFormat("zh-TW", { maximumFractionDigits: 2 }).format(billing.terms.amountMinor / 100)}`;
   const title = access?.hasProAccess
     ? access.status === "trialing" ? "Pro 免費試用中" : "目前方案：VetExam Pro"
     : "目前方案：免費版";
@@ -46,11 +47,16 @@ export default async function SubscriptionPage() {
       <Link href="/" aria-label="回首頁"><StudyIcon name="home" />回首頁</Link>
       <span aria-hidden="true">/</span><span aria-current="page">會員方案</span>
     </nav>
-    <header className={analysisStyles.header}><div>
-      <p className={analysisStyles.eyebrow}>陪你穩穩前進 · VETEXAM</p>
-      <h1>會員方案與訂閱管理</h1><p>依照自己的步調，安排更完整的國考準備。</p>
-    </div><span className={styles.icon}><StudyIcon name="leaf" /></span></header>
-    <div className={styles.grid}>
+    <header className={styles.hero}>
+      <p className={styles.eyebrow}>陪你穩穩前進 · VETEXAM</p>
+      <h1>VetExam <span>PRO</span></h1>
+      <p>更完整的刷題體驗，陪你一步一步準備獸醫國考。</p>
+      <div className={styles.trialBanner}><strong>30 天免費試用</strong><span>需先綁定有效信用卡 · 每個帳號限享一次</span></div>
+      <p className={styles.heroNote}>試用期間不收取 PRO 訂閱費；結束前若未取消，將依選擇的方案自動續訂。</p>
+    </header>
+    <Pricing signedIn={Boolean(result)} managed={billing.managed} hasPro={Boolean(access?.hasProAccess)} enabled={billing.enabled} trialEligible={billing.trialEligible} expired={access?.status === "expired"} monthlyMatches={billing.terms.amountMinor === 19900 && billing.terms.trialDays === 30} />
+    <PlanInformation />
+    <div className={styles.section}>
       <section className={`study-card ${styles.card}`} aria-labelledby="current-plan">
         <p className={styles.eyebrow}>我的會員方案</p>
         {unavailable ? <div role="alert"><h2 id="current-plan">暫時無法讀取會員資料</h2>
@@ -83,20 +89,11 @@ export default async function SubscriptionPage() {
             {billing.managed && <BillingActions enabled={billing.enabled} managed canceled={access.renewalCanceled} canResume={billing.canResume} expired={access.status === "expired"} />}
           </>}
       </section>
-      <section className={`study-card ${styles.card} ${styles.pro}`} aria-labelledby="pro-plan">
-        <div className={styles.proHeading}><span className={styles.icon}><StudyIcon name="paw" /></span><span className={styles.badge}>即將開放</span></div>
-        <h2 id="pro-plan">VetExam Pro</h2><p className={styles.subtitle}>讓你的國考準備更完整</p>
-        <p className={styles.price}>{price}<small>／月</small></p>
-        <p className={styles.description}>新會員預計可免費試用 {billing.terms.trialDays} 天，須先綁定付款方式。試用結束後每月 {price} 自動續訂，可在到期前取消。</p>
-        <ul className={styles.features}>
-          <li><StudyIcon name="file" /><span>私人學習工具<small>方案內容即將公布</small></span></li>
-          <li><StudyIcon name="calendar" /><span>每月訂閱<small>價格與續訂資訊清楚呈現</small></span></li>
-          <li><StudyIcon name="leaf" /><span>{billing.terms.trialDays} 天 Pro 免費試用<small>每位新會員限用一次 · 即將開放</small></span></li>
-        </ul>
-        {!billing.managed && <BillingActions enabled={billing.enabled && Boolean(result) && !access?.hasProAccess} trialEligible={billing.trialEligible} expired={access?.status === "expired"} />}
-        <p className={styles.small}>{billing.enabled ? "付款方式將由付款平台安全管理。" : "目前尚未開放購買，不會產生扣款。"}</p>
-      </section>
     </div>
-    <footer className={styles.footer}><span>每一點累積，都讓你離夢想更近。</span><Link href="/feedback">會員問題與建議 <StudyIcon name="arrow" /></Link></footer>
+    <footer className={styles.contactFooter} aria-label="VetExam 客服資訊">
+      <div><strong>VetExam</strong><p>個人賣家</p></div>
+      <address><div><span>客服信箱</span><a href="mailto:vetexam.support.tw@gmail.com">vetexam.support.tw@gmail.com</a></div><div><span>客服電話</span><a href="tel:0988058090">0988-058-090</a></div></address>
+      <Link href="/feedback">聯絡與意見回饋 <StudyIcon name="arrow" /></Link>
+    </footer>
   </div></main>;
 }
