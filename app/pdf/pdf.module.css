@@ -1,0 +1,38 @@
+.container { max-width: 960px; margin: auto; }
+.account { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; font-size: 13px; color: var(--text-secondary); overflow-wrap: anywhere; }
+.badge { display: inline-flex; border-radius: 999px; background: var(--primary-light); color: #3F725F; padding: 4px 10px; font-size: 12px; font-weight: 500; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 18px; padding: 24px; box-shadow: var(--shadow-card); }
+.grid { display: grid; gap: 20px; grid-template-columns: 1fr 1fr; }
+.fields { display: grid; gap: 16px; }
+.field { display: block; font-size: 14px; font-weight: 500; }
+.field select { margin-top: 8px; }
+.upload { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 28px 20px; border: 1.5px dashed #D8DED9; border-radius: 18px; background: #FBFCFA; text-align: center; cursor: pointer; transition: background 150ms, border-color 150ms; }
+.upload:hover, .upload:focus-within { background: #F3F8F5; border-color: var(--primary); }
+.upload > svg { width: 32px; height: 32px; color: var(--primary); }
+.upload small { color: var(--text-secondary); font-size: 12px; }
+.file { width: 100%; padding: 12px; border-radius: 10px; background: white; font-size: 13px; overflow-wrap: anywhere; }
+.file small { display: block; margin-top: 4px; }
+.permissions { margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border); }
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 24px; }
+.primary, .secondary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 18px; min-height: 44px; border-radius: 10px; font-size: 14px; font-weight: 500; cursor: pointer; transition: background 150ms; }
+.primary { background: var(--primary); color: white; }
+.primary:hover { background: var(--primary-hover); }
+.secondary { border: 1px solid var(--border); background: white; color: var(--text-primary); }
+.secondary:hover { background: var(--primary-light); }
+.primary:disabled { background: #E8EBE8; color: #6F7873; cursor: not-allowed; }
+.status { border: 1px solid var(--border); border-radius: 12px; background: var(--study-background); padding: 16px; margin-top: 20px; font-size: 14px; overflow-wrap: anywhere; white-space: pre-wrap; }
+.success { background: var(--success-light); color: #3F725F; }
+.error { background: var(--error-light); color: #A44747; }
+.warning { background: var(--warning-light); color: #80652C; border-radius: 12px; padding: 14px 16px; font-size: 13px; margin-top: 16px; }
+.gate { text-align: center; padding: 48px 24px; }
+.gate p { color: var(--text-secondary); margin: 12px 0 20px; }
+.skeleton { height: 14px; border-radius: 6px; background: #EEF0EE; margin: 14px 0; width: 70%; }
+.skeleton:last-child { width: 45%; }
+.content { margin-top: 24px; }
+.content :is(button, select, input, textarea) { min-height: 44px; }
+.content label:has(input[type="file"]) { display: inline-flex; align-items: center; min-height: 44px; }
+.content :is(button, select, input, textarea):focus-visible, .content label:has(input:focus-visible) { outline: 2px solid rgba(95,143,123,.35); outline-offset: 2px; }
+.content select, .content textarea { border-color: var(--border); color: var(--text-primary); }
+.content button { transition: background 150ms; }
+@media (max-width: 700px) { .grid { grid-template-columns: 1fr; } .card { padding: 20px; } .actions > button { width: 100%; } .account { width: 100%; } }
+@media (prefers-reduced-motion: reduce) { .upload, .primary, .secondary, .content button { transition: none; } }
