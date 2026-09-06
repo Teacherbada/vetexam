@@ -182,6 +182,7 @@ test("subscription page renders anonymous, unavailable and all membership states
     "./plans": load("app/subscription/plans.ts"),
   };
   const page = load("app/subscription/page.tsx", {
+    "@/components/policies/PolicyLinks": { default: () => null },
     "./Pricing": load("app/subscription/Pricing.tsx", presentationMocks),
     "./PlanInformation": load("app/subscription/PlanInformation.tsx", presentationMocks),
     "react/jsx-runtime": jsxRuntime,

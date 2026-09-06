@@ -1,0 +1,28 @@
+.container { max-width: 840px; margin: auto; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 18px; box-shadow: 0 3px 14px rgba(0,0,0,.025); padding: 36px; font-size: 16px; line-height: 1.8; overflow-wrap: anywhere; }
+.section + .section { margin-top: 30px; padding-top: 28px; border-top: 1px solid #eef0ee; }
+.section h2 { margin-bottom: 14px; }
+.section h3 { margin: 20px 0 8px; }
+.section p + p { margin-top: 12px; }
+.section ul { list-style: disc; padding-left: 24px; margin-top: 12px; }
+.section li + li { margin-top: 6px; }
+.card a { color: #3f725f; text-decoration: underline; text-underline-offset: 4px; }
+.notice { background: var(--primary-light); border-radius: 10px; padding: 16px 20px; margin-bottom: 24px; }
+.plans { display: grid; gap: 14px; margin: 18px 0; }
+.plan { border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; }
+.plan h3 { margin: 0 0 8px; }
+.plan strong { color: #3f725f; }
+.plan small { display: block; color: #626e67; font-size: 14px; margin: 6px 0; }
+.updated { margin-top: 28px; color: #626e67; font-size: 14px; }
+.links { display: flex; flex-wrap: wrap; gap: 4px 24px; grid-column: 1 / -1; flex-basis: 100%; min-width: 0; font-size: 14px; }
+.links a { display: inline-flex; align-items: center; min-height: 44px; color: #626e67; }
+.links a:hover { color: var(--primary-hover); text-decoration: underline; text-underline-offset: 4px; }
+.links a:focus-visible { outline: 3px solid #3f725f; outline-offset: 4px; }
+.footer { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 32px; padding-top: 28px; border-top: 1px solid var(--border); font-size: 14px; color: #626e67; }
+.footer strong { font-size: 18px; color: var(--text-primary); }
+.footer p { margin-top: 8px; }
+.footer address { font-style: normal; min-width: 0; }
+.footer address span { display: block; font-size: 13px; }
+.footer address a { display: inline-flex; align-items: center; min-height: 44px; max-width: 100%; overflow-wrap: anywhere; }
+.footer address a:hover { color: var(--primary-hover); }
+@media (max-width: 600px) { .card { padding: 22px; } .footer { grid-template-columns: minmax(0, 1fr); } .links { flex-direction: column; align-items: flex-start; gap: 2px; } .plan { padding: 16px; } }

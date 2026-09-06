@@ -10,6 +10,7 @@ import BillingActions from "./BillingActions";
 import RefreshSubscription from "./RefreshSubscription";
 import Pricing from "./Pricing";
 import PlanInformation from "./PlanInformation";
+import PolicyLinks from "@/components/policies/PolicyLinks";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -94,6 +95,7 @@ export default async function SubscriptionPage() {
       <div><strong>VetExam</strong><p>個人賣家</p></div>
       <address><div><span>客服信箱</span><a href="mailto:vetexam.support.tw@gmail.com">vetexam.support.tw@gmail.com</a></div><div><span>客服電話</span><a href="tel:0988058090">0988-058-090</a></div></address>
       <Link href="/feedback">聯絡與意見回饋 <StudyIcon name="arrow" /></Link>
+      <PolicyLinks />
     </footer>
   </div></main>;
 }
