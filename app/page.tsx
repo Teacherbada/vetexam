@@ -182,7 +182,14 @@ export default function Home() {
               <section className="study-card study-countdown"><h2><StudyIcon name="calendar" />國考倒數</h2><p className="study-days">{daysLeft}<span>天</span></p><label htmlFor="exam-date">我的目標考試日期</label><input id="exam-date" type="date" value={examDate} onChange={(event) => { if (event.target.value) { setExamDate(event.target.value); localStorage.setItem("examDate", event.target.value); } }} /><p className="study-muted">照自己的步調，準備每一天。</p></section>
             </div>
           </div>
-          <footer className="study-footer"><span><b>VetExam</b>｜陪未來的獸醫，走好每一步。</span><Link href="/feedback">聯絡與意見回饋 <StudyIcon name="arrow" /></Link></footer>
+          <footer className="study-footer" aria-label="VetExam 客服資訊">
+            <div className="study-footer-brand"><b>VetExam</b><p>陪未來的獸醫，走好每一步。</p></div>
+            <address className="study-footer-contact">
+              <div><span>客服信箱</span><a href="mailto:vetexam.support.tw@gmail.com">vetexam.support.tw@gmail.com</a></div>
+              <div><span>客服電話</span><a href="tel:0988058090">0988-058-090</a></div>
+            </address>
+            <div className="study-footer-meta"><small>© 2026 VetExam. All rights reserved.</small><Link href="/feedback">聯絡與意見回饋 <StudyIcon name="arrow" /></Link></div>
+          </footer>
         </main>
       </div>
     </div>

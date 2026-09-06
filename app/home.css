@@ -104,10 +104,17 @@
 .study-countdown label { display: block; font-size: 12px; margin-bottom: 6px; color: var(--text-secondary); }
 .study-countdown input { display: block; min-height: 44px; width: 100%; min-width: 0; padding: 8px 12px; border: 1px solid #DFE4D9; background: white; border-radius: 8px; }
 .study-countdown > p:last-child { margin-top: 10px; }
-.study-footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; margin-top: 36px; padding-top: 20px; border-top: 1px solid var(--border); color: var(--text-secondary); font-size: 11px; }
-.study-footer b { font-weight: 600; }
-.study-footer a { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; }
+.study-footer { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px 32px; margin-top: 36px; padding: 32px 0 24px; border-top: 1px solid var(--border); background: var(--study-background); color: var(--text-secondary); font-size: 14px; }
+.study-footer-brand b { color: var(--text-primary); font-size: 17px; font-weight: 600; }
+.study-footer-brand p { margin-top: 8px; }
+.study-footer-contact { display: grid; gap: 8px; min-width: 0; font-style: normal; }
+.study-footer-contact span { display: block; color: var(--text-primary); font-size: 13px; font-weight: 600; }
+.study-footer a { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; max-width: 100%; overflow-wrap: anywhere; }
+.study-footer a:hover { color: var(--primary); }
+.study-footer-meta { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 20px; padding-top: 16px; border-top: 1px solid var(--border); font-size: 12px; }
+.study-footer-meta small { font-size: inherit; }
 .study-footer svg { width: 14px; }
+@media (max-width: 560px) { .study-footer { grid-template-columns: minmax(0, 1fr); } .study-footer-meta { flex-direction: column; align-items: flex-start; } }
 @media (min-width: 1450px) { .study-bank p span { display: inline; } }
 @media (max-width: 1150px) { .study-content { padding: 30px 24px 80px; } .study-header { padding-inline: 24px; } .study-bank-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .study-goal-content { padding: 24px; } .study-goal { grid-template-columns: 1.5fr 1fr; } .study-bottom-grid { grid-template-columns: 1.4fr 1fr; } }
 @media (max-width: 850px) { .study-sidebar { display: none; } .study-body { margin-left: 0; } .study-breadcrumb { display: none; } .study-mobile-nav { display: block; } .study-mobile-nav summary { display: flex; gap: 10px; align-items: center; min-height: 44px; } .study-mobile-nav nav { position: absolute; top: 80px; left: 16px; right: 16px; z-index: 30; background: #FDFDFC; border: 1px solid var(--border); padding: 16px; border-radius: 14px; box-shadow: 0 8px 24px rgb(0 0 0 / 8%); } .study-account-menu summary { max-width: 150px; font-size: 12px; } }
