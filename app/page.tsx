@@ -128,6 +128,7 @@ export default function Home() {
     { href: "/wrong", label: "錯題本", icon: "wrong" },
     { href: "/favorites", label: "收藏題", icon: "heart" },
     { href: "/analysis", label: "學習紀錄 / 弱點分析", icon: "chart" },
+    { href: "/subscription", label: "會員方案", icon: "leaf" },
   ];
   const subjectIcons: StudyIconName[] = ["leaf", "file", "search", "heart", "target", "book"];
   const studied = subjects.filter((subject) => progress[subject]?.answered.length > 0);

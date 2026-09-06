@@ -49,7 +49,7 @@ export const auth = betterAuth({
               VALUES (
                 ${user.id},
                 'free',
-                'active'
+                'free'
               )
               ON CONFLICT (user_id) DO NOTHING
             `;

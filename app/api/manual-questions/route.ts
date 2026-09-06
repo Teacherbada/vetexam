@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { neon } from "@neondatabase/serverless";
 import { auth } from "@/lib/auth";
+import { hasProAccess } from "@/lib/subscription";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -48,26 +49,7 @@ export async function POST(request: Request) {
     /*
      * 檢查 PRO
      */
-    const subscriptions = await sql`
-      SELECT
-        plan,
-        status,
-        expires_at
-      FROM subscriptions
-      WHERE user_id = ${userId}
-      LIMIT 1
-    `;
-
-    const subscription = subscriptions[0];
-
-    const isPro =
-      subscription?.plan === "pro" &&
-      subscription?.status === "active" &&
-      (
-        subscription?.expires_at === null ||
-        subscription?.expires_at === undefined ||
-        new Date(subscription.expires_at) > new Date()
-      );
+    const isPro = await hasProAccess(request.headers);
 
     if (!isPro) {
       return NextResponse.json(

@@ -1,0 +1,29 @@
+.container { max-width: 1000px; margin: auto; }
+.grid { display: grid; grid-template-columns: 1.15fr 1fr; gap: 24px; align-items: start; }
+.card { padding: 30px; }
+.eyebrow { color: var(--text-secondary); font-size: 13px; margin-bottom: 16px; }
+.title { margin-top: 14px; }
+.badge { display: inline-flex; padding: 5px 12px; border-radius: 24px; background: var(--primary-light); color: #3F725F; font-size: 12px; font-weight: 600; }
+.icon { display: inline-flex; align-items: center; justify-content: center; width: 48px; height: 48px; border-radius: 16px; color: var(--primary); background: var(--primary-light); }
+.description { color: var(--text-secondary); font-size: 14px; margin: 16px 0 24px; line-height: 1.85; }
+.notice { background: var(--primary-light); border-radius: var(--radius-button); padding: 14px 16px; margin-top: 20px; font-size: 14px; }
+.details { margin: 24px 0 16px; }
+.details > div { display: flex; justify-content: space-between; gap: 20px; padding: 14px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+.details dt { color: var(--text-secondary); flex-shrink: 0; }
+.details dd { text-align: right; overflow-wrap: anywhere; }
+.small { color: var(--text-secondary); font-size: 12px; margin: 12px 0 18px; }
+.pro { border-color: #D8E4DC; }
+.proHeading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 22px; }
+.proHeading .badge { background: var(--warning-light); color: #80652C; }
+.subtitle { margin-top: 8px; font-size: 16px; }
+.features { list-style: none; padding: 0; margin: 28px 0; display: grid; gap: 22px; }
+.features li { display: flex; gap: 12px; align-items: start; font-size: 14px; }
+.features svg { color: var(--primary); margin-top: 3px; }
+.features small { display: block; color: var(--text-secondary); font-size: 12px; margin-top: 3px; }
+.upgrade { width: 100%; }
+.upgrade:disabled { cursor: not-allowed; opacity: .7; }
+.footer { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 16px; color: var(--text-secondary); font-size: 13px; margin-top: 30px; }
+.footer a { display: inline-flex; align-items: center; gap: 8px; color: var(--primary); min-height: 44px; }
+.footer a:hover { color: var(--primary-hover); }
+@media (max-width: 760px) { .grid { grid-template-columns: 1fr; } .card { padding: 22px; } }
+@media (max-width: 420px) { .details > div { flex-direction: column; gap: 5px; } .details dd { text-align: left; } }
