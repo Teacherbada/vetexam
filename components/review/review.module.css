@@ -1,0 +1,33 @@
+.container { max-width: 960px; margin: auto; }
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; color: var(--text-secondary); font-size: 14px; }
+.list { display: grid; gap: 16px; }
+.card { padding: 20px 24px; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow-card); overflow-wrap: anywhere; transition: transform 150ms ease, border-color 150ms ease, box-shadow 150ms ease; }
+@media (hover: hover) { .card:hover { transform: translateY(-1px); border-color: #D5DDD7; box-shadow: 0 7px 22px rgb(0 0 0 / 4.5%); } }
+.meta { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; color: var(--text-secondary); font-size: 12px; }
+.badge { display: inline-flex; align-items: center; gap: 6px; background: var(--subject-light, var(--primary-light)); color: var(--text-primary); border-radius: 999px; padding: 4px 9px; font-size: 12px; font-weight: 500; }
+.badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--subject-main, var(--primary)); flex-shrink: 0; }
+.card h2.question { margin: 12px 0; font-size: 16px; line-height: 1.65; font-weight: 500; white-space: pre-wrap; }
+.options { display: grid; gap: 6px; margin: 12px 0; font-size: 14px; }
+.option { display: flex; gap: 10px; white-space: pre-wrap; }
+.option span { color: var(--text-secondary); }
+.answers { display: flex; flex-wrap: wrap; gap: 8px 24px; font-size: 14px; margin-top: 12px; }
+.incorrect { color: #A44747; background: var(--error-light); border-radius: 6px; padding: 1px 7px; margin-left: 6px; }
+.correct { color: #3F725F; background: var(--success-light); border-radius: 6px; padding: 1px 7px; margin-left: 6px; }
+.explanation { margin-top: 14px; padding: 12px 16px; background: var(--study-background); border-radius: 10px; font-size: 14px; }
+.explanation p { white-space: pre-wrap; }
+.explanation p + p { margin-top: 6px; color: var(--text-secondary); }
+.note { display: block; margin-top: 16px; font-size: 13px; font-weight: 500; }
+.note textarea { display: block; width: 100%; min-height: 76px; margin-top: 8px; padding: 10px 12px; resize: vertical; border: 1px solid var(--border); border-radius: 10px; background: white; color: var(--text-primary); font-size: 14px; font-weight: 400; }
+.note textarea::placeholder { color: var(--text-secondary); }
+.footer { display: flex; justify-content: flex-end; margin-top: 14px; }
+.primary, .secondary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 10px 16px; border-radius: 10px; font-size: 14px; font-weight: 500; transition: background 150ms ease; cursor: pointer; }
+.primary { background: var(--primary); color: white; }
+.primary:hover { background: var(--primary-hover); }
+.secondary { border: 1px solid var(--border); background: white; color: #3F725F; }
+.secondary:hover { background: var(--primary-light); }
+.card :is(button, textarea):focus-visible, .toolbar a:focus-visible, .empty a:focus-visible { outline: 2px solid rgba(95,143,123,.35); outline-offset: 2px; }
+.empty { padding: 56px 24px; text-align: center; border: 1px dashed #DDE3DF; border-radius: 18px; background: var(--surface); }
+.emptyIcon { display: inline-flex; padding: 16px; margin-bottom: 16px; background: var(--primary-light); color: var(--primary); border-radius: 50%; }
+.empty p { margin: 12px 0 24px; color: var(--text-secondary); font-size: 14px; }
+@media (max-width: 700px) { .card { padding: 20px; } .toolbar { gap: 12px; } .empty { padding: 40px 20px; } .footer .secondary { width: 100%; } }
+@media (prefers-reduced-motion: reduce) { .card, .primary, .secondary { transition: none; } .card:hover { transform: none; } }
