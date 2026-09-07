@@ -15,7 +15,7 @@ function load(path, mocks = {}) {
   return exports;
 }
 const policy = load("lib/payment/policy.ts");
-const config = load("lib/payment/config.ts", { "server-only": {} });
+const config = load("lib/payment/config.ts", { "server-only": {}, "@/lib/subscription/plans": load("lib/subscription/plans.ts") });
 const events = load("lib/payment/events.ts", { "./policy": policy });
 const snapshot = {
   id: "sub", customerId: "customer", userId: "member", priceReference: "price",

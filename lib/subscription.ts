@@ -13,18 +13,22 @@ export async function getUserSubscription(headers: Headers) {
     SELECT id, user_id, plan, status, expires_at, trial_start, trial_end,
       current_period_start, current_period_end, cancel_at_period_end, canceled_at,
       access_source, provider, provider_customer_id, provider_subscription_id,
-      created_at, updated_at, NOW() AS checked_at
-    FROM subscriptions WHERE user_id = ${session.user.id} LIMIT 1
+      created_at, updated_at, NOW() AS checked_at,
+      to_jsonb(s)->>'billing_plan' AS billing_plan,
+      to_jsonb(s)->>'reward_start' AS reward_start, to_jsonb(s)->>'reward_end' AS reward_end
+    FROM subscriptions s WHERE user_id = ${session.user.id} LIMIT 1
   `;
   const record = (rows[0] ?? null) as (SubscriptionRecord & { checked_at: string }) | null;
   const access = evaluateSubscription(record, record ? new Date(record.checked_at) : new Date());
   // Provider identifiers and internal grant provenance stay on the server.
   const subscription = record ? {
-    id: record.id, user_id: record.user_id, plan: record.plan, status: access.status,
+    id: record.id, user_id: record.user_id, plan: access.hasProAccess ? "pro" : record.plan, status: access.status,
     expires_at: record.expires_at, trial_start: record.trial_start, trial_end: record.trial_end,
     current_period_start: record.current_period_start, current_period_end: record.current_period_end,
     cancel_at_period_end: record.cancel_at_period_end, canceled_at: record.canceled_at,
     created_at: record.created_at, updated_at: record.updated_at,
+    billing_plan: record.billing_plan ?? null,
+    reward_start: record.reward_start ?? null, reward_end: record.reward_end ?? null,
   } : null;
   return {
     user: { id: session.user.id, name: session.user.name, email: session.user.email },

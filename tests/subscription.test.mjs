@@ -182,7 +182,7 @@ test("subscription page renders anonymous, unavailable and all membership states
     "./RefreshSubscription": { default: () => createElement("button", {}, "重新整理狀態") },
     "@/components/dashboard/StudyUI": { StudyIcon: () => null },
     "./BillingActions": { default: () => createElement("button", { disabled: true }, "升級 Pro · 即將開放") },
-    "./plans": load("app/subscription/plans.ts"),
+    "./plans": load("app/subscription/plans.ts", { "@/lib/subscription/plans": load("lib/subscription/plans.ts") }),
   };
   const page = load("app/subscription/page.tsx", {
     "./AccountStatus": load("app/subscription/AccountStatus.tsx", presentationMocks),

@@ -17,6 +17,9 @@ export type SubscriptionRecord = {
   provider_subscription_id: string | null;
   created_at: string;
   updated_at: string;
+  billing_plan?: "monthly" | "half_year" | "yearly" | null;
+  reward_start?: string | null;
+  reward_end?: string | null;
 };
 
 // Pure policy, called with trusted database records by the server service.
@@ -46,7 +49,21 @@ export function evaluateSubscription(record: SubscriptionRecord | null, now = ne
     }
   }
 
-  const accessUntil = hasProAccess ? (storedStatus === "trialing" ? record!.trial_end : end) : null;
+  const baseAccess = hasProAccess;
+  let accessUntil = hasProAccess ? (storedStatus === "trialing" ? record!.trial_end : end) : null;
+  // Independently earned time does not change paid periods or provider renewal dates.
+  const rewardStart = record?.reward_start ?? null, rewardEnd = record?.reward_end ?? null;
+  const rewardActive = rewardStart !== null && validWindow(rewardStart, rewardEnd);
+  const contiguousReward = baseAccess && accessUntil !== null && rewardStart !== null && rewardEnd !== null &&
+    Number.isFinite(Date.parse(rewardStart)) && Number.isFinite(Date.parse(rewardEnd)) &&
+    Date.parse(rewardStart) <= Date.parse(accessUntil) && Date.parse(rewardEnd) > Date.parse(accessUntil);
+  if (rewardActive || contiguousReward) {
+    hasProAccess = true;
+    if (!baseAccess || accessUntil !== null) {
+      accessUntil = accessUntil && Date.parse(accessUntil) >= Date.parse(rewardEnd!) ? accessUntil : rewardEnd;
+    }
+    if (!baseAccess) status = "active";
+  }
   const renewalCanceled = record?.cancel_at_period_end === true || storedStatus === "canceled";
   return {
     plan: hasProAccess ? "pro" as const : "free" as const,
@@ -56,10 +73,10 @@ export function evaluateSubscription(record: SubscriptionRecord | null, now = ne
     accessUntil,
     renewalCanceled,
     // Manual grants do not imply recurring billing.
-    nextRenewalAt: hasProAccess && storedStatus === "active" && !renewalCanceled &&
+    nextRenewalAt: baseAccess && storedStatus === "active" && !renewalCanceled &&
       record?.provider && record.provider_subscription_id ? end : null,
-    trialDaysRemaining: hasProAccess && storedStatus === "trialing" && accessUntil
-      ? Math.ceil((Date.parse(accessUntil) - time) / 86_400_000) : 0,
+    trialDaysRemaining: baseAccess && storedStatus === "trialing" && record?.trial_end
+      ? Math.ceil((Date.parse(record.trial_end) - time) / 86_400_000) : 0,
     checkedAt: now.toISOString(),
   };
 }
