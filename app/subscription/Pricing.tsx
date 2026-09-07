@@ -15,7 +15,7 @@ export default function Pricing({ signedIn, managed, hasPro, enabled, trialEligi
       <div className={styles.schedule}><strong>30 天免費試用</strong><p>今天 NT$0 · 30 天後 {money(plan.price)} / {plan.period}</p><p>之後每 {plan.months === 1 ? "月" : `${plan.months} 個月`} {money(plan.price)} 自動續訂</p></div>
       {plan.key !== "monthly" ? <button disabled className={styles.pendingButton}>開始 30 天免費試用 · 即將開放</button>
         : !signedIn ? <Link href="/login" className={styles.trialButton}>開始 30 天免費試用</Link>
-        : managed || hasPro ? <a href="#current-plan" className={styles.trialButton}>查看目前 PRO 方案</a>
+        : managed || hasPro ? <Link href="/subscription?view=account" className={styles.trialButton}>查看目前 PRO 方案</Link>
         : <BillingActions enabled={enabled && monthlyMatches} trialEligible={trialEligible} expired={expired} />}
       <p className={styles.paymentNote}>需先綁定有效信用卡。<br />30 天內取消不會收取下一期訂閱費。</p>
       <p className={styles.availability}>{plan.key !== "monthly" || !enabled || !monthlyMatches ? "此方案目前尚未開放購買，不會產生扣款。" : !signedIn ? "請先登入確認試用資格。" : !trialEligible ? "你的帳號不適用首次免費試用；訂閱將依付款頁顯示金額收費。" : "試用僅適用符合資格的首次訂閱帳號。"}</p>

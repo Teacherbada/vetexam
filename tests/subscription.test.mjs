@@ -173,15 +173,20 @@ test("manual import delegates entitlement to the server guard before reading req
 test("subscription page renders anonymous, unavailable and all membership states truthfully", async () => {
   let result = null;
   let unavailable = false;
+  let billingUnavailable = false;
   const presentationMocks = {
     "react/jsx-runtime": jsxRuntime,
     "next/link": { default: props => createElement("a", props) },
     "./subscription.module.css": { default: {} },
+    "./account.module.css": { default: {} },
+    "./RefreshSubscription": { default: () => createElement("button", {}, "重新整理狀態") },
     "@/components/dashboard/StudyUI": { StudyIcon: () => null },
     "./BillingActions": { default: () => createElement("button", { disabled: true }, "升級 Pro · 即將開放") },
     "./plans": load("app/subscription/plans.ts"),
   };
   const page = load("app/subscription/page.tsx", {
+    "./AccountStatus": load("app/subscription/AccountStatus.tsx", presentationMocks),
+    "./account.module.css": { default: {} },
     "@/components/policies/PolicyLinks": { default: () => null },
     "./Pricing": load("app/subscription/Pricing.tsx", presentationMocks),
     "./PlanInformation": load("app/subscription/PlanInformation.tsx", presentationMocks),
@@ -191,7 +196,10 @@ test("subscription page renders anonymous, unavailable and all membership states
     "@/components/dashboard/StudyUI": { StudyIcon: () => null },
     "@/app/analysis/analysis.module.css": { default: {} },
     "./subscription.module.css": { default: {} },
-    "@/lib/payment/view": { getBillingView: async () => ({ enabled: false, managed: false, terms: { currency: "TWD", amountMinor: 19900, trialDays: 30 } }) },
+    "@/lib/payment/view": { getBillingView: async () => {
+      if (billingUnavailable) throw new Error("billing offline");
+      return { enabled: false, managed: false, terms: { currency: "TWD", amountMinor: 19900, trialDays: 30 } };
+    } },
     "./BillingActions": { default: () => createElement("button", { disabled: true }, "升級 Pro · 即將開放") },
     "./RefreshSubscription": { default: () => createElement("button", {}, "重新整理狀態") },
     "@/lib/subscription": { getUserSubscription: async () => {
@@ -199,9 +207,10 @@ test("subscription page renders anonymous, unavailable and all membership states
       return result;
     } },
   });
-  const render = async () => renderToStaticMarkup(await page.default());
+  const render = async (view = "account") => renderToStaticMarkup(await page.default({ searchParams: Promise.resolve({ view }) }));
   assert.match(await render(), /登入後查看你的方案/);
-  const publicHtml = await render();
+  assert.doesNotMatch(await render(), /VetExam Free|PRO 使用資格|推薦獎勵尚未提供/);
+  const publicHtml = await render("pricing");
   for (const price of ["NT$199", "NT$1,095", "NT$2,189", "NT$1,194", "NT$2,388"]) assert.ok(publicHtml.includes(price));
   assert.match(publicHtml, /需先綁定有效信用卡/);
   assert.match(publicHtml, /首次實際付款成功後/);
@@ -209,23 +218,36 @@ test("subscription page renders anonymous, unavailable and all membership states
   assert.match(publicHtml, /tel:0988058090/);
   assert.doesNotMatch(publicHtml, /PDF|私人題庫|AI 出題/);
   unavailable = true;
-  assert.match(await render(), /暫時無法讀取會員資料/);
-  assert.doesNotMatch(await render(), /目前方案：免費版/);
+  assert.match(await render(), /目前無法取得方案資訊/);
+  assert.doesNotMatch(await render(), /VetExam Free/);
+  assert.match(await render("pricing"), /NT\$2,189/);
   unavailable = false;
   for (const [overrides, expected] of [
-    [{ plan: "free", status: "free" }, /目前方案：免費版/],
-    [{ status: "trialing", trial_start: before, trial_end: after }, /Pro 免費試用中/],
-    [{}, /目前方案：VetExam Pro/],
-    [{ status: "past_due" }, /付款狀態待處理，Pro 權限暫停/],
-    [{ status: "canceled" }, /仍可使用至/],
-    [{ cancel_at_period_end: true }, /仍可使用至/],
-    [{ status: "expired" }, /你的 Pro 期間已結束/],
-    [{ status: "trialing", trial_start: before, trial_end: now.toISOString() }, /你的 Pro 期間已結束/],
+    [{ plan: "free", status: "free" }, /VetExam Free/],
+    [{ status: "trialing", trial_start: before, trial_end: after }, /免費試用中/],
+    [{}, /VetExam PRO/],
+    [{ status: "past_due" }, /PRO 權限暫停/],
+    [{ status: "canceled" }, /你仍可使用 PRO 至/],
+    [{ cancel_at_period_end: true }, /你仍可使用 PRO 至/],
+    [{ status: "expired" }, /VetExam PRO 已到期/],
+    [{ status: "trialing", trial_start: before, trial_end: now.toISOString() }, /VetExam PRO 已到期/],
   ]) {
     result = { user: { id: "member" }, subscription: { ...record, ...overrides }, access: evaluate(overrides) };
     const html = await render();
     assert.match(html, expected);
     assert.match(html, /href="\/" aria-label="回首頁"/);
-    assert.match(html, /disabled=""[^>]*>開始 30 天免費試用 · 即將開放/);
+    assert.match(html, /disabled=""[^>]*>管理自動續訂 · 尚未開放/);
+    assert.match(html, /推薦獎勵尚未提供/);
+    if (result.access.hasProAccess) assert.doesNotMatch(html, /VetExam Free/);
+    if (result.access.renewalCanceled) assert.match(html, /已取消未來續訂扣款/);
   }
+  result = { user: { id: "member" }, subscription: record, access: evaluate({}) };
+  billingUnavailable = true;
+  const partial = await render();
+  assert.match(partial, /VetExam PRO/);
+  assert.match(partial, /暫時無法取得付款管理資訊/);
+  assert.doesNotMatch(partial, /VetExam Free/);
+  result = { user: { id: "member" }, subscription: { ...record, provider: "test", provider_subscription_id: "test-sub" }, access: evaluate({ provider: "test", provider_subscription_id: "test-sub" }) };
+  assert.match(await render(), /已開啟/);
+  assert.doesNotMatch(await render(), /年度方案|半年方案|NT\$/);
 });

@@ -1,0 +1,14 @@
+.content { display: grid; gap: 24px; }
+.heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; }
+.heading .planName { font-size: 28px; }
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; align-items: start; }
+.grid h2 { margin-bottom: 16px; }
+.status { font-size: 18px; font-weight: 600; margin: 18px 0; }
+.warning { background: var(--warning-light); color: #725a28; padding: 16px; border-radius: var(--radius-button); margin-top: 20px; font-size: 14px; }
+.actions { display: flex; flex-wrap: wrap; gap: 12px; }
+.textLink { display: inline-flex; align-items: center; min-height: 44px; color: #3f725f; font-size: 14px; text-decoration: underline; text-underline-offset: 4px; }
+.tabs { display: flex; flex-wrap: wrap; gap: 12px; margin: 20px 0 28px; }
+.tabs a[aria-current="page"] { background: var(--primary-light); color: #3f725f; border-color: #b4c7b8; }
+.skeleton { height: 22px; border-radius: 8px; background: var(--border); margin: 18px 0; }
+.skeletonTitle { width: 45%; height: 36px; }
+@media (max-width: 760px) { .grid { grid-template-columns: minmax(0, 1fr); } }
