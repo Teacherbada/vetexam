@@ -31,6 +31,11 @@ test("plan amounts and Taiwan calendar months distinguish trial days, leap years
     ["2027-08-30T16:30:00Z",6,"2028-02-28T16:30:00Z"],
   ]) assert.equal(calendar.addCalendarMonths(new Date(start),months).toISOString(),new Date(end).toISOString());
   assert.throws(() => plans.subscriptionPlan("annual"));
+  const anchor = new Date("2027-01-30T16:30:00Z");
+  const february = calendar.addCalendarMonths(anchor, 1);
+  assert.equal(calendar.nextCalendarPeriodEnd(february, 1, anchor).toISOString(), "2027-03-30T16:30:00.000Z");
+  assert.equal(calendar.nextCalendarPeriodEnd(new Date("2027-03-05T00:00:00Z"), 1, anchor).toISOString(), "2027-04-05T00:00:00.000Z");
+  assert.throws(() => calendar.nextCalendarPeriodEnd(february, 0, anchor));
 });
 
 test("earned time preserves billing dates and exact trial countdown, while expiring at its own boundary", () => {
@@ -154,6 +159,46 @@ test("PostgreSQL V1: permanent trial, concurrent payment/reward deduplication, c
     const bad=await payment(b,"renewal","yearly");
     await assert.rejects(service.activateSubscription(bad.event),/Plan changes/);
     assert.equal((await admin.query("SELECT count(*)::int AS n FROM subscription_operations WHERE transaction_id=$1",[bad.id])).rows[0].n,0);
+    const wrongIdentity=await payment(b,"renewal");
+    await admin.query("UPDATE billing_transactions SET provider_subscription_id='unrelated-sub' WHERE id=$1",[wrongIdentity.id]);
+    await assert.rejects(service.activateSubscription(wrongIdentity.event),/identity mismatch/);
+    assert.equal((await admin.query("SELECT count(*)::int AS n FROM subscription_operations WHERE transaction_id=$1",[wrongIdentity.id])).rows[0].n,0);
+
+    // A has earned time while Free. Paying must append, never overlap or erase it.
+    const earnedEnd=(await admin.query("SELECT reward_end FROM subscriptions WHERE user_id='A'")).rows[0].reward_end;
+    const aPaid=await payment(a);
+    await service.activateSubscription(aPaid.event);
+    let aSub=(await admin.query("SELECT row_to_json(s) AS s FROM subscriptions s WHERE user_id='A'")).rows[0].s;
+    assert.equal(Date.parse(aSub.current_period_end),calendar.addCalendarMonths(earnedEnd,1).getTime());
+    assert.equal(policy.evaluateSubscription(aSub).hasProAccess,true);
+    assert.equal(policy.evaluateSubscription(aSub).accessUntil,aSub.current_period_end);
+    const aPaidEnd=new Date(aSub.current_period_end);
+    assert.equal(await service.isEligibleForTrial(a),false);
+    await assert.rejects(service.startTrial(a,"monthly",await event(a,"payment_method.bound")),/Trial already used/);
+    // A second referral while paid queues beyond the paid end, then a renewal preserves both.
+    const d=await member("D");
+    await service.registerReferral(a,d);
+    await service.startTrial(d,"monthly",await event(d,"payment_method.bound"));
+    const tooEarly=await payment(d);
+    await assert.rejects(service.activateSubscription(tooEarly.event),/Trial has not ended/);
+    await admin.query("UPDATE subscriptions SET trial_start=now()-interval '31 days',trial_end=now()-interval '1 day',current_period_start=now()-interval '31 days',current_period_end=now()-interval '1 day' WHERE user_id='D'");
+    await service.activateSubscription(tooEarly.event);
+    aSub=(await admin.query("SELECT row_to_json(s) AS s FROM subscriptions s WHERE user_id='A'")).rows[0].s;
+    const beforeRenewal=policy.evaluateSubscription(aSub).accessUntil;
+    assert.equal(Date.parse(beforeRenewal),calendar.addCalendarMonths(aPaidEnd,1).getTime());
+    const aRenewal=await payment(a,"renewal");
+    await Promise.all([service.activateSubscription(aRenewal.event),service.activateSubscription(aRenewal.event)]);
+    aSub=(await admin.query("SELECT row_to_json(s) AS s FROM subscriptions s WHERE user_id='A'")).rows[0].s;
+    assert.equal(Date.parse(aSub.current_period_end),calendar.addCalendarMonths(new Date(beforeRenewal),1).getTime());
+    assert.equal(policy.evaluateSubscription(aSub).hasProAccess,true);
+
+    const legacy=await member("legacy");
+    await admin.query("INSERT INTO subscriptions(user_id,plan,status,access_source) VALUES('legacy','pro','active','legacy_manual')");
+    await assert.rejects(service.cancelAtPeriodEnd(legacy,"preserve-legacy"),/explicit migration/);
+    const legacySub=(await admin.query("SELECT row_to_json(s) AS s FROM subscriptions s WHERE user_id='legacy'")).rows[0].s;
+    assert.equal(policy.evaluateSubscription(legacySub).hasProAccess,true);
+    assert.equal(legacySub.cancel_at_period_end,false);
+
     await admin.query("UPDATE subscriptions SET current_period_start=now()-interval '2 days',current_period_end=now()-interval '1 day' WHERE user_id='B'");
     await service.expireSubscription(b);
     assert.equal((await admin.query("SELECT status FROM subscriptions WHERE user_id='B'")).rows[0].status,"expired");

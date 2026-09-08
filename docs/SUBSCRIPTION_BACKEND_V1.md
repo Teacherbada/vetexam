@@ -93,7 +93,8 @@ replace adapter verification. Database write privileges remain a trusted boundar
 
 1. Verify provider signature, account ownership and environment; fetch authoritative
    payment/binding state. Test events are rejected in Vercel production, and live
-   evidence is rejected outside production.
+   evidence is rejected outside production or without the existing
+   `PAYMENT_LIVE_CONFIRMED=true` confirmation. This phase does not set that flag.
 2. Persist a sanitized payment_events record, with transaction_id for payments,
    and a billing_transactions row containing authoritative plan_key and
    transaction_type. Evidence may be recorded before entitlement processing;
@@ -109,7 +110,10 @@ replace adapter verification. Database write privileges remain a trusted boundar
 `activateSubscription` verifies exact captured amount (integer minor units), TWD,
 paid status, payment identity/time, selected plan, initial-vs-renewal order and
 ownership. Partial/zero/refunded/failed payments do not grant access. It rejects
-plan switching/proration. Prepaid renewals extend the end without moving an active
+plan switching/proration, pre-trial-end initial captures, out-of-order historical
+captures, and renewals from a different provider/mode/subscription identity.
+Those cases require explicit reconciliation, not speculative entitlement updates.
+Prepaid renewals extend the end without moving an active
 start into the future. Payment extension, effect ledger, first-paid history,
 referral qualification and reward all commit or roll back together.
 
@@ -137,9 +141,25 @@ entitlement; `grantReferralReward` can retry later without losing or duplicating
 Future provider scheduling must separately define how reward time offsets charges;
 this phase does not claim a provider's next charge has been postponed.
 
+In the internal V1 flow, a later paid extension starts after the greater of the
+existing paid end, current earned-access end, and verified payment time. This
+preserves already earned time instead of overlapping it with a new paid month.
+For an active reward-only user, the combined access window begins no later than
+payment time so a further referral sees the complete effective end. The existing
+reward ledger keeps its original grant interval for audit. Only the subsequent
+verified payment updates the combined subscription period; granting a reward by
+itself still does not change a provider's renewal date.
+
+Continuous calendar renewals retain their original day across February (Jan 31 ->
+Feb 28 -> Mar 31). Calendar gaps or reward offsets use the resulting extension
+boundary. Calendar-month duration is distinct from the exact 30-day trial.
+
 Cancellation records a timestamp/flag and an audit entry, never deletes a row or
 refunds money. Provider-backed cancellation remains in the existing confirmed
 provider workflow; V1 internal cancellation refuses to pretend it canceled remotely.
+Internal cancellation also requires an unexpired V1-owned term. It cannot disable
+an unbounded legacy grant. Optional expiry writes are likewise limited to V1-owned,
+non-provider subscriptions; existing readers continue enforcing expiry everywhere.
 
 ## Validation commands
 
@@ -177,3 +197,37 @@ Local production HTTP checks returned 200 for fourteen public/page entrypoints;
 anonymous subscription/admin APIs and billing cancellation returned 401, including
 a forged isPro/userId query. Logged-in browser workflows and real payment-provider
 flows were not exercised; the relevant server policy paths use automated fixtures.
+
+## Follow-up validation and delivery (2026-09-08)
+
+Inspected baseline: `77aa975f555b6540beb454be327571670292feab` on `main`.
+V1 schema was already applied. Read-only public-table inspection found one active
+`legacy_manual` PRO, zero payment events, zero operations and zero referrals.
+This follow-up adds no tables, columns, indexes or constraints. The existing
+additive migration was run twice in a rollback transaction; existing subscription
+values remained unchanged. No real accounts receive test events or rewards.
+
+Changed files in this follow-up:
+
+- `lib/subscription/service.ts`: preserve earned time across payments, validate
+  renewal identity/order, reject early initial capture and previously paid trial
+  applicants, require live confirmation, protect existing grants from V1 commands.
+- `lib/subscription/calendar.ts`: retain calendar billing anchor after month-end
+  clamping; reject invalid period lengths.
+- `tests/subscription-v1.test.mjs`: cover those cases, including payment after
+  reward-only access, a later referral, and concurrent renewal.
+- This architecture and validation document.
+
+Existing trial, referral and operation tables retain their unique protections.
+Trial checks additionally consult durable first-paid history and captured
+transactions, so previously paid accounts do not receive a first-subscription trial.
+No UI, authentication, API route, provider adapter, payment webhook, environment
+setting or question data changes are part of this follow-up.
+
+Final validation: all 40 tests passed (36 existing regressions, 2 calendar/access
+tests, the expanded concurrent V1 PostgreSQL workflow, and the existing payment
+PostgreSQL workflow). Build, TypeScript, scoped ESLint and whitespace checks passed.
+Fourteen local production page entrypoints returned HTTP 200. Anonymous subscription
+requests, including forged `isPro`/user IDs, returned 401; admin users returned 403;
+the unchanged billing cancellation endpoint returned 401. These checks do not
+claim a real card charge or an interactive logged-in browser workflow was tested.

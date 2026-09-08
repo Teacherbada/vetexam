@@ -3,16 +3,16 @@ import { randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
 import { billingTransaction } from "@/lib/payment/db";
 import { evaluateSubscription, type SubscriptionRecord } from "@/lib/subscription-state";
-import { addCalendarMonths } from "./calendar";
+import { addCalendarMonths, nextCalendarPeriodEnd } from "./calendar";
 import { subscriptionPlan, TRIAL_DAYS, type SubscriptionPlan } from "./plans";
 
 // Internal trusted service only: no HTTP entry, no browser-supplied success/eligibility.
 // Future adapters must verify and persist evidence before invoking these operations.
-type Account = { id: string; user_id: string | null; trial_started_at: Date | null };
+type Account = { id: string; user_id: string | null; trial_started_at: Date | null; first_paid_at: Date | null };
 type Row = SubscriptionRecord & { billing_plan: SubscriptionPlan | null; reward_start: string | null; reward_end: string | null };
 function assertEventEnvironment(mode: string) {
   if (!["test", "live"].includes(mode) || (mode === "test" && process.env.VERCEL_ENV === "production") ||
-    (mode === "live" && process.env.VERCEL_ENV !== "production")) throw new Error("Payment environment mismatch");
+    (mode === "live" && (process.env.VERCEL_ENV !== "production" || process.env.PAYMENT_LIVE_CONFIRMED !== "true"))) throw new Error("Payment environment mismatch");
 }
 async function now(client: PoolClient): Promise<Date> {
   return (await client.query("SELECT transaction_timestamp() AS time")).rows[0].time;
@@ -28,9 +28,10 @@ async function subscription(client: PoolClient, userId: string): Promise<Row> {
   return (await client.query("SELECT row_to_json(s) AS record FROM subscriptions s WHERE user_id=$1 FOR UPDATE", [userId])).rows[0].record;
 }
 async function eligible(client: PoolClient, account: Account) {
-  if (!account.user_id || account.trial_started_at) return false;
+  if (!account.user_id || account.trial_started_at || account.first_paid_at) return false;
   return !(await client.query(`SELECT 1 FROM subscription_trial_history WHERE user_id=$1
-    UNION ALL SELECT 1 FROM subscriptions WHERE user_id=$1 AND trial_start IS NOT NULL`, [account.user_id])).rowCount;
+    UNION ALL SELECT 1 FROM subscriptions WHERE user_id=$1 AND trial_start IS NOT NULL
+    UNION ALL SELECT 1 FROM billing_transactions WHERE account_id=$2 AND captured_minor>0`, [account.user_id, account.id])).rowCount;
 }
 export async function isEligibleForTrial(accountId: string) {
   return billingTransaction(async client => eligible(client, (await lockAccounts(client, [accountId]))[0]));
@@ -132,16 +133,28 @@ export async function activateSubscription(eventId: string) {
     const amount = plan.price * 100;
     const time = await now(client);
     if (payment.status !== "paid" || Number(payment.amount_minor) !== amount || Number(payment.captured_minor) !== amount || Number(payment.refunded_minor) !== 0 ||
-      payment.currency !== "TWD" || !payment.provider_payment_id || !payment.paid_at || payment.paid_at > time || !["initial","renewal"].includes(payment.transaction_type)) throw new Error("Successful real payment required");
+      payment.currency !== "TWD" || !payment.provider_payment_id || !payment.provider_subscription_id || !(payment.paid_at instanceof Date) || !Number.isFinite(payment.paid_at.getTime()) || payment.paid_at > time || !["initial","renewal"].includes(payment.transaction_type)) throw new Error("Successful real payment required");
     const sub = await subscription(client, account.user_id);
     if (sub.billing_plan && sub.billing_plan !== plan.key) throw new Error("Plan changes are not supported in V1");
     if (sub.provider_subscription_id && (sub.provider_subscription_id !== payment.provider_subscription_id || sub.provider !== payment.provider)) throw new Error("Historical subscription payment cannot extend current access");
-    const previousPayment = (await client.query("SELECT 1 FROM subscription_operations WHERE account_id=$1 AND operation_type IN ('initial','renewal') LIMIT 1", [account.id])).rowCount;
+    const previousPayment = (await client.query(`SELECT p.provider,p.mode,p.provider_subscription_id,p.paid_at
+      FROM subscription_operations o JOIN billing_transactions p ON p.id=o.transaction_id
+      WHERE o.account_id=$1 AND o.operation_type IN ('initial','renewal') ORDER BY p.paid_at DESC,p.id LIMIT 1`, [account.id])).rows[0];
     if ((payment.transaction_type === "initial" && previousPayment) || (payment.transaction_type === "renewal" && !previousPayment)) throw new Error("Unexpected payment order");
+    if (previousPayment && (previousPayment.provider !== payment.provider || previousPayment.mode !== payment.mode || previousPayment.provider_subscription_id !== payment.provider_subscription_id)) throw new Error("Payment subscription identity mismatch");
+    if (previousPayment && payment.paid_at < previousPayment.paid_at) throw new Error("Historical payment requires reconciliation");
     if (sub.access_source && !["subscription_v1"].includes(sub.access_source)) throw new Error("Existing provider or legacy subscription requires explicit migration");
-    const start = new Date(Math.max(payment.paid_at.getTime(), Date.parse(sub.current_period_end ?? "") || 0));
-    const end = addCalendarMonths(start, plan.months);
-    const effectiveStart = evaluateSubscription(sub, time).hasProAccess && sub.current_period_start ? new Date(sub.current_period_start) : start;
+    if (payment.transaction_type === "initial" && sub.trial_end && payment.paid_at.getTime() < Date.parse(sub.trial_end)) throw new Error("Trial has not ended");
+    const access = evaluateSubscription(sub, time);
+    // Consume the existing effective end, including earned time. A new paid period must
+    // not overlap and silently swallow a previously granted referral extension.
+    const start = new Date(Math.max(payment.paid_at.getTime(), Date.parse(sub.current_period_end ?? "") || 0, Date.parse(access.accessUntil ?? "") || 0));
+    const continuesPaidPeriod = Boolean(previousPayment && sub.current_period_end && start.getTime() === Date.parse(sub.current_period_end));
+    const end = nextCalendarPeriodEnd(start, plan.months, continuesPaidPeriod && sub.current_period_start ? new Date(sub.current_period_start) : null);
+    // An already active reward-only user retains continuous access. Represent the
+    // combined period from its existing start/payment time, not a future paid start.
+    const effectiveStart = access.hasProAccess
+      ? new Date(Math.min(Date.parse(sub.current_period_start ?? "") || payment.paid_at.getTime(), payment.paid_at.getTime())) : start;
     await client.query(`UPDATE subscriptions SET plan='pro',billing_plan=$2,status='active',current_period_start=$3,
       current_period_end=$4,expires_at=$4,access_source='subscription_v1' WHERE user_id=$1`, [account.user_id, plan.key, effectiveStart, end]);
     await audit(client, account.id, key, payment.transaction_type, { eventId, transactionId: payment.id, before: sub.current_period_end, after: end.toISOString() });
@@ -179,6 +192,9 @@ export async function cancelAtPeriodEnd(accountId: string, requestId: string) {
     const sub = await subscription(client, account.user_id);
     // Provider-backed cancellation must continue through the existing provider-confirmed flow.
     if (sub.provider_subscription_id) throw new Error("Use provider-confirmed cancellation");
+    if (sub.access_source !== "subscription_v1") throw new Error("Existing subscription requires explicit migration");
+    const baseEnd = sub.status === "trialing" ? sub.trial_end : sub.current_period_end;
+    if (!baseEnd || !Number.isFinite(Date.parse(baseEnd)) || Date.parse(baseEnd) <= (await now(client)).getTime()) throw new Error("No unexpired subscription to cancel");
     if (!sub.cancel_at_period_end) {
       if (!["active","trialing"].includes(sub.status)) throw new Error("No subscription to cancel");
       await client.query("UPDATE subscriptions SET cancel_at_period_end=true,canceled_at=now() WHERE user_id=$1", [account.user_id]);
@@ -212,6 +228,7 @@ export async function expireSubscription(accountId: string) {
     const account = (await lockAccounts(client, [accountId]))[0];
     if (!account.user_id) return;
     const sub = await subscription(client, account.user_id);
+    if (sub.access_source !== "subscription_v1" || sub.provider_subscription_id) return;
     const end = sub.status === "trialing" ? sub.trial_end : sub.current_period_end ?? sub.expires_at;
     if (!end || Date.parse(end) > (await now(client)).getTime() || !["active","trialing","canceled"].includes(sub.status)) return;
     await client.query("UPDATE subscriptions SET status='expired' WHERE user_id=$1", [account.user_id]);
