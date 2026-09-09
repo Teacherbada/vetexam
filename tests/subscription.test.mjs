@@ -198,7 +198,7 @@ test("subscription page renders anonymous, unavailable and all membership states
     "./subscription.module.css": { default: {} },
     "@/lib/payment/view": { getBillingView: async () => {
       if (billingUnavailable) throw new Error("billing offline");
-      return { enabled: false, managed: false, terms: { currency: "TWD", amountMinor: 19900, trialDays: 30 } };
+      return { enabled: false, managed: false, terms: { currency: "TWD", amountMinor: 19900, trialDays: 0 } };
     } },
     "./BillingActions": { default: () => createElement("button", { disabled: true }, "升級 Pro · 即將開放") },
     "./RefreshSubscription": { default: () => createElement("button", {}, "重新整理狀態") },
@@ -212,7 +212,9 @@ test("subscription page renders anonymous, unavailable and all membership states
   assert.doesNotMatch(await render(), /VetExam Free|PRO 使用資格|推薦獎勵尚未提供/);
   const publicHtml = await render("pricing");
   for (const price of ["NT$199", "NT$1,095", "NT$2,189", "NT$1,194", "NT$2,388"]) assert.ok(publicHtml.includes(price));
-  assert.match(publicHtml, /需先綁定有效信用卡/);
+  assert.match(publicHtml, /無需綁定信用卡/);
+  assert.match(publicHtml, /體驗期結束後不會自動扣款/);
+  assert.doesNotMatch(publicHtml, /需先綁定|開始免費試用|30 天後 NT/);
   assert.match(publicHtml, /首次實際付款成功後/);
   assert.match(publicHtml, /mailto:vetexam.support.tw@gmail.com/);
   assert.match(publicHtml, /tel:0988058090/);
@@ -224,13 +226,13 @@ test("subscription page renders anonymous, unavailable and all membership states
   unavailable = false;
   for (const [overrides, expected] of [
     [{ plan: "free", status: "free" }, /VetExam Free/],
-    [{ status: "trialing", trial_start: before, trial_end: after }, /免費試用中/],
+    [{ status: "trialing", trial_start: before, trial_end: after }, /PRO 免費體驗/],
     [{}, /VetExam PRO/],
     [{ status: "past_due" }, /PRO 權限暫停/],
     [{ status: "canceled" }, /你仍可使用 PRO 至/],
     [{ cancel_at_period_end: true }, /你仍可使用 PRO 至/],
     [{ status: "expired" }, /VetExam PRO 已到期/],
-    [{ status: "trialing", trial_start: before, trial_end: now.toISOString() }, /VetExam PRO 已到期/],
+    [{ status: "trialing", trial_start: before, trial_end: now.toISOString() }, /你的 30 天 PRO 免費體驗已結束/],
   ]) {
     result = { user: { id: "member" }, subscription: { ...record, ...overrides }, access: evaluate(overrides) };
     const html = await render();

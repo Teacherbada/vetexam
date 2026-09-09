@@ -26,15 +26,15 @@ const payment = { invoiceId: "invoice", paymentId: "payment", subscriptionId: "s
   capturedMinor: 19900, refundedMinor: 0, status: "paid", paidAt: "2026-09-01T00:00:00Z" };
 const event = { id: "event", type: "invoice.paid", provider: "test-adapter", mode: "test", customerId: "customer", subscriptionId: "sub", invoiceId: "invoice" };
 
-test("billing config centralizes 30 days and rejects unsafe environments", () => {
+test("billing config never grants a checkout trial and rejects unsafe environments", () => {
   const saved = { ...process.env };
   try {
     for (const key of ["PRO_TRIAL_DAYS", "PRO_MONTHLY_AMOUNT_MINOR", "PAYMENT_MODE", "PAYMENT_ENABLED", "PAYMENT_LIVE_CONFIRMED", "VERCEL_ENV"]) delete process.env[key];
-    assert.equal(config.getBillingTerms().trialDays, 30);
+    assert.equal(config.getBillingTerms().trialDays, 0);
     assert.equal(config.getBillingTerms().amountMinor, 19900);
     assert.equal(config.getPaymentConfiguration().enabled, false);
     process.env.PRO_TRIAL_DAYS = "-1";
-    assert.throws(config.getBillingTerms);
+    assert.equal(config.getBillingTerms().trialDays, 0);
     delete process.env.PRO_TRIAL_DAYS;
     process.env.PAYMENT_MODE = "live";
     assert.throws(config.getPaymentConfiguration);
@@ -58,7 +58,7 @@ test("redirects require the exact HTTPS provider origin", () => {
   assert.equal(policy.assertHostedUrl("https://pay.example.test/checkout", provider), "https://pay.example.test/checkout");
   for (const url of ["javascript:alert(1)", "https://pay.example.test.evil.test", "http://pay.example.test", "https://user:pass@pay.example.test"]) assert.throws(() => policy.assertHostedUrl(url, provider));
 });
-test("trial requires payment method and valid bounds; metadata alone is insufficient", () => {
+test("legacy provider trial snapshots retain binding validation; registration trials bypass providers", () => {
   const expected = { customerId: "customer", userId: "member", subscriptionId: "sub", priceReference: "price" };
   policy.validateSnapshot(snapshot, expected);
   for (const change of [{ customerId: "other" }, { userId: "other" }, { priceReference: "cheap" }, { periodEnd: snapshot.periodStart }, { status: "unknown" }]) assert.throws(() => policy.validateSnapshot({ ...snapshot, ...change }, expected));

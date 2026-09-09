@@ -10,7 +10,7 @@ import shared from "./subscription.module.css";
 type Member = NonNullable<Awaited<ReturnType<typeof getUserSubscription>>>;
 type Billing = Awaited<ReturnType<typeof getBillingView>>;
 const labels: Record<SubscriptionStatus, string> = {
-  free: "免費方案", trialing: "免費試用中", active: "訂閱有效",
+  free: "免費方案", trialing: "PRO 免費體驗", active: "訂閱有效",
   canceled: "已取消自動續訂", expired: "PRO 已到期", past_due: "付款未完成",
 };
 
@@ -31,14 +31,14 @@ export default function AccountStatus({ member, billing, unavailable = false }: 
   const { access, subscription } = member;
   const trial = access.status === "trialing" && access.hasProAccess;
   const nextPayment = access.nextRenewalAt && Number.isFinite(Date.parse(access.nextRenewalAt)) ? access.nextRenewalAt : null;
-  const renewal = access.renewalCanceled ? "已取消自動續訂" : nextPayment ? "已開啟" : access.status === "free" || access.status === "expired" ? "目前沒有排定續訂" : "尚未提供續訂資訊";
+  const renewal = trial ? "體驗期結束後不會自動扣款" : access.renewalCanceled ? "已取消自動續訂" : nextPayment ? "已開啟" : access.status === "free" || access.status === "expired" ? "目前沒有排定續訂" : "尚未提供續訂資訊";
   return <div className={styles.content}>
     <section className={`study-card ${shared.card}`} aria-labelledby="current-plan">
       <div className={styles.heading}><div><p className={shared.eyebrow}>目前方案</p><h2 id="current-plan" className={styles.planName}>{access.hasProAccess ? "VetExam PRO" : "VetExam Free"}</h2></div><span className={shared.badge}>{access.renewalCanceled && access.hasProAccess ? "已取消自動續訂" : labels[access.status]}</span></div>
       {access.status === "free" && <p className={shared.description}>你目前使用免費方案。</p>}
-      {trial && <div className={shared.notice}><strong>免費試用中 · 還有 {access.trialDaysRemaining} 天</strong><p>試用結束：{subscriptionDate(subscription?.trial_end)}</p></div>}
+      {trial && <div className={shared.notice}><strong>PRO 免費體驗 · 還有 {access.trialDaysRemaining} 天</strong><p>體驗到期日：{subscriptionDate(subscription?.trial_end)}</p><p>體驗期結束後不會自動扣款。</p></div>}
       {access.renewalCanceled && access.hasProAccess && <p className={shared.notice}>你仍可使用 PRO 至：{subscriptionDate(access.accessUntil)}。到期後將不再自動扣款。</p>}
-      {access.status === "expired" && <p className={shared.description}>VetExam PRO 已到期，目前方案為 Free，可繼續使用免費功能。</p>}
+      {access.status === "expired" && <p className={shared.description}>{subscription?.trial_end && !subscription.billing_plan ? "你的 30 天 PRO 免費體驗已結束。" : "VetExam PRO 已到期。"}目前方案為 Free，學習紀錄仍會保留。如欲繼續使用 PRO，可選擇訂閱方案。</p>}
       {access.status === "past_due" && <p className={styles.warning}>目前未能完成最新一期付款，PRO 權限暫停。請透過訂閱管理更新付款方式或聯絡客服。</p>}
       {access.status === "canceled" && !access.hasProAccess && <p className={shared.description}>訂閱已取消，目前沒有有效的 PRO 使用期間。</p>}
       {(access.status === "active" || access.status === "trialing") && !access.hasProAccess && <p className={styles.warning}>目前尚無有效的 PRO 使用期間。若你認為狀態有誤，請聯絡客服確認。</p>}
@@ -56,9 +56,9 @@ export default function AccountStatus({ member, billing, unavailable = false }: 
     </section>
     <div className={styles.grid}>
       <section className={`study-card ${shared.card}`} aria-labelledby="renewal-heading"><h2 id="renewal-heading">自動續訂</h2><p className={styles.status}>{renewal}</p>
-        <dl className={shared.details}><div><dt>{trial ? "預計首次扣款" : "下次預計付款"}</dt><dd>{access.renewalCanceled ? "已取消未來續訂扣款" : nextPayment ? subscriptionDate(nextPayment) : "尚未提供"}</dd></div></dl>
-        {!access.renewalCanceled && <p className={shared.description}>{trial ? "試用後的方案與金額尚未提供。" : "下一期方案與金額尚未提供。"}{!nextPayment && "下一期扣款資訊將於付款系統完成後顯示。"}</p>}
-        {trial && !access.renewalCanceled && <p className={shared.description}>如果不希望試用結束後自動續訂，請在下一個計費週期開始前取消自動續訂。</p>}
+        <dl className={shared.details}><div><dt>{trial ? "體驗到期扣款" : "下次預計付款"}</dt><dd>{trial ? "不會自動扣款" : access.renewalCanceled ? "已取消未來續訂扣款" : nextPayment ? subscriptionDate(nextPayment) : "尚未提供"}</dd></div></dl>
+        {!trial && !access.renewalCanceled && <p className={shared.description}>下一期方案與金額尚未提供。{!nextPayment && "下一期扣款資訊將於付款系統完成後顯示。"}</p>}
+        {trial && !access.renewalCanceled && <p className={shared.description}>無需取消免費體驗。如需繼續使用 PRO，請自行選擇方案並完成付款。</p>}
         {billing?.managed ? <BillingActions enabled={billing.enabled} managed canceled={access.renewalCanceled} canResume={billing.canResume} expired={access.status === "expired"} /> : <><button className="study-button" disabled>管理自動續訂 · 尚未開放</button><p className={shared.small}>{billing === null ? "暫時無法取得付款管理資訊，請稍後重試或聯絡客服。" : "目前沒有可由付款平台管理的訂閱。如需協助，請聯絡客服。"}</p></>}
         <p className={shared.description}>取消續訂會停止未來扣款，目前 PRO 仍可使用至有效期限。取消續訂不等於退款。</p><Link className={styles.textLink} href="/refund-policy">取消與退款政策</Link>
       </section>

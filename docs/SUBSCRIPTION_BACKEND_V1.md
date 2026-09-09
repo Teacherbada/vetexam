@@ -1,5 +1,36 @@
 # Subscription Backend V1
 
+Current trial revision baseline: `main`, `6f4b39c3dd0c9e9af8a695232e9a27ecf8eb60a4` (2026-09-09).
+Trial is granted automatically to eligible newly registered users.
+No payment method is required. Trial expires after exactly 30 days.
+Expiration does not trigger automatic billing. Paid billing begins only after
+the user explicitly subscribes and completes payment. No database schema changes.
+
+Trial revision changed files:
+
+- `lib/auth.ts`, `lib/subscription/service.ts`
+- `lib/payment/config.ts`, `lib/payment/service.ts`, `lib/payment/view.ts`, `lib/payment/types.ts`
+- `app/subscription/page.tsx`, `app/subscription/Pricing.tsx`, `app/subscription/PlanInformation.tsx`
+- `app/subscription/AccountStatus.tsx`, `app/subscription/BillingActions.tsx`
+- `app/subscription-info/page.tsx`, `app/refund-policy/page.tsx`
+- `tests/subscription-v1.test.mjs`, `tests/subscription.test.mjs`, `tests/payment.test.mjs`, `tests/payment-db.test.mjs`
+- `docs/SUBSCRIPTION_BACKEND_V1.md`, `docs/PAYMENT_INTEGRATION_V1.md`
+
+Validation for this trial revision: 39 unit/render/auth/admin/PDF/analytics tests
+and both PostgreSQL integration workflows passed (41 distinct tests total).
+The database tests only used generated synthetic schemas and cleaned up their
+fixtures; no public schema migration or existing-user grants were performed.
+Build (including TypeScript), scoped ESLint and diff whitespace checks passed.
+Full `npm run lint` failed on pre-existing code and `.security-audit` generated
+artifacts (866 errors, 11071 warnings); those unrelated files were not changed.
+Fifteen local production page entrypoints returned 200, including login/register,
+subscription/account, policy pages, admin, subjects/questions, analysis, wrong,
+favorites, PDF and feedback. Anonymous subscription/admin APIs returned 401,
+including forged entitlement query flags. Quiz without selection returned its
+expected 400. This is HTTP/render regression coverage, not a complete logged-in
+interactive browser or live-payment acceptance test. Existing UI styles and
+the user's unrelated pending working-tree edits were preserved.
+
 Baseline: `1ca7733cbe3fbea69070fd72cc8173ec038df399` on `main`.
 
 ## Existing architecture
@@ -57,7 +88,7 @@ migration requires an explicit retention/export plan; no destructive down script
 
 | Trigger | Stored transition | Access |
 | --- | --- | --- |
-| Verified bound payment method, eligible account | free -> trialing | Within exact trial window |
+| Successful new-user registration, eligible account | free -> trialing | Within exact trial window |
 | Verified captured initial/renewal payment | trialing/expired/past_due -> active | Within paid period |
 | Cancel | active/trialing + cancel_at_period_end=true | Retained until valid access ends |
 | Existing provider cancellation snapshot | canceled | Retained until valid access ends |
@@ -74,13 +105,26 @@ not a payment grace period. It may provide access after base expiry, while
 
 ## Trial and authorization boundary
 
-`startTrial(accountId, planKey, bindingEventId)` accepts only an existing verified
-`payment_method.bound` event owned by the locked billing account. It rechecks
-`subscription_trial_history`, `billing_accounts.trial_started_at` and the current
-subscription's trial_start in the SAME transaction as starting the trial. Event
-and history unique constraints prevent replay/concurrent consumption. Deleting
-the subscription row or changing plan cannot reset eligibility. Billing identity
-history also survives user deletion under the existing billing foundation rules.
+The existing Better Auth user-create after hook first preserves a Free fallback,
+then invokes `startTrialForNewUser(userId)`. It is never invoked on login, reads,
+deployment or checkout. Existing users receive no automatic grants. The helper
+locks the subscription row and atomically writes the existing permanent
+`subscription_trial_history` and the exact database-time 30-day window. The
+history primary key and row lock prevent replay/concurrent extension, even after
+subscription-row deletion. No billing account, provider, card, plan selection,
+payment event or transaction is needed; `billing_plan` remains null.
+
+`startTrial(accountId)` remains an internal helper for eligible billing accounts;
+it also checks billing-account trial/first-paid history and captured transactions,
+and updates the existing billing history and operation ledger. No binding event is
+required. Neither path sets first-paid fields or awards referrals.
+
+If trial creation fails, the transaction rolls back and the hook logs a server
+error. Registration remains usable with Free access. Repair is an explicit
+server operation: verify that the user was newly registered under this revision
+and had a failed grant before retrying `startTrialForNewUser`; never bulk-repair
+legacy Free users. There is no automatic login/read repair or backfill.
+Trial expiry only removes access; learning records remain intact.
 
 No browser route invokes these functions. Account IDs and normalized evidence
 are internal server inputs, not user-facing authorization tokens. Any future
@@ -92,7 +136,7 @@ replace adapter verification. Database write privileges remain a trusted boundar
 ## Future adapter contract (not wired this phase)
 
 1. Verify provider signature, account ownership and environment; fetch authoritative
-   payment/binding state. Test events are rejected in Vercel production, and live
+   payment state. Test events are rejected in Vercel production, and live
    evidence is rejected outside production or without the existing
    `PAYMENT_LIVE_CONFIRMED=true` confirmation. This phase does not set that flag.
 2. Persist a sanitized payment_events record, with transaction_id for payments,
@@ -100,7 +144,7 @@ replace adapter verification. Database write privileges remain a trusted boundar
    transaction_type. Evidence may be recorded before entitlement processing;
    this is an inbox, not a completed entitlement. V1 completion is determined by
    subscription_operations, not the legacy event processed_at default.
-3. Invoke `activateSubscription(eventId)`, `startTrial(...)`, or
+3. Invoke `activateSubscription(eventId)` or
    `markPaymentFailed(eventId)`. No V1 function manufactures payment evidence.
 4. Retry failures. Account locks plus unique identities make committed effects
    repeat-safe. Use one orchestration path per subscription: existing snapshot

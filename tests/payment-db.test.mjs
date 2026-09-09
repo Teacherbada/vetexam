@@ -80,7 +80,10 @@ test("PostgreSQL checkout/event lifecycle, durable trial history, refunds and tr
     await service.createCheckout(user);
     assert.equal(creates, 1, "repeated Checkout reuses a durable intent");
     const checkout = [...checkouts.values()][0];
-    assert.equal(checkout.trialDays, 30);
+    assert.equal(checkout.trialDays, 0, "even legacy configuration cannot grant checkout trials");
+    await client.query("UPDATE billing_checkouts SET trial_days=30");
+    await assert.rejects(service.createCheckout({ id: "member", email: "member@example.test" }), /舊試用付款流程/);
+    await client.query("UPDATE billing_checkouts SET trial_days=0");
     checkout.status = "completed"; checkout.subscriptionId = "sub";
     const start = new Date(Date.now()-86400000).toISOString(), end = new Date(Date.now()+29*86400000).toISOString();
     snapshots.set("sub", { id: "sub", customerId: "customer", userId: "member", priceReference: "price", status: "trialing",

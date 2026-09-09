@@ -21,6 +21,33 @@ const calendar = load("lib/subscription/calendar.ts");
 const plans = load("lib/subscription/plans.ts");
 const policy = load("lib/subscription-state.ts");
 
+test("registration hook grants trial after Free fallback and catches grant failures", async () => {
+  const saved = process.env.DATABASE_URL;
+  process.env.DATABASE_URL = "postgres://fixture";
+  const calls = [];
+  let fail = false;
+  const originalError = console.error, originalLog = console.log;
+  console.error = () => calls.push("error"); console.log = () => {};
+  try {
+    const { auth } = load("lib/auth.ts", {
+      "better-auth": { betterAuth: config => config }, "pg": { Pool: class {} },
+      "@neondatabase/serverless": { neon: () => async () => calls.push("free") },
+      "@/lib/subscription/service": { startTrialForNewUser: async id => {
+        calls.push(id); if (fail) throw new Error("fixture grant failed");
+      } },
+    });
+    await auth.databaseHooks.user.create.after({ id: "new-user" });
+    assert.deepEqual(calls, ["free", "new-user"]);
+    fail = true;
+    await assert.doesNotReject(auth.databaseHooks.user.create.after({ id: "retry-user" }));
+    assert.deepEqual(calls.slice(2), ["free", "retry-user", "error"]);
+    assert.equal(auth.databaseHooks.session, undefined);
+  } finally {
+    console.error = originalError; console.log = originalLog;
+    if (saved === undefined) delete process.env.DATABASE_URL; else process.env.DATABASE_URL = saved;
+  }
+});
+
 test("plan amounts and Taiwan calendar months distinguish trial days, leap years and month end", () => {
   assert.deepEqual(plans.PRO_PLANS.map(p => [p.key,p.price,p.months]), [["monthly",199,1],["half_year",1095,6],["yearly",2189,12]]);
   assert.equal(plans.TRIAL_DAYS, 30);
@@ -96,16 +123,49 @@ test("PostgreSQL V1: permanent trial, concurrent payment/reward deduplication, c
         VALUES($1::uuid,$2,'fixture','test',$1::uuid::text,$1::uuid::text,'fixture-sub',$3,$4,'TWD',$5,now(),$6,$7)`,[id,account,price,status==="paid"?price:0,status,key,kind]);
       return {id,event:await event(account,status==="paid"?"payment.succeeded":"payment.failed",id)};
     }
+    // Successful registration needs no billing identity, card, provider or payment event.
+    await admin.query('INSERT INTO "user"(id) VALUES($1)', ["registered"]);
+    const grants = await Promise.all([service.startTrialForNewUser("registered"), service.startTrialForNewUser("registered")]);
+    assert.equal(grants.filter(result => !result.duplicate).length, 1);
+    let registered = (await admin.query("SELECT row_to_json(s) AS s FROM subscriptions s WHERE user_id='registered'")).rows[0].s;
+    assert.equal(registered.status, "trialing");
+    assert.equal(registered.billing_plan, null);
+    assert.equal(Date.parse(registered.trial_end)-Date.parse(registered.trial_start), 30*86400000);
+    assert.equal(policy.evaluateSubscription(registered).hasProAccess, true);
+    assert.equal(policy.evaluateSubscription(registered, new Date(registered.trial_end)).hasProAccess, false);
+    assert.equal(policy.evaluateSubscription(registered, new Date(registered.trial_end)).plan, "free");
+    for (const table of ["billing_accounts", "billing_transactions", "billing_checkouts", "payment_events", "subscription_referrals"]) {
+      assert.equal((await admin.query(`SELECT count(*)::int AS n FROM ${table}`)).rows[0].n, 0);
+    }
+    const registrationEnd = registered.trial_end;
+    await admin.query("UPDATE subscriptions SET status='expired' WHERE user_id='registered'");
+    await service.startTrialForNewUser("registered");
+    registered = (await admin.query("SELECT row_to_json(s) AS s FROM subscriptions s WHERE user_id='registered'")).rows[0].s;
+    assert.equal(registered.status, "expired"); assert.equal(registered.trial_end, registrationEnd);
+    await admin.query("DELETE FROM subscriptions WHERE user_id='registered'");
+    assert.equal((await service.startTrialForNewUser("registered")).duplicate, true);
+    assert.equal((await admin.query("SELECT status FROM subscriptions WHERE user_id='registered'")).rows[0].status, "free");
+
+    const expiryAccount = await member("expiry");
+    await service.startTrial(expiryAccount);
+    await admin.query("UPDATE subscriptions SET trial_start=now()-interval '31 days',trial_end=now(),current_period_start=now()-interval '31 days',current_period_end=now(),expires_at=now() WHERE user_id='expiry'");
+    await service.expireSubscription(expiryAccount);
+    assert.equal((await admin.query("SELECT status FROM subscriptions WHERE user_id='expiry'")).rows[0].status,"expired");
+    for (const table of ["billing_transactions", "billing_checkouts", "payment_events"]) {
+      assert.equal((await admin.query(`SELECT count(*)::int AS n FROM ${table}`)).rows[0].n, 0);
+    }
+    assert.equal((await admin.query("SELECT first_paid_at,first_paid_transaction_id FROM billing_accounts WHERE id=$1", [expiryAccount])).rows[0].first_paid_at, null);
+    assert.equal((await admin.query("SELECT first_paid_transaction_id FROM billing_accounts WHERE id=$1", [expiryAccount])).rows[0].first_paid_transaction_id, null);
+
     const a=await member("A"),b=await member("B"),c=await member("C");
     await assert.rejects(service.registerReferral(a,a),/Self referral/);
     const referral=await service.registerReferral(a,b);
     assert.equal((await service.registerReferral(a,b)).duplicate,true);
     await assert.rejects(service.registerReferral(c,b),/immutable/);
     assert.equal(await service.isEligibleForTrial(b),true);
-    await assert.rejects(service.startTrial(b,"monthly",randomUUID()),/binding evidence/);
-    const binding=await event(b,"payment_method.bound");
-    await service.startTrial(b,"monthly",binding);
-    assert.equal((await service.startTrial(b,"monthly",binding)).duplicate,true);
+    const starts = await Promise.all([service.startTrial(b), service.startTrial(b)]);
+    assert.equal(starts.filter(result => !result.duplicate).length, 1);
+    assert.equal((await service.startTrial(b)).duplicate,true);
     assert.equal(await service.isEligibleForTrial(b),false);
     let sub=(await admin.query("SELECT row_to_json(s) AS s FROM subscriptions s WHERE user_id='B'")).rows[0].s;
     assert.equal(Date.parse(sub.trial_end)-Date.parse(sub.trial_start),30*86400000);
@@ -115,7 +175,7 @@ test("PostgreSQL V1: permanent trial, concurrent payment/reward deduplication, c
     assert.equal(policy.evaluateSubscription(sub).hasProAccess,true);
     await admin.query("DELETE FROM subscriptions WHERE user_id='B'");
     assert.equal(await service.isEligibleForTrial(b),false);
-    await assert.rejects(service.startTrial(b,"yearly",await event(b,"payment_method.bound")),/Trial already used/);
+    assert.equal((await service.startTrial(b)).duplicate,true);
     // Simulate historical completed trial in fixture only, never a real provider or real account.
     await admin.query(`INSERT INTO subscriptions(user_id,plan,status,billing_plan,trial_start,trial_end,current_period_start,current_period_end,access_source)
       VALUES('B','pro','trialing','monthly',now()-interval '31 days',now()-interval '1 day',now()-interval '31 days',now()-interval '1 day','subscription_v1')`);
@@ -143,7 +203,7 @@ test("PostgreSQL V1: permanent trial, concurrent payment/reward deduplication, c
     assert.equal(policy.evaluateSubscription(sub).hasProAccess,true);
     assert.equal((await admin.query("SELECT count(*)::int AS n FROM subscription_operations WHERE referral_id=$1",[referral.id])).rows[0].n,1);
     const secondReferral=await service.registerReferral(a,c);
-    await service.startTrial(c,"half_year",await event(c,"payment_method.bound"));
+    await service.startTrial(c);
     await admin.query("UPDATE subscriptions SET trial_start=now()-interval '31 days',trial_end=now()-interval '1 day',current_period_start=now()-interval '31 days',current_period_end=now()-interval '1 day' WHERE user_id='C'");
     const second=await payment(c,"initial","half_year");
     const firstRewardEnd=reward.reward_end;
@@ -174,11 +234,11 @@ test("PostgreSQL V1: permanent trial, concurrent payment/reward deduplication, c
     assert.equal(policy.evaluateSubscription(aSub).accessUntil,aSub.current_period_end);
     const aPaidEnd=new Date(aSub.current_period_end);
     assert.equal(await service.isEligibleForTrial(a),false);
-    await assert.rejects(service.startTrial(a,"monthly",await event(a,"payment_method.bound")),/Trial already used/);
+    await assert.rejects(service.startTrial(a),/Trial already used/);
     // A second referral while paid queues beyond the paid end, then a renewal preserves both.
     const d=await member("D");
     await service.registerReferral(a,d);
-    await service.startTrial(d,"monthly",await event(d,"payment_method.bound"));
+    await service.startTrial(d);
     const tooEarly=await payment(d);
     await assert.rejects(service.activateSubscription(tooEarly.event),/Trial has not ended/);
     await admin.query("UPDATE subscriptions SET trial_start=now()-interval '31 days',trial_end=now()-interval '1 day',current_period_start=now()-interval '31 days',current_period_end=now()-interval '1 day' WHERE user_id='D'");

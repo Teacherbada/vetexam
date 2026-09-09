@@ -16,14 +16,14 @@ export default function PlanInformation() {
     </section>
     <section className={styles.referral} aria-labelledby="referral-title">
       <div><span className={styles.badge}>推薦獎勵 · 即將開放</span><h2 id="referral-title">邀請朋友，一起準備國考</h2>
-      <p>好友透過你的邀請加入 VetExam，註冊並綁定付款方式，完成 30 天免費試用，且首次實際付款成功後，推薦人可獲得獎勵。</p></div>
+      <p>好友透過你的邀請加入 VetExam，註冊並完成 30 天免費體驗，且首次實際付款成功後，推薦人可獲得獎勵。</p></div>
       <div><strong>1 個月免費 PRO</strong><p>統一延長 PRO 使用期限 1 個月，適用月繳、半年與年度方案；不折現、不依方案更換折扣。</p></div>
     </section>
     <section className={styles.section} aria-labelledby="trial-title">
       <h2 id="trial-title">30 天免費試用如何運作？</h2>
-      <ol className={styles.steps}>{["選擇方案", "綁定有效信用卡", "免費使用 PRO 30 天", "到期前未取消，依方案自動續訂"].map((step, index) => <li key={step}><span>{index + 1}</span>{step}</li>)}</ol>
-      <div className={styles.infoGrid}><article><h3>試用資格</h3><p>第一次訂閱 PRO 的新使用者，需先綁定付款方式。試用期間不收取 PRO 訂閱費。每個帳號只能享有一次 30 天免費試用，取消後重新訂閱不會再次取得試用。</p></article>
-      <article><h3>自動續訂與取消</h3><p>方案會自動續訂。你可以在下一個計費週期開始前取消自動續訂，取消後不會再收取下一期費用。目前已取得的 PRO 權限仍可使用至有效期限結束。</p><p>取消與退款規則請依 VetExam 最新訂閱與退款政策為準。</p></article></div>
+      <ol className={styles.steps}>{["註冊新帳號", "無需綁卡，免費使用 PRO 30 天", "到期回到 Free，不自動扣款", "自行選擇方案並付款，繼續使用 PRO"].map((step, index) => <li key={step}><span>{index + 1}</span>{step}</li>)}</ol>
+      <div className={styles.infoGrid}><article><h3>試用資格</h3><p>新會員註冊後自動獲得 30 天 PRO 免費體驗，無需綁定信用卡，體驗期內不收費，到期不會自動扣款。每個帳號只能享有一次 30 天免費試用，取消後重新訂閱不會再次取得試用。</p></article>
+      <article><h3>自動續訂與取消</h3><p>免費體驗不會自動續訂。自行訂閱並完成付款後，付費方案才會自動續訂。你可以在下一個計費週期開始前取消自動續訂，取消後不會再收取下一期費用。目前已取得的 PRO 權限仍可使用至有效期限結束。</p><p>取消與退款規則請依 VetExam 最新訂閱與退款政策為準。</p></article></div>
     </section>
   </>;
 }

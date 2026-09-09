@@ -49,27 +49,42 @@ async function duplicate(client: PoolClient, key: string, accountId: string) {
   return Boolean(row);
 }
 
-export async function startTrial(accountId: string, planKey: SubscriptionPlan, bindingEventId: string) {
-  const plan = subscriptionPlan(planKey);
+// Called only by the successful user-create hook (or an explicitly verified repair).
+// Never call this from login, subscription reads, checkout, or a browser request.
+export async function startTrialForNewUser(userId: string) {
+  return billingTransaction(client => grantTrial(client, userId));
+}
+
+async function grantTrial(client: PoolClient, userId: string) {
+  const sub = await subscription(client, userId);
+  if ((await client.query("SELECT 1 FROM subscription_trial_history WHERE user_id=$1", [userId])).rowCount || sub.trial_start) {
+    return { duplicate: true };
+  }
+  const time = await now(client);
+  if (evaluateSubscription(sub, time).hasProAccess || sub.provider_subscription_id || sub.billing_plan ||
+      (await client.query(`SELECT 1 FROM billing_accounts a WHERE user_id=$1 AND
+        (trial_started_at IS NOT NULL OR first_paid_at IS NOT NULL OR EXISTS
+          (SELECT 1 FROM billing_transactions p WHERE p.account_id=a.id AND p.captured_minor>0))`, [userId])).rowCount) {
+    throw new Error("Existing subscription must be resolved first");
+  }
+  const end = new Date(time.getTime() + TRIAL_DAYS * 86400000);
+  await client.query("INSERT INTO subscription_trial_history(user_id,started_at) VALUES($1,$2)", [userId, time]);
+  await client.query(`UPDATE subscriptions SET plan='pro',billing_plan=null,status='trialing',trial_start=$2,trial_end=$3,
+    current_period_start=$2,current_period_end=$3,expires_at=$3,cancel_at_period_end=false,canceled_at=null,access_source='subscription_v1'
+    WHERE user_id=$1`, [userId, time, end]);
+  return { duplicate: false };
+}
+
+export async function startTrial(accountId: string) {
   return billingTransaction(async client => {
     const account = (await lockAccounts(client, [accountId]))[0];
-    const key = `trial:${bindingEventId}`;
+    const key = `trial:${accountId}`;
     if (await duplicate(client, key, accountId)) return { duplicate: true };
-    const event = (await client.query("SELECT * FROM payment_events WHERE id=$1 AND account_id=$2 FOR UPDATE", [bindingEventId, accountId])).rows[0];
-    if (!event || event.event_type !== "payment_method.bound") throw new Error("Verified binding evidence required");
-    assertEventEnvironment(event.mode);
     if (!await eligible(client, account)) throw new Error("Trial already used or account unavailable");
-    const sub = await subscription(client, account.user_id!);
-    const time = await now(client);
-    if (evaluateSubscription(sub, time).hasProAccess || sub.provider_subscription_id) throw new Error("Existing subscription must be resolved first");
-    const end = new Date(time.getTime() + TRIAL_DAYS * 86400000);
-    await client.query("INSERT INTO subscription_trial_history(user_id,started_at,binding_event_id) VALUES($1,$2,$3)", [account.user_id, time, event.id]);
-    await client.query("UPDATE billing_accounts SET trial_started_at=COALESCE(trial_started_at,$2) WHERE id=$1", [accountId, time]);
-    await client.query(`UPDATE subscriptions SET plan='pro',billing_plan=$2,status='trialing',trial_start=$3,trial_end=$4,
-      current_period_start=$3,current_period_end=$4,expires_at=$4,cancel_at_period_end=false,canceled_at=null,access_source='subscription_v1'
-      WHERE user_id=$1`, [account.user_id, plan.key, time, end]);
-    await audit(client, accountId, key, "trial", { eventId: event.id, after: end.toISOString() });
-    return { duplicate: false };
+    const result = await grantTrial(client, account.user_id!);
+    await client.query("UPDATE billing_accounts SET trial_started_at=(SELECT started_at FROM subscription_trial_history WHERE user_id=$2) WHERE id=$1", [accountId, account.user_id]);
+    await audit(client, accountId, key, "trial");
+    return result;
   });
 }
 

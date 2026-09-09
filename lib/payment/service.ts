@@ -87,10 +87,11 @@ export async function createCheckout(user: User) {
       const id = randomUUID();
       attempt = (await client.query<Attempt>(`INSERT INTO billing_checkouts(id,account_id,provider,mode,price_reference,amount_minor,currency,trial_days,return_url,cancel_url)
         VALUES($1,$2,$3,$4,$5,$6,'TWD',$7,$8,$9) RETURNING *`, [id, account.id, provider.name, provider.mode,
-        config.priceReference, config.terms.amountMinor, account.trial_started_at || sub.trial_start ? 0 : config.terms.trialDays,
+        config.priceReference, config.terms.amountMinor, 0,
         config.origin + "/subscription/return", config.origin + "/subscription"])).rows[0];
     }
     if (attempt.provider !== provider.name || attempt.mode !== provider.mode) throw new Error("Unresolved checkout from different environment");
+    if (attempt.trial_days !== 0) throw new BillingError("LEGACY_TRIAL_CHECKOUT", 409, "此舊試用付款流程需先確認，請聯絡客服。");
     return { accountId: account.id, attemptId: attempt.id };
   });
   const outcome = await billingTransaction(async client => {

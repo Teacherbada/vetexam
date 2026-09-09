@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 import styles from "./subscription.module.css";
 
 type Action = "checkout" | "cancel" | "resume" | "portal" | "sync";
-export default function BillingActions({ enabled, managed = false, canceled = false, canResume = false, trialEligible = false, expired = false }: {
-  enabled: boolean; managed?: boolean; canceled?: boolean; canResume?: boolean; trialEligible?: boolean; expired?: boolean;
+export default function BillingActions({ enabled, managed = false, canceled = false, canResume = false, expired = false }: {
+  enabled: boolean; managed?: boolean; canceled?: boolean; canResume?: boolean; expired?: boolean;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<Action | null>(null);
@@ -30,7 +30,7 @@ export default function BillingActions({ enabled, managed = false, canceled = fa
   const disabled = !enabled || busy !== null || refreshing;
   return <div className={styles.billingActions} aria-busy={busy !== null || refreshing}>
     {!managed ? <button disabled={disabled} onClick={() => act("checkout")} className={`study-button study-button-primary ${styles.upgrade}`}>
-      {busy === "checkout" ? "正在準備安全付款頁…" : !enabled ? "升級 Pro · 即將開放" : trialEligible ? "開始免費試用" : expired ? "重新訂閱 Pro" : "升級 VetExam Pro"}
+      {busy === "checkout" ? "正在準備安全付款頁…" : !enabled ? "升級 Pro · 即將開放" : expired ? "重新訂閱 Pro" : "升級 VetExam Pro"}
     </button> : <>
       <button disabled={disabled} onClick={() => act("portal")} className="study-button">{busy === "portal" ? "正在開啟…" : "管理／更新付款方式"}</button>
       {!expired && (canceled ? canResume && <button disabled={disabled} onClick={() => act("resume")} className="study-button">{busy === "resume" ? "正在恢復…" : "恢復自動續訂"}</button>

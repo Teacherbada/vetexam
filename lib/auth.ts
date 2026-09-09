@@ -1,6 +1,7 @@
 import { betterAuth } from "better-auth";
 import { Pool } from "pg";
 import { neon } from "@neondatabase/serverless";
+import { startTrialForNewUser } from "@/lib/subscription/service";
 
 const connectionString = process.env.DATABASE_URL;
 
@@ -54,13 +55,15 @@ export const auth = betterAuth({
               ON CONFLICT (user_id) DO NOTHING
             `;
 
+            await startTrialForNewUser(user.id);
             console.log(
-              "Subscription: 已建立免費方案",
+              "Subscription: 已建立 30 天 PRO 免費體驗",
               user.id
             );
           } catch (error) {
             console.error(
               "Subscription: 建立失敗",
+              user.id,
               error
             );
           }

@@ -73,7 +73,7 @@ export interface PaymentProvider {
   validatePrice(reference: string, terms: BillingTerms): Promise<void>;
   // Must recover the SAME customer after response loss, even beyond API-key retention.
   ensureCustomer(input: { accountId: string; userId: string; email: string }): Promise<string>;
-  // Must collect a payment method before trial and recover an uncertain previous create.
+  // Paid checkout only (trialDays=0); recover an uncertain previous create.
   createCheckout(attempt: CheckoutAttempt): Promise<HostedCheckout>;
   getCheckout(id: string): Promise<HostedCheckout>;
   getSubscription(id: string): Promise<SubscriptionSnapshot>;

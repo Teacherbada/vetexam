@@ -17,7 +17,7 @@ export async function getBillingView(userId?: string) {
       WHERE s.user_id=$1`, [userId, provider.name, provider.mode]);
     const row = result.rows[0];
     return { enabled, managed: Boolean(row?.provider === provider.name && row?.provider_subscription_id),
-      canResume: provider.supportsResume, trialEligible: !row?.trial_started_at && !row?.trial_start,
+      canResume: provider.supportsResume, trialEligible: false,
       terms: { ...terms, amountMinor: row?.amount_minor ?? terms.amountMinor } };
   });
 }

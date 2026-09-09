@@ -3,6 +3,11 @@
 ## Delivery status
 
 The owner has not selected a payment provider. Trial duration is confirmed as **30 days**.
+Trial is granted automatically to eligible newly registered users.
+No payment method is required. Trial expires after 30 days.
+Expiration does not trigger automatic billing. Paid billing begins only after
+the user explicitly subscribes and completes payment. This trial revision adds
+no database schema changes and no ECPay integration.
 This revision implements and tests provider-neutral billing workflows, storage and UI.
 It is **not a live payment integration**. No real adapter, API credentials, hosted
 checkout session, provider signature algorithm or sandbox end-to-end charge is installed.
@@ -68,7 +73,11 @@ The migration adds no columns to Better Auth user or the existing subscriptions 
   captured amount, refunded amount, currency, payment status and dates. No raw payloads/card data.
 * billing_rate_limits: one row per user, ten billing requests per minute, shared across actions.
 
-Trial is consumed when the server confirms a provider trial, not when a button is clicked.
+Trial is consumed by the successful new-user registration hook, using the existing
+subscription trial history independently of providers. New checkout intents always
+use zero trial days, even for legacy Free users. Existing pending/open intents
+with nonzero trial days fail closed for explicit reconciliation. Historical
+provider trial snapshot validation remains only for legacy compatibility.
 Canceled/expired subscriptions never reset trial history. Actual captured money (>0 with
 a provider payment identifier and paid_at) establishes first_paid_at; zero invoices and
 credits do not. MIN(paid_at) handles out-of-order invoices; refunds preserve historical first
@@ -97,7 +106,7 @@ Never paste secret values in chat, source control, logs or browser props.
 | BILLING_APP_ORIGIN | http://localhost:3000 or exact HTTPS Preview origin | https://vetexam-tw.vercel.app (or the actual canonical domain) | Existing site URL; no trailing slash |
 | PAYMENT_PRICE_ID | Sandbox monthly recurring price reference | Separate live recurring price reference | Provider product/price dashboard |
 | PRO_MONTHLY_AMOUNT_MINOR | 19900 (TWD minor units, NT$199) | 19900 | Central price config |
-| PRO_TRIAL_DAYS | 30 | 30 | Owner-confirmed trial duration |
+| PRO_TRIAL_DAYS | Unused | Unused | Registration uses fixed TRIAL_DAYS=30; checkout trialDays is always 0 |
 | BILLING_IDENTITY_SECRET | Independently generated 32+ character secret | Separate stable production secret | Password/secret manager |
 | DATABASE_URL | Isolated test/Preview Neon database | Existing production Neon database | Neon dashboard |
 | Provider API secret / Webhook secret | Names depend on chosen adapter | Separate live secrets | Provider API keys and webhook dashboard |
@@ -112,8 +121,10 @@ Enabled test mode is rejected on the production deployment. Preview must use its
 
 1. Confirm merchant country/entity eligibility and support for TWD recurring payments.
 2. Create separate sandbox and live Pro **monthly** products/prices; no annual plan.
-3. Configure Hosted Checkout to always collect a valid payment method before a 30-day trial.
-   Terms and price are supplied/verified server-side, never browser parameters.
+3. Configure Hosted Checkout for an explicitly selected paid subscription with no
+   provider trial. Registration grants free access separately; trial expiry must
+   never schedule a provider charge. Terms and price are supplied/verified
+   server-side, never browser parameters.
 4. Configure an exact HTTPS return URL `/subscription/return` and cancellation URL `/subscription`.
 5. Register `/api/billing/webhook` (or an adapter-specific route if the provider requires a
    different acknowledgement format). Implement that provider's raw signature and timestamp

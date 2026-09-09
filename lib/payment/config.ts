@@ -1,6 +1,6 @@
 import "server-only";
 import type { BillingTerms, PaymentMode } from "./types";
-import { subscriptionPlan, TRIAL_DAYS } from "@/lib/subscription/plans";
+import { subscriptionPlan } from "@/lib/subscription/plans";
 
 function integer(name: string, fallback: number, max: number) {
   const raw = process.env[name];
@@ -10,7 +10,7 @@ function integer(name: string, fallback: number, max: number) {
 }
 export function getBillingTerms(): BillingTerms {
   return { plan: "pro_monthly", amountMinor: integer("PRO_MONTHLY_AMOUNT_MINOR", subscriptionPlan("monthly").price * 100, 100_000_000),
-    currency: "TWD", trialDays: integer("PRO_TRIAL_DAYS", TRIAL_DAYS, 365) };
+    currency: "TWD", trialDays: 0 };
 }
 export function getPaymentConfiguration() {
   const mode = process.env.PAYMENT_MODE ?? "test";

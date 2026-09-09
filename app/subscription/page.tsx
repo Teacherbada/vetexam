@@ -45,10 +45,10 @@ export default async function SubscriptionPage({ searchParams }: PageProps) {
       <p className={styles.eyebrow}>陪你穩穩前進 · VETEXAM</p>
       <h1>VetExam <span>PRO</span></h1>
       <p>更完整的刷題體驗，陪你一步一步準備獸醫國考。</p>
-      <div className={styles.trialBanner}><strong>30 天免費試用</strong><span>需先綁定有效信用卡 · 每個帳號限享一次</span></div>
-      <p className={styles.heroNote}>試用期間不收取 PRO 訂閱費；結束前若未取消，將依選擇的方案自動續訂。</p>
+      <div className={styles.trialBanner}><strong>新會員享 30 天 PRO 免費體驗</strong><span>無需綁定信用卡 · 每個帳號限享一次</span></div>
+      <p className={styles.heroNote}>體驗期結束後不會自動扣款。若想繼續使用 PRO，可自行選擇訂閱方案並完成付款。</p>
     </header>
-    <Pricing signedIn={Boolean(result)} managed={billing?.managed ?? false} hasPro={Boolean(access?.hasProAccess)} enabled={billing?.enabled ?? false} trialEligible={billing?.trialEligible ?? false} expired={access?.status === "expired"} monthlyMatches={billing?.terms.amountMinor === 19900 && billing?.terms.trialDays === 30} />
+    <Pricing signedIn={Boolean(result)} managed={billing?.managed ?? false} hasPro={Boolean(access?.hasProAccess)} enabled={billing?.enabled ?? false} expired={access?.status === "expired"} monthlyMatches={billing?.terms.amountMinor === 19900 && billing?.terms.trialDays === 0} />
     <PlanInformation />
     </>}
     <footer className={styles.contactFooter} aria-label="VetExam 客服資訊">
