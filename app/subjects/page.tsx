@@ -7,7 +7,7 @@ import { subjectPalette } from "@/app/analysis/analytics";
 import analysisStyles from "@/app/analysis/analysis.module.css";
 import styles from "./subjects.module.css";
 
-type Row = { subject: string; year: number | "all"; count: string };
+type Row = { subject: string; years: number[]; count: string };
 
 const subjects = ["獸醫病理學", "獸醫藥理學", "獸醫實驗診斷學", "獸醫普通疾病學", "獸醫傳染病學", "獸醫公共衛生學"];
 const subjectIcons: Record<string, StudyIconName> = {
@@ -18,45 +18,48 @@ const subjectIcons: Record<string, StudyIconName> = {
   獸醫傳染病學: "target",
   獸醫公共衛生學: "book",
 };
-const currentRocYear = new Date().getFullYear() - 1911;
-const years = Array.from({ length: 30 }, (_, i) => currentRocYear - i);
 
 export default function SubjectsPage() {
   const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
   const [rows, setRows] = useState<Row[]>([]);
   const [order, setOrder] = useState<"original" | "random">("random");
-  const [available, setAvailable] = useState<Record<string, number>>({});
+  const [available, setAvailable] = useState<{ subject: string; year: number | null; count: number }[]>([]);
+  const [mode, setMode] = useState("practice");
+  const [error, setError] = useState("");
   const [loadingAvailable, setLoadingAvailable] = useState(false);
 
-  function openSettings(subject: string) { setSelectedSubject(subject); setRows([{ subject, year: "all", count: "10" }]); setOrder("random"); }
-  function addRow() { const used = new Set(rows.map((r) => r.subject)); const nextSubject = subjects.find((s) => !used.has(s)) ?? subjects[0]; setRows((r) => [...r, { subject: nextSubject, year: "all", count: "10" }]); }
+  function openSettings(subject: string) { setSelectedSubject(subject); setRows([{ subject, years: [], count: "10" }]); setOrder("random"); }
+  function addRow() { const used = new Set(rows.map((r) => r.subject)); const nextSubject = subjects.find((s) => !used.has(s)) ?? subjects[0]; setRows((r) => [...r, { subject: nextSubject, years: [], count: "10" }]); }
   function removeRow(index: number) { setRows((r) => r.filter((_, i) => i !== index)); }
   function updateRow(index: number, patch: Partial<Row>) { setRows((r) => r.map((row, i) => (i === index ? { ...row, ...patch } : row))); }
 
   useEffect(() => {
     if (!selectedSubject) return;
+    const controller = new AbortController();
     async function loadAvailable() {
-      setLoadingAvailable(true);
+      setLoadingAvailable(true); setError("");
       try {
-        const params = new URLSearchParams(); params.set("subjects", rows.map((r) => r.subject).join(","));
-        const response = await fetch(`/api/quiz?${params.toString()}&count=500`, { cache: "no-store" });
+        const response = await fetch("/api/quiz?scope=public&settings=1", { cache: "no-store", signal: controller.signal });
         const data = await response.json();
-        if (response.ok) { const map: Record<string, number> = {}; for (const q of data.questions ?? []) map[q.subject] = (map[q.subject] ?? 0) + 1; setAvailable(map); }
-      } finally { setLoadingAvailable(false); }
+        if (!response.ok) throw new Error(data.error || "取得年份失敗");
+        setAvailable(data.availability);
+      } catch (e) { if (!controller.signal.aborted) setError(e instanceof Error ? e.message : "取得年份失敗"); }
+      finally { if (!controller.signal.aborted) setLoadingAvailable(false); }
     }
     loadAvailable();
-  }, [selectedSubject, rows.map((r) => r.subject).join(",")]);
+    return () => controller.abort();
+  }, [selectedSubject]);
 
-  function buildQuizUrl() {
-    const params = new URLSearchParams(); params.set("subjects", [...new Set(rows.map((r) => r.subject))].join(","));
-    const selectedYears = rows.filter((r) => r.year !== "all").map((r) => Number(r.year) + 1911);
-    if (selectedYears.length) params.set("years", [...new Set(selectedYears)].join(","));
-    const total = rows.reduce((sum, r) => sum + (r.count === "all" ? available[r.subject] ?? 500 : Number(r.count) || 0), 0);
-    params.set("count", String(Math.min(Math.max(total, 1), 500))); params.set("order", order); return `/questions?${params.toString()}`;
+  function availableCount(row: Row) {
+    return available.filter((a) => a.subject === row.subject && (!row.years.length || (a.year !== null && row.years.includes(a.year)))).reduce((sum, a) => sum + Number(a.count), 0);
   }
 
-  const totalCount = rows.reduce((sum, r) => sum + (r.count === "all" ? available[r.subject] ?? 0 : Number(r.count) || 0), 0);
-  const invalid = rows.some((r) => !r.count || Number(r.count) < 1 || (r.count !== "all" && available[r.subject] !== undefined && Number(r.count) > available[r.subject]));
+  function buildQuizUrl() {
+    return `/questions?${new URLSearchParams({ groups: JSON.stringify(rows), order, mode, started: "1" })}`;
+  }
+
+  const totalCount = rows.reduce((sum, row) => sum + Math.min(availableCount(row), row.count === "all" ? Infinity : Number(row.count) || 0), 0);
+  const invalid = loadingAvailable || !!error || rows.some((r) => r.count !== "all" && (!Number.isInteger(Number(r.count)) || Number(r.count) < 1));
 
   return <main className={`${analysisStyles.page}`}><div className={analysisStyles.container}>
     <nav className={analysisStyles.breadcrumb} aria-label="麵包屑"><Link href="/" aria-label="回首頁"><StudyIcon name="home" />首頁</Link><span aria-hidden="true">/</span><span aria-current="page">選擇科目</span></nav>
@@ -79,17 +82,22 @@ export default function SubjectsPage() {
 
   {selectedSubject && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/25 p-4 backdrop-blur-[2px]">
     <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-3xl border border-gray-100 bg-white p-6 shadow-xl md:p-8">
-      <div className="flex items-start justify-between"><div><h2 className="text-2xl font-bold">開始刷題</h2><p className="mt-1 text-gray-500">每一列都是一組獨立的刷題條件</p></div><button onClick={() => setSelectedSubject(null)} className="min-h-11 min-w-11 rounded-full px-3 py-2 text-[#6F7873] hover:bg-[#E9F2ED]">✕</button></div>
-      <div className="mt-6 space-y-4">{rows.map((row, index) => <div key={index} className="rounded-2xl border border-gray-200 bg-gray-50/70 p-4"><div className="grid gap-3 md:grid-cols-[1.5fr_1fr_110px_auto] md:items-end">
-        <label><span className="text-sm font-bold text-gray-600">科目</span><select value={row.subject} onChange={(e) => updateRow(index, { subject: e.target.value })} className="mt-1 w-full rounded-xl border border-gray-200 bg-white p-3">{subjects.map((s) => <option key={s}>{s}</option>)}</select></label>
-        <label><span className="text-sm font-bold text-gray-600">考試年份</span><select value={row.year} onChange={(e) => updateRow(index, { year: e.target.value === "all" ? "all" : Number(e.target.value) })} className="mt-1 w-full rounded-xl border border-gray-200 bg-white p-3"><option value="all">不限年份</option>{years.map((y) => <option key={y} value={y}>{y} 年（{y + 1911}）</option>)}</select></label>
-        <label><span className="text-sm font-bold text-gray-600">題數</span><input type="number" min={1} value={row.count === "all" ? "" : row.count} placeholder="全部" onChange={(e) => updateRow(index, { count: e.target.value })} className="mt-1 w-full rounded-xl border border-gray-200 bg-white p-3" /></label>
+      <div className="flex items-start justify-between"><div><h2 className="text-2xl font-bold">開始刷題</h2><p className="mt-1 text-gray-500">每組條件獨立出題，題數不足時使用全部符合題目；重複題目只計一次。</p></div><button onClick={() => setSelectedSubject(null)} className="min-h-11 min-w-11 rounded-full px-3 py-2 text-[#6F7873] hover:bg-[#E9F2ED]">✕</button></div>
+      <div className="mt-6 space-y-4">{rows.map((row, index) => <div key={index} className="rounded-2xl border border-gray-200 bg-gray-50/70 p-4"><div className="grid gap-3 md:grid-cols-2 md:items-end">
+        <label><span className="text-sm font-bold text-gray-600">科目</span><select value={row.subject} onChange={(e) => updateRow(index, { subject: e.target.value, years: [] })} className="mt-1 w-full rounded-xl border border-gray-200 bg-white p-3">{subjects.map((s) => <option key={s}>{s}</option>)}</select></label>
+        <fieldset className="min-w-0"><legend className="text-sm font-bold text-gray-600">考試年份（可多選）</legend><div className="mt-1 flex flex-wrap gap-2">
+          <button aria-pressed={!row.years.length} onClick={() => updateRow(index, { years: [] })} className={"study-button " + (!row.years.length ? "study-button-primary" : "")}>全部年份</button>
+          {available.filter((a) => a.subject === row.subject && a.year !== null).map((a) => a.year as number).map((year) => <button key={year} aria-pressed={row.years.includes(year)} onClick={() => updateRow(index, { years: row.years.includes(year) ? row.years.filter((y) => y !== year) : [...row.years, year] })} className={"study-button " + (row.years.includes(year) ? "study-button-primary" : "")}>{year} 年{year >= 1911 ? "（西元）" : ""}</button>)}
+        </div></fieldset>
+        <fieldset className="min-w-0 md:col-span-2"><legend className="text-sm font-bold text-gray-600">本次要做幾題？</legend><div className="mt-2 flex flex-wrap gap-2">{["10", "20", "40", "all"].map((count) => <button key={count} aria-pressed={row.count === count} onClick={() => updateRow(index, { count })} className={"study-button " + (row.count === count ? "study-button-primary" : "")}>{count === "all" ? "全部" : count + " 題"}</button>)}</div><label className="mt-2 block text-sm text-gray-600">自訂題數<input type="number" min={1} step={1} value={row.count === "all" ? "" : row.count} placeholder="全部" onChange={(e) => updateRow(index, { count: e.target.value || "all" })} className="mt-1 w-full rounded-xl border border-gray-200 bg-white p-3" /></label></fieldset>
         {rows.length > 1 && <button onClick={() => removeRow(index)} className="rounded-xl px-3 py-3 text-red-500 hover:bg-red-50">刪除</button>}
-      </div><p className="mt-2 text-sm text-gray-500">{loadingAvailable ? "正在查詢可用題目…" : `此科目目前可用約 ${available[row.subject] ?? 0} 題`}</p></div>)}</div>
+      </div><p className="mt-2 text-sm text-gray-500">{loadingAvailable ? "正在查詢可用題目…" : `符合條件共有 ${availableCount(row)} 題`}</p></div>)}</div>
       {rows.length < subjects.length && <button onClick={addRow} className="mt-4 w-full rounded-2xl border-2 border-dashed border-gray-200 p-4 font-bold text-[#3F725F] hover:bg-[#E9F2ED]">＋ 新增一組科目／年份／題數</button>}
-      <section className="mt-7"><h3 className="font-bold">題目順序</h3><div className="mt-3 grid grid-cols-2 gap-3"><button onClick={() => setOrder("original")} className={`rounded-2xl border p-4 text-left transition ${order === "original" ? "border-[#5F8F7B] bg-[#E9F2ED] ring-1 ring-[#E9F2ED]" : "border-gray-200 hover:bg-gray-50"}`}><b>原始順序</b><div className="mt-1 text-sm text-gray-500">依題庫題號排列</div></button><button onClick={() => setOrder("random")} className={`rounded-2xl border p-4 text-left transition ${order === "random" ? "border-[#5F8F7B] bg-[#E9F2ED] ring-1 ring-[#E9F2ED]" : "border-gray-200 hover:bg-gray-50"}`}><b>隨機順序</b><div className="mt-1 text-sm text-gray-500">每次測驗重新打亂</div></button></div></section>
-      <div className="mt-7 rounded-2xl bg-gray-50 p-4"><div className="text-sm text-gray-500">本次測驗</div><div className="mt-1 text-2xl font-bold">共 {totalCount} 題</div>{invalid && <p className="mt-2 text-sm text-red-600">請確認每組題數至少為 1，且不要超過可用題目。</p>}</div>
-      <div className="mt-7 flex gap-3"><button onClick={() => setSelectedSubject(null)} className="flex-1 rounded-2xl border border-gray-200 px-5 py-3">取消</button><Link href={invalid || totalCount < 1 ? "#" : buildQuizUrl()} onClick={(e) => { if (invalid || totalCount < 1) e.preventDefault(); else setSelectedSubject(null); }} className={`flex-1 rounded-2xl px-5 py-3 text-center font-bold text-white ${invalid || totalCount < 1 ? "bg-gray-300" : "bg-[#5F8F7B] hover:bg-[#507B69]"}`}>開始刷題 →</Link></div>
+      <section className="mt-7"><h3 className="font-bold">題目順序</h3><div className="mt-3 grid grid-cols-2 gap-3"><button onClick={() => setOrder("original")} className={`rounded-2xl border p-4 text-left transition ${order === "original" ? "border-[#5F8F7B] bg-[#E9F2ED] ring-1 ring-[#E9F2ED]" : "border-gray-200 hover:bg-gray-50"}`}><b>原始順序</b><div className="mt-1 text-sm text-gray-500">依年份、原題題號排列</div></button><button onClick={() => setOrder("random")} className={`rounded-2xl border p-4 text-left transition ${order === "random" ? "border-[#5F8F7B] bg-[#E9F2ED] ring-1 ring-[#E9F2ED]" : "border-gray-200 hover:bg-gray-50"}`}><b>隨機順序</b><div className="mt-1 text-sm text-gray-500">每次測驗重新打亂</div></button></div></section>
+      <section className="mt-7"><h3 className="font-bold">答題模式</h3><div className="mt-3 grid grid-cols-2 gap-3">{[["practice", "練習模式", "選答案後立即顯示解析"], ["exam", "模擬考模式", "交卷後才顯示答案與成績"]].map(([value, label, description]) => <button key={value} aria-pressed={mode === value} onClick={() => setMode(value)} className={"rounded-2xl border p-4 text-left " + (mode === value ? "border-[#5F8F7B] bg-[#E9F2ED]" : "border-gray-200 hover:bg-gray-50")}><b>{label}</b><p className="mt-1 text-sm text-gray-500">{description}</p></button>)}</div></section>
+      {error && <p role="alert" className="mt-4 text-red-600">{error}，請關閉設定後再試一次。</p>}
+      <div className="mt-7 rounded-2xl bg-gray-50 p-4"><div className="text-sm text-gray-500">本次測驗</div><div className="mt-1 text-2xl font-bold">最多 {totalCount} 題</div>{invalid && <p className="mt-2 text-sm text-red-600">請確認每組題數為至少 1 的整數，並等待年份載入。</p>}</div>
+      <div className="mt-7 flex gap-3"><button onClick={() => setSelectedSubject(null)} className="flex-1 rounded-2xl border border-gray-200 px-5 py-3">取消</button><Link href={invalid ? "#" : buildQuizUrl()} onClick={(e) => { if (invalid) e.preventDefault(); else setSelectedSubject(null); }} className={`flex-1 rounded-2xl px-5 py-3 text-center font-bold text-white ${invalid ? "bg-gray-300" : "bg-[#5F8F7B] hover:bg-[#507B69]"}`}>開始刷題 →</Link></div>
     </div>
   </div>}
   </main>;

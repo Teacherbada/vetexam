@@ -42,7 +42,7 @@
 .state h1 { font-size: 28px; font-weight: 600; }
 .state > p { color: var(--text-secondary); margin-top: 12px; }
 .badge { display: inline-flex; padding: 18px; border-radius: 50%; color: #3F725F; background: var(--primary-light); margin-bottom: 20px; }
-.resultScore { font-size: 64px; font-weight: 600; color: #3F725F; margin-top: 24px; }
+.resultScore { font-size: clamp(28px, 7vw, 64px); font-weight: 600; color: #3F725F; margin-top: 24px; overflow-wrap: anywhere; }
 .resultScore small { font-size: 24px; }
 .state .actions { justify-content: center; }
 @media (max-width: 600px) { .page { padding: 16px 14px 100px; } .card, .state { padding: 22px 18px; } .topbar small { display: none; } .question { font-size: 20px; } .option { flex-wrap: wrap; padding: 16px 12px; gap: 10px; } .answerStatus { width: 100%; padding-left: 42px; } .actions > button { width: 100%; } .progressLabel { gap: 6px; } .explanation { padding: 18px; } }
