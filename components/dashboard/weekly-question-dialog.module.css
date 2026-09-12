@@ -1,0 +1,7 @@
+.dialog { width: min(840px, calc(100% - 28px)); max-height: calc(100dvh - 40px); margin: auto; padding: 28px; border: 1px solid var(--border); border-radius: 18px; background: white; color: var(--text-primary); line-height: 1.7; box-shadow: var(--shadow-card); overflow-y: auto; }
+.dialog::backdrop { background: rgb(29 43 34 / 45%); }
+.header { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 20px; }
+.header h2 { font-size: 18px; font-weight: 600; }
+.dialog :is(button, summary):focus-visible { outline: 3px solid #3F725F; outline-offset: 3px; }
+.dialog button { cursor: pointer; }
+@media (max-width: 600px) { .dialog { padding: 20px 16px; } }

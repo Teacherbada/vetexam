@@ -82,6 +82,7 @@ test("PostgreSQL first-answer stats, immutable retries, threshold, ranking, priv
     await client.query("CREATE TABLE questions (id integer PRIMARY KEY, question_set_id integer, question_number integer, subject text, question text, answer text, option_a text, option_b text, option_c text, option_d text, option_e text)");
     const migration = readFileSync(new URL("../migrations/20260912_question_answer_stats.sql", import.meta.url), "utf8");
     await client.query(migration); await client.query(migration);
+    await client.query(readFileSync(new URL("../migrations/20260912_option_distribution.sql", import.meta.url), "utf8"));
     await client.query('INSERT INTO "user" SELECT \'u\' || i FROM generate_series(1,12) i');
     await client.query("INSERT INTO question_sets VALUES (1,'public',2026),(2,'private',2026)");
     await client.query("INSERT INTO questions SELECT i, CASE WHEN i=6 THEN 2 ELSE 1 END, i, 'subject', 'question', 'C', 'a','b','c','d',NULL FROM generate_series(1,6) i");
@@ -90,6 +91,7 @@ test("PostgreSQL first-answer stats, immutable retries, threshold, ranking, priv
     await submit("u1", 1, "B");
     const first = (await query("SELECT * FROM question_answer_stats", []))[0];
     assert.equal(first.is_correct, false);
+    assert.equal(first.selected_answer, "B");
     await submit("u1", 1, "C");
     const retried = await query("SELECT * FROM question_answer_stats", []);
     assert.equal(retried.length, 1); assert.deepEqual(retried[0], first);

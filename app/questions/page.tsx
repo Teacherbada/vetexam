@@ -11,26 +11,10 @@ import Link from "next/link";
 import { StudyIcon } from "@/components/dashboard/StudyUI";
 import styles from "./quiz.module.css";
 import { formatExamYear } from "@/lib/exam-year";
+import OptionDistribution from "@/components/questions/OptionDistribution";
+import { sendStatistics } from "@/lib/answer-statistics-client";
 
 type Question = { id: number; questionSetId: number; questionNumber: number; subject: string; question: string; options: string[]; answer: string; explanation: string; examYear: number | null; questionSetName: string };
-
-async function sendStatistics(answers: { question_id: number; selected_answer: string }[]) {
-  // Secondary system: bounded batches and one retry, never block the quiz UI.
-  for (let index = 0; index < answers.length; index += 100) {
-    const body = JSON.stringify({ answers: answers.slice(index, index + 100) });
-    for (let retry = 0; retry < 2; retry++) {
-      try {
-        const response = await fetch("/api/stats/answers", {
-          method: "POST", headers: { "Content-Type": "application/json" }, body,
-          keepalive: true, signal: AbortSignal.timeout(8000),
-        });
-        if (response.ok || response.status < 500) break;
-      } catch { /* Preserve local results even if statistics are unavailable. */ }
-      if (retry === 0) await new Promise((resolve) => setTimeout(resolve, 500));
-    }
-  }
-}
-
 
 function QuestionsContent() {
   const searchParams = useSearchParams();
@@ -133,6 +117,7 @@ function QuestionsContent() {
       <h3 className={styles.question}>{question.question}</h3>
       {question.options.map((option, optionIndex) => <p key={optionIndex} className={styles.explanationText}>{String.fromCharCode(65 + optionIndex)}. {option}</p>)}
       <section className={styles.explanation}><p className={answers[question.id] === question.answer ? styles.correctText : styles.wrongText}>{!answers[question.id] ? "未作答" : answers[question.id] === question.answer ? "✓ 正確" : "✗ 錯誤"}</p><p>你的答案：{answers[question.id] || "未作答"} · 正確答案：{question.answer || "未提供"}</p>{question.explanation && <><h2>解析</h2><p className={styles.explanationText}>{question.explanation}</p></>}</section>
+      <OptionDistribution questionId={question.id} selectedAnswer={answers[question.id] || ""} correctAnswer={question.answer} />
     </article>)}</div></main>;
 
   const isFavorite = favorites.some((item) => item.id === currentQuestion.id);
@@ -152,6 +137,7 @@ function QuestionsContent() {
         return <button key={`${currentQuestion.id}-${index}`} disabled={answered} aria-pressed={selected === letter} onClick={() => chooseAnswer(letter)} className={`${styles.option} ${correctOption ? styles.correct : wrongOption ? styles.wrong : selected === letter ? styles.selected : ""}`}><span className={styles.letter}>{letter}</span><span className={styles.optionText}>{option}</span>{correctOption && <span className={styles.answerStatus}>✓ 正確答案</span>}{wrongOption && <span className={styles.answerStatus}>✗ 你的答案</span>}</button>;
       })}</div>
       {showResult && <section className={styles.explanation} aria-label="答案與解析"><p role="status" className={selected === currentQuestion.answer ? styles.correctText : styles.wrongText}>{selected === currentQuestion.answer ? "✓ 答對了，正確答案：" + currentQuestion.answer : `✗ 答錯了，答案是 ${currentQuestion.answer || "未提供"}`}</p><h2>解析</h2><p className={styles.explanationText}>{currentQuestion.explanation || "目前沒有提供解析。"}</p></section>}
+      {mode === "practice" && showResult && <OptionDistribution key={currentQuestion.id} questionId={currentQuestion.id} selectedAnswer={selected} correctAnswer={currentQuestion.answer} />}
       <div className={styles.actions}>{mode === "exam" ? <>
         <button disabled={currentIndex === 0} onClick={() => { setCurrentIndex((value) => value - 1); setSelected(answers[questions[currentIndex - 1].id] || ""); }} className="study-button">上一題</button>
         {currentIndex < questions.length - 1 && <button onClick={nextQuestion} className="study-button">下一題 <StudyIcon name="arrow" /></button>}

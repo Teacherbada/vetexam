@@ -1,0 +1,21 @@
+.panel { margin-top: 20px; border: 1px solid var(--border); border-radius: 14px; background: #F7F9F7; font-size: 14px; overflow-wrap: anywhere; }
+.panel summary { cursor: pointer; padding: 14px 18px; min-height: 48px; font-weight: 600; }
+.panel summary > span { display: block; margin-top: 3px; color: var(--text-secondary); font-size: 11px; font-weight: 400; }
+.panel summary:focus-visible, .retry:focus-visible { outline: 3px solid #3F725F; outline-offset: 3px; border-radius: 10px; }
+.content { padding: 0 18px 18px; line-height: 1.7; color: var(--text-secondary); }
+.content small { display: block; font-size: 12px; margin-top: 6px; }
+.caption { font-size: 12px; }
+.rows { display: grid; gap: 14px; margin: 16px 0; }
+.label { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; min-width: 0; }
+.label > strong { color: var(--text-primary); }
+.badges { display: flex; flex-wrap: wrap; gap: 4px 8px; font-size: 11px; }
+.correct { color: #356748; }
+.percentage { margin-left: auto; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.track { height: 7px; background: #E8ECE8; border-radius: 10px; overflow: hidden; }
+.track > span { display: block; height: 100%; border-radius: inherit; background: #93A39A; }
+.track > .correctBar { background: #63A47C; }
+.insight { border-top: 1px solid var(--border); padding-top: 12px; font-size: 12px; }
+.insight strong, .insight span { display: block; }
+.insight strong { color: var(--text-primary); margin-bottom: 4px; }
+.retry { min-height: 44px; color: #3F725F; text-decoration: underline; cursor: pointer; }
+@media (max-width: 400px) { .content { padding: 0 14px 14px; } .panel summary { padding: 14px; } }

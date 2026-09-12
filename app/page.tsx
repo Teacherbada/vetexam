@@ -7,6 +7,7 @@ import { authClient } from "@/lib/auth-client";
 import { ProgressBar, StudyCompanions, StudyIcon, type StudyIconName } from "@/components/dashboard/StudyUI";
 import "./home.css";
 import PolicyLinks from "@/components/policies/PolicyLinks";
+import WeeklyMostMissed from "@/components/dashboard/WeeklyMostMissed";
 
 export default function Home() {
   const [search, setSearch] = useState("");
@@ -181,6 +182,7 @@ export default function Home() {
             </section>
             <div className="study-side-cards"><section className="study-card study-achievement"><h2>學習小成就</h2><div><span className="study-subject-icon"><StudyIcon name="check" /></span><p>{isLoadingProgress ? "讀取中…" : `累積完成 ${completed} 題`}<small>一題一題，累積自己的實力。</small></p></div><Link href="/favorites" className="study-text-link"><StudyIcon name="heart" />重溫收藏的重點題目</Link></section>
               <section className="study-card study-countdown"><h2><StudyIcon name="calendar" />國考倒數</h2><p className="study-days">{daysLeft}<span>天</span></p><label htmlFor="exam-date">我的目標考試日期</label><input id="exam-date" type="date" value={examDate} onChange={(event) => { if (event.target.value) { setExamDate(event.target.value); localStorage.setItem("examDate", event.target.value); } }} /><p className="study-muted">照自己的步調，準備每一天。</p></section>
+              <WeeklyMostMissed />
             </div>
           </div>
           <footer className="study-footer" aria-label="VetExam 客服資訊">
