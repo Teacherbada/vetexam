@@ -13,6 +13,7 @@ import styles from "./quiz.module.css";
 import { formatExamYear } from "@/lib/exam-year";
 import OptionDistribution from "@/components/questions/OptionDistribution";
 import { sendStatistics } from "@/lib/answer-statistics-client";
+import { usableAnswer } from "@/lib/question-answer";
 
 type Question = { id: number; questionSetId: number; questionNumber: number; subject: string; question: string; options: string[]; answer: string; explanation: string; examYear: number | null; questionSetName: string };
 
@@ -73,8 +74,10 @@ function QuestionsContent() {
   if (!currentQuestion) return null;
 
   function recordAnswer(question: Question, answer: string) {
+    const correctAnswer = usableAnswer(question);
+    if (!correctAnswer) return false;
     addDailyProgress();
-    const correct = answer === question.answer;
+    const correct = answer === correctAnswer;
     saveProgress(question.id, correct, question.subject);
     if (!correct) saveWrongQuestion(question, answer);
     return correct;
@@ -88,7 +91,7 @@ function QuestionsContent() {
       if (answer && recordAnswer(question, answer)) correct++;
     }
     setScore(correct); setFinished(true);
-    void sendStatistics(questions.filter((question) => finalAnswers[question.id]).map((question) => ({
+    void sendStatistics(questions.filter((question) => finalAnswers[question.id] && usableAnswer(question)).map((question) => ({
       question_id: question.id, selected_answer: finalAnswers[question.id],
     })));
   }
@@ -104,20 +107,22 @@ function QuestionsContent() {
     locked.current.add(currentQuestion.id);
     setShowResult(true); setAnswered(true);
     if (recordAnswer(currentQuestion, letter)) setScore((prev) => prev + 1);
-    void sendStatistics([{ question_id: currentQuestion.id, selected_answer: letter }]);
+    if (usableAnswer(currentQuestion)) void sendStatistics([{ question_id: currentQuestion.id, selected_answer: letter }]);
   }
   function nextQuestion() { if (currentIndex < questions.length - 1) { setCurrentIndex((p) => p + 1); setSelected(answers[questions[currentIndex + 1].id] || ""); setShowResult(false); setAnswered(false); } else setFinished(true); }
   function restartQuiz() { setLoading(true); setAttempt((value) => value + 1); }
   function exitQuiz() { if (window.confirm("確定要退出測驗嗎？\n\n目前測驗進度將會重置。")) window.location.href = "/subjects"; }
   function favoriteQuestion() { setFavorites(toggleFavorite(currentQuestion)); }
 
-  if (finished) return <main className={styles.page}><div className={styles.container}><section className={styles.state}><span className={styles.badge}><StudyIcon name="check" /></span><h1>完成這次測驗了</h1><p>每一題的累積，都讓你更進一步。</p><div className={styles.resultScore}>{score} / {questions.length}</div><p>正確率 {Math.round(score / questions.length * 100)}% · 未作答 {questions.length - Object.keys(answers).length} 題</p><div className={styles.actions}><Link href="/" className="study-button">回首頁</Link><Link href="/subjects" className="study-button">回到設定</Link><button onClick={restartQuiz} className="study-button study-button-primary">重新測驗 <StudyIcon name="arrow" /></button></div></section>
+  const gradableCount = questions.filter(question => usableAnswer(question)).length;
+  const currentAnswer = usableAnswer(currentQuestion);
+  if (finished) return <main className={styles.page}><div className={styles.container}><section className={styles.state}><span className={styles.badge}><StudyIcon name="check" /></span><h1>完成這次測驗了</h1><p>每一題的累積，都讓你更進一步。</p><div className={styles.resultScore}>{score} / {gradableCount}</div><p>正確率 {gradableCount ? Math.round(score / gradableCount * 100) + '%' : '暫無可判分題目'} · 未作答 {questions.length - Object.keys(answers).length} 題{gradableCount < questions.length && ` · ${questions.length - gradableCount} 題答案尚未設定，不計分`}</p><div className={styles.actions}><Link href="/" className="study-button">回首頁</Link><Link href="/subjects" className="study-button">回到設定</Link><button onClick={restartQuiz} className="study-button study-button-primary">重新測驗 <StudyIcon name="arrow" /></button></div></section>
     <h2 className="mb-4 text-xl font-bold">題目回顧</h2>{questions.map((question, index) => <article key={question.id} className={styles.card + " mb-4"}>
       <div className={styles.meta}><span>第 {index + 1} 題 · {question.subject}</span><button className={styles.favorite} aria-pressed={favorites.some((item) => item.id === question.id)} onClick={() => setFavorites(toggleFavorite(question))}><StudyIcon name="heart" />{favorites.some((item) => item.id === question.id) ? "已收藏" : "收藏題目"}</button></div>
       <h3 className={styles.question}>{question.question}</h3>
       {question.options.map((option, optionIndex) => <p key={optionIndex} className={styles.explanationText}>{String.fromCharCode(65 + optionIndex)}. {option}</p>)}
-      <section className={styles.explanation}><p className={answers[question.id] === question.answer ? styles.correctText : styles.wrongText}>{!answers[question.id] ? "未作答" : answers[question.id] === question.answer ? "✓ 正確" : "✗ 錯誤"}</p><p>你的答案：{answers[question.id] || "未作答"} · 正確答案：{question.answer || "未提供"}</p>{question.explanation && <><h2>解析</h2><p className={styles.explanationText}>{question.explanation}</p></>}</section>
-      <OptionDistribution questionId={question.id} selectedAnswer={answers[question.id] || ""} correctAnswer={question.answer} />
+      <section className={styles.explanation}><p className={!usableAnswer(question) ? undefined : answers[question.id] === usableAnswer(question) ? styles.correctText : styles.wrongText}>{!usableAnswer(question) ? "本題正確答案尚未設定，不計入作答統計。" : !answers[question.id] ? "未作答" : answers[question.id] === usableAnswer(question) ? "✓ 正確" : "✗ 錯誤"}</p><p>你的答案：{answers[question.id] || "未作答"} · 正確答案：{usableAnswer(question) || "尚未設定"}</p>{question.explanation && <><h2>解析</h2><p className={styles.explanationText}>{question.explanation}</p></>}</section>
+      {usableAnswer(question) && <OptionDistribution questionId={question.id} selectedAnswer={answers[question.id] || ""} correctAnswer={question.answer} />}
     </article>)}</div></main>;
 
   const isFavorite = favorites.some((item) => item.id === currentQuestion.id);
@@ -132,12 +137,12 @@ function QuestionsContent() {
       <h1 className={styles.question} key={currentQuestion.id}>{currentQuestion.question}</h1>
       <div className={styles.options} role="group" aria-label="答案選項">{currentQuestion.options.map((option, index) => {
         const letter = String.fromCharCode(65 + index);
-        const correctOption = showResult && letter === currentQuestion.answer;
-        const wrongOption = showResult && selected === letter && !correctOption;
+        const correctOption = showResult && letter === currentAnswer;
+        const wrongOption = showResult && Boolean(currentAnswer) && selected === letter && !correctOption;
         return <button key={`${currentQuestion.id}-${index}`} disabled={answered} aria-pressed={selected === letter} onClick={() => chooseAnswer(letter)} className={`${styles.option} ${correctOption ? styles.correct : wrongOption ? styles.wrong : selected === letter ? styles.selected : ""}`}><span className={styles.letter}>{letter}</span><span className={styles.optionText}>{option}</span>{correctOption && <span className={styles.answerStatus}>✓ 正確答案</span>}{wrongOption && <span className={styles.answerStatus}>✗ 你的答案</span>}</button>;
       })}</div>
-      {showResult && <section className={styles.explanation} aria-label="答案與解析"><p role="status" className={selected === currentQuestion.answer ? styles.correctText : styles.wrongText}>{selected === currentQuestion.answer ? "✓ 答對了，正確答案：" + currentQuestion.answer : `✗ 答錯了，答案是 ${currentQuestion.answer || "未提供"}`}</p><h2>解析</h2><p className={styles.explanationText}>{currentQuestion.explanation || "目前沒有提供解析。"}</p></section>}
-      {mode === "practice" && showResult && <OptionDistribution key={currentQuestion.id} questionId={currentQuestion.id} selectedAnswer={selected} correctAnswer={currentQuestion.answer} />}
+      {showResult && <section className={styles.explanation} aria-label="答案與解析"><p role="status" className={!currentAnswer ? undefined : selected === currentAnswer ? styles.correctText : styles.wrongText}>{!currentAnswer ? "本題正確答案尚未設定，不計入作答統計。" : selected === currentAnswer ? "✓ 答對了，正確答案：" + currentAnswer : `✗ 答錯了，答案是 ${currentAnswer}`}</p><h2>解析</h2><p className={styles.explanationText}>{currentQuestion.explanation || "目前沒有提供解析。"}</p></section>}
+      {mode === "practice" && showResult && currentAnswer && <OptionDistribution key={currentQuestion.id} questionId={currentQuestion.id} selectedAnswer={selected} correctAnswer={currentQuestion.answer} />}
       <div className={styles.actions}>{mode === "exam" ? <>
         <button disabled={currentIndex === 0} onClick={() => { setCurrentIndex((value) => value - 1); setSelected(answers[questions[currentIndex - 1].id] || ""); }} className="study-button">上一題</button>
         {currentIndex < questions.length - 1 && <button onClick={nextQuestion} className="study-button">下一題 <StudyIcon name="arrow" /></button>}

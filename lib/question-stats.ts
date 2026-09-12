@@ -33,6 +33,9 @@ export const INSERT_FIRST_ANSWERS_SQL = `
   JOIN questions q ON q.id = submitted.question_id
   JOIN question_sets qs ON qs.id = q.question_set_id
   WHERE qs.visibility = 'public' AND UPPER(BTRIM(q.answer)) ~ '^[A-E]$'
+    AND NULLIF(BTRIM(CASE UPPER(BTRIM(q.answer))
+      WHEN 'A' THEN q.option_a WHEN 'B' THEN q.option_b WHEN 'C' THEN q.option_c
+      WHEN 'D' THEN q.option_d WHEN 'E' THEN q.option_e END), '') IS NOT NULL
     AND NULLIF(BTRIM(CASE submitted.selected_answer
       WHEN 'A' THEN q.option_a WHEN 'B' THEN q.option_b WHEN 'C' THEN q.option_c
       WHEN 'D' THEN q.option_d WHEN 'E' THEN q.option_e END), '') IS NOT NULL
@@ -55,6 +58,7 @@ export const OPTION_DISTRIBUTION_SQL = `
   LEFT JOIN question_answer_stats s ON s.question_id = q.id
     AND s.selected_answer IS NOT NULL AND s.selected_answer = choices.letter
   WHERE q.id = $1 AND qs.visibility = 'public'
+    AND UPPER(BTRIM(q.answer)) ~ '^[A-E]$'
     AND NULLIF(BTRIM(choices.content), '') IS NOT NULL
   GROUP BY choices.letter ORDER BY choices.letter
 `;
@@ -82,7 +86,7 @@ export const MOST_MISSED_SQL = `
     FROM question_answer_stats s
     JOIN questions q ON q.id = s.question_id
     JOIN question_sets qs ON qs.id = q.question_set_id
-    WHERE qs.visibility = 'public'
+    WHERE qs.visibility = 'public' AND UPPER(BTRIM(q.answer)) ~ '^[A-E]$'
       AND ($1::text = 'all' OR s.created_at >= CURRENT_TIMESTAMP - INTERVAL '7 days')
       AND ($2::text IS NULL OR q.subject = $2)
       AND ($3::integer IS NULL OR qs.exam_year = $3)
@@ -111,7 +115,7 @@ export async function weeklyMostMissed(query: Query) {
     FROM question_answer_stats s
     JOIN questions q ON q.id = s.question_id
     JOIN question_sets qs ON qs.id = q.question_set_id
-    WHERE qs.visibility = 'public'
+    WHERE qs.visibility = 'public' AND UPPER(BTRIM(q.answer)) ~ '^[A-E]$'
       AND s.created_at >= (DATE_TRUNC('week', CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Taipei') AT TIME ZONE 'Asia/Taipei')
       AND s.created_at <= CURRENT_TIMESTAMP
     GROUP BY q.id, qs.exam_year

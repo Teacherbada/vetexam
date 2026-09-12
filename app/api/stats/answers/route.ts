@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { neon } from "@neondatabase/serverless";
+import { questionTransaction } from "@/lib/question-transaction";
 import { auth } from "@/lib/auth";
 import { parseAnswerSubmissions, recordFirstAnswers } from "@/lib/question-stats";
 
@@ -36,8 +36,12 @@ export async function POST(request: Request) {
     if (!answers) return NextResponse.json({ error: "答題資料格式錯誤" }, { status: 400 });
     const databaseUrl = process.env.DATABASE_URL;
     if (!databaseUrl) throw new Error("Missing database configuration");
-    const sql = neon(databaseUrl);
-    await recordFirstAnswers((text, values) => sql.query(text, values), session.user.id, answers);
+    await questionTransaction(async client => {
+      // Acquire the writer lock before the INSERT statement takes its snapshot.
+      // Admin corrections hold a conflicting lock through answer + stats updates.
+      await client.query('LOCK TABLE question_answer_stats IN ROW EXCLUSIVE MODE');
+      await recordFirstAnswers(async (text, values) => (await client.query(text, values)).rows, session.user.id, answers);
+    });
     // Never return correctness, the answer key, or per-user records.
     return NextResponse.json({ success: true });
   } catch {

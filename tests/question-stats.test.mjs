@@ -41,7 +41,7 @@ test("stats POST uses session identity, skips guests, validates origin/payload, 
   const route = load("app/api/stats/answers/route.ts", {
     "next/server": { NextResponse: { json: (body, init) => Response.json(body, init) } },
     "@/lib/auth": { auth: { api: { getSession: async () => user ? { user: { id: user } } : null } } },
-    "@neondatabase/serverless": { neon: () => ({ query: async () => [] }) },
+    "@/lib/question-transaction": { questionTransaction: async run => run({ query: async () => ({ rows: [] }) }) },
     "@/lib/question-stats": { ...stats, recordFirstAnswers: async (_query, userId, answers) => {
       assert.equal(userId, "session-user"); assert.equal(answers[0].selected_answer, "B");
       writes++; if (failure) throw new Error("offline");
