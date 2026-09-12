@@ -10,8 +10,26 @@ import { getFavorites, toggleFavorite } from "@/data/favorites";
 import Link from "next/link";
 import { StudyIcon } from "@/components/dashboard/StudyUI";
 import styles from "./quiz.module.css";
+import { formatExamYear } from "@/lib/exam-year";
 
 type Question = { id: number; questionSetId: number; questionNumber: number; subject: string; question: string; options: string[]; answer: string; explanation: string; examYear: number | null; questionSetName: string };
+
+async function sendStatistics(answers: { question_id: number; selected_answer: string }[]) {
+  // Secondary system: bounded batches and one retry, never block the quiz UI.
+  for (let index = 0; index < answers.length; index += 100) {
+    const body = JSON.stringify({ answers: answers.slice(index, index + 100) });
+    for (let retry = 0; retry < 2; retry++) {
+      try {
+        const response = await fetch("/api/stats/answers", {
+          method: "POST", headers: { "Content-Type": "application/json" }, body,
+          keepalive: true, signal: AbortSignal.timeout(8000),
+        });
+        if (response.ok || response.status < 500) break;
+      } catch { /* Preserve local results even if statistics are unavailable. */ }
+      if (retry === 0) await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+  }
+}
 
 
 function QuestionsContent() {
@@ -86,6 +104,9 @@ function QuestionsContent() {
       if (answer && recordAnswer(question, answer)) correct++;
     }
     setScore(correct); setFinished(true);
+    void sendStatistics(questions.filter((question) => finalAnswers[question.id]).map((question) => ({
+      question_id: question.id, selected_answer: finalAnswers[question.id],
+    })));
   }
   function chooseAnswer(letter: string) {
     if (submitted.current || (mode === "practice" && locked.current.has(currentQuestion.id))) return;
@@ -99,6 +120,7 @@ function QuestionsContent() {
     locked.current.add(currentQuestion.id);
     setShowResult(true); setAnswered(true);
     if (recordAnswer(currentQuestion, letter)) setScore((prev) => prev + 1);
+    void sendStatistics([{ question_id: currentQuestion.id, selected_answer: letter }]);
   }
   function nextQuestion() { if (currentIndex < questions.length - 1) { setCurrentIndex((p) => p + 1); setSelected(answers[questions[currentIndex + 1].id] || ""); setShowResult(false); setAnswered(false); } else setFinished(true); }
   function restartQuiz() { setLoading(true); setAttempt((value) => value + 1); }
@@ -118,7 +140,7 @@ function QuestionsContent() {
   return <main className={styles.page}><div className={styles.container}>
     <header className={styles.topbar}><span><StudyIcon name="paw" />VetExam <small>專心練習，一題一步</small></span><button onClick={exitQuiz} className="study-button">退出測驗</button></header>
     <section className={styles.card} aria-label="本次練習">
-      <div className={styles.meta}><span>{currentQuestion.subject}{currentQuestion.examYear ? ` · ${currentQuestion.examYear} 年${currentQuestion.examYear >= 1911 ? "（西元）" : ""}` : ""}</span><span className={styles.tag}>{mode === "exam" ? "模擬考" : "練習"} · {order === "random" ? "隨機順序" : "原始順序"}</span></div>
+      <div className={styles.meta}><span>{currentQuestion.subject}{currentQuestion.examYear ? ` · ${formatExamYear(currentQuestion.examYear)}` : ""}</span><span className={styles.tag}>{mode === "exam" ? "模擬考" : "練習"} · {order === "random" ? "隨機順序" : "原始順序"}</span></div>
       <div className={styles.progressLabel}><span>第 <strong>{currentIndex + 1}</strong> / {questions.length} 題</span><span>已完成 {completedCount} 題{mode === "practice" && " · 答對 " + score + " 題"}</span></div>
       <div className={styles.progress} role="progressbar" aria-label="已完成題數" aria-valuenow={completedCount} aria-valuemin={0} aria-valuemax={questions.length}><span style={{ width: `${completedCount / questions.length * 100}%` }} /></div>
       <div className={styles.questionHeader}><span>單選題</span><button onClick={favoriteQuestion} aria-pressed={isFavorite} className={styles.favorite}><StudyIcon name="heart" />{isFavorite ? "已收藏" : "收藏題目"}</button></div>

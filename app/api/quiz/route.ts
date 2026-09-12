@@ -30,6 +30,14 @@ export async function GET(request: Request) {
       let groups: unknown;
       try { groups = JSON.parse(searchParams.get("groups") || "[]"); }
       catch { return NextResponse.json({ error: "請確認測驗設定格式" }, { status: 400 }); }
+      const questionId = searchParams.has("questionId") ? Number(searchParams.get("questionId")) : null;
+      if (questionId !== null) {
+        if (!Number.isInteger(questionId) || questionId < 1 || questionId > 2147483647) {
+          return NextResponse.json({ error: "題目編號錯誤" }, { status: 400 });
+        }
+        // A leaderboard link starts one public question through the existing quiz.
+        groups = [{ subject: "single-question", years: [], count: "1" }];
+      }
       if (!Array.isArray(groups) || !groups.length || groups.length > 6 || groups.some((g) =>
         !g || typeof g.subject !== "string" || !g.subject.trim() ||
         !Array.isArray(g.years) || !g.years.every(Number.isInteger) ||
@@ -39,11 +47,12 @@ export async function GET(request: Request) {
       const random = searchParams.get("order") === "random";
       const batches = await Promise.all(groups.map(async (group) => {
         const yearFilter = group.years.length ? sql`qs.exam_year = ANY(${group.years})` : sql`TRUE`;
+        const subjectFilter = questionId === null ? sql`q.subject = ${group.subject}` : sql`q.id = ${questionId}`;
         const ordering = random ? sql`RANDOM()` : sql`qs.exam_year ASC NULLS LAST, q.question_number ASC, q.question_set_id ASC, q.id ASC`;
         return sql`
           SELECT q.*, qs.exam_year, qs.name AS question_set_name
           FROM questions q JOIN question_sets qs ON qs.id = q.question_set_id
-          WHERE qs.visibility = 'public' AND q.subject = ${group.subject} AND ${yearFilter}
+          WHERE qs.visibility = 'public' AND ${subjectFilter} AND ${yearFilter}
           ORDER BY ${ordering} LIMIT ${group.count === "all" ? null : Number(group.count)}
         `;
       }));

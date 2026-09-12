@@ -6,6 +6,7 @@ import { StudyIcon, type StudyIconName } from "@/components/dashboard/StudyUI";
 import { subjectPalette } from "@/app/analysis/analytics";
 import analysisStyles from "@/app/analysis/analysis.module.css";
 import styles from "./subjects.module.css";
+import { formatExamYear } from "@/lib/exam-year";
 
 type Row = { subject: string; years: number[]; count: string };
 
@@ -63,7 +64,7 @@ export default function SubjectsPage() {
 
   return <main className={`${analysisStyles.page}`}><div className={analysisStyles.container}>
     <nav className={analysisStyles.breadcrumb} aria-label="麵包屑"><Link href="/" aria-label="回首頁"><StudyIcon name="home" />首頁</Link><span aria-hidden="true">/</span><span aria-current="page">選擇科目</span></nav>
-    <header className={analysisStyles.header}><div><h1>選擇科目</h1><p>選擇你想練習的科目，開始今天的刷題。</p></div></header>
+    <header className={analysisStyles.header}><div><h1>選擇科目</h1><p>選擇你想練習的科目，開始今天的刷題。</p></div><Link href="/most-missed" className="study-button"><StudyIcon name="target" />最多人答錯</Link></header>
     <div className={styles.grid}>{subjects.map((subject) => <button
       key={subject}
       type="button"
@@ -87,7 +88,7 @@ export default function SubjectsPage() {
         <label><span className="text-sm font-bold text-gray-600">科目</span><select value={row.subject} onChange={(e) => updateRow(index, { subject: e.target.value, years: [] })} className="mt-1 w-full rounded-xl border border-gray-200 bg-white p-3">{subjects.map((s) => <option key={s}>{s}</option>)}</select></label>
         <fieldset className="min-w-0"><legend className="text-sm font-bold text-gray-600">考試年份（可多選）</legend><div className="mt-1 flex flex-wrap gap-2">
           <button aria-pressed={!row.years.length} onClick={() => updateRow(index, { years: [] })} className={"study-button " + (!row.years.length ? "study-button-primary" : "")}>全部年份</button>
-          {available.filter((a) => a.subject === row.subject && a.year !== null).map((a) => a.year as number).map((year) => <button key={year} aria-pressed={row.years.includes(year)} onClick={() => updateRow(index, { years: row.years.includes(year) ? row.years.filter((y) => y !== year) : [...row.years, year] })} className={"study-button " + (row.years.includes(year) ? "study-button-primary" : "")}>{year} 年{year >= 1911 ? "（西元）" : ""}</button>)}
+          {available.filter((a) => a.subject === row.subject && a.year !== null).map((a) => a.year as number).map((year) => <button key={year} aria-pressed={row.years.includes(year)} onClick={() => updateRow(index, { years: row.years.includes(year) ? row.years.filter((y) => y !== year) : [...row.years, year] })} className={"study-button " + (row.years.includes(year) ? "study-button-primary" : "")}>{formatExamYear(year)}</button>)}
         </div></fieldset>
         <fieldset className="min-w-0 md:col-span-2"><legend className="text-sm font-bold text-gray-600">本次要做幾題？</legend><div className="mt-2 flex flex-wrap gap-2">{["10", "20", "40", "all"].map((count) => <button key={count} aria-pressed={row.count === count} onClick={() => updateRow(index, { count })} className={"study-button " + (row.count === count ? "study-button-primary" : "")}>{count === "all" ? "全部" : count + " 題"}</button>)}</div><label className="mt-2 block text-sm text-gray-600">自訂題數<input type="number" min={1} step={1} value={row.count === "all" ? "" : row.count} placeholder="全部" onChange={(e) => updateRow(index, { count: e.target.value || "all" })} className="mt-1 w-full rounded-xl border border-gray-200 bg-white p-3" /></label></fieldset>
         {rows.length > 1 && <button onClick={() => removeRow(index)} className="rounded-xl px-3 py-3 text-red-500 hover:bg-red-50">刪除</button>}
