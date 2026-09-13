@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { neon } from "@neondatabase/serverless";
 import { auth } from "@/lib/auth";
+import { validChapter } from "@/data/exam-chapters";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,6 +26,15 @@ export async function GET(request: Request) {
           WHERE qs.visibility = 'public'
           GROUP BY q.subject, qs.exam_year ORDER BY qs.exam_year DESC NULLS LAST
         `;
+        if (searchParams.get("chapters") === "1") {
+          const chapterAvailability = await sql`
+            SELECT q.subject, qs.exam_year AS year, q.chapter, COUNT(*)::int AS count
+            FROM questions q JOIN question_sets qs ON qs.id = q.question_set_id
+            WHERE qs.visibility = 'public' AND q.chapter IS NOT NULL
+            GROUP BY q.subject, qs.exam_year, q.chapter
+          `;
+          return NextResponse.json({ availability, chapterAvailability });
+        }
         return NextResponse.json({ availability });
       }
       let groups: unknown;
@@ -40,19 +50,21 @@ export async function GET(request: Request) {
       }
       if (!Array.isArray(groups) || !groups.length || groups.length > 6 || groups.some((g) =>
         !g || typeof g.subject !== "string" || !g.subject.trim() ||
+        !validChapter(g.subject, g.chapter) ||
         !Array.isArray(g.years) || !g.years.every(Number.isInteger) ||
         (g.count !== "all" && (!Number.isInteger(Number(g.count)) || Number(g.count) < 1)))) {
-        return NextResponse.json({ error: "請確認科目、年份與題數設定" }, { status: 400 });
+        return NextResponse.json({ error: "請確認科目、章節、年份與題數設定" }, { status: 400 });
       }
       const random = searchParams.get("order") === "random";
       const batches = await Promise.all(groups.map(async (group) => {
         const yearFilter = group.years.length ? sql`qs.exam_year = ANY(${group.years})` : sql`TRUE`;
         const subjectFilter = questionId === null ? sql`q.subject = ${group.subject}` : sql`q.id = ${questionId}`;
+        const chapterFilter = group.chapter ? sql`q.chapter = ${group.chapter}` : sql`TRUE`;
         const ordering = random ? sql`RANDOM()` : sql`qs.exam_year ASC NULLS LAST, q.question_number ASC, q.question_set_id ASC, q.id ASC`;
         return sql`
           SELECT q.*, qs.exam_year, qs.name AS question_set_name
           FROM questions q JOIN question_sets qs ON qs.id = q.question_set_id
-          WHERE qs.visibility = 'public' AND ${subjectFilter} AND ${yearFilter}
+          WHERE qs.visibility = 'public' AND ${subjectFilter} AND ${yearFilter} AND ${chapterFilter}
           ORDER BY ${ordering} LIMIT ${group.count === "all" ? null : Number(group.count)}
         `;
       }));

@@ -7,10 +7,12 @@ import { subjectPalette } from "@/app/analysis/analytics";
 import analysisStyles from "@/app/analysis/analysis.module.css";
 import styles from "./subjects.module.css";
 import { formatExamYear } from "@/lib/exam-year";
+import { EXAM_SUBJECTS } from "@/data/exam-chapters";
+import ChapterPicker from "@/components/questions/ChapterPicker";
 
-type Row = { subject: string; years: number[]; count: string };
+type Row = { subject: string; years: number[]; count: string; chapter?: string };
 
-const subjects = ["獸醫病理學", "獸醫藥理學", "獸醫實驗診斷學", "獸醫普通疾病學", "獸醫傳染病學", "獸醫公共衛生學"];
+const subjects = EXAM_SUBJECTS;
 const subjectIcons: Record<string, StudyIconName> = {
   獸醫病理學: "leaf",
   獸醫藥理學: "file",
@@ -25,6 +27,7 @@ export default function SubjectsPage() {
   const [rows, setRows] = useState<Row[]>([]);
   const [order, setOrder] = useState<"original" | "random">("random");
   const [available, setAvailable] = useState<{ subject: string; year: number | null; count: number }[]>([]);
+  const [chapterAvailable, setChapterAvailable] = useState<{ subject: string; year: number | null; chapter: string; count: number }[]>([]);
   const [mode, setMode] = useState("practice");
   const [error, setError] = useState("");
   const [loadingAvailable, setLoadingAvailable] = useState(false);
@@ -40,10 +43,11 @@ export default function SubjectsPage() {
     async function loadAvailable() {
       setLoadingAvailable(true); setError("");
       try {
-        const response = await fetch("/api/quiz?scope=public&settings=1", { cache: "no-store", signal: controller.signal });
+        const response = await fetch("/api/quiz?scope=public&settings=1&chapters=1", { cache: "no-store", signal: controller.signal });
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || "取得年份失敗");
         setAvailable(data.availability);
+        setChapterAvailable(data.chapterAvailability ?? []);
       } catch (e) { if (!controller.signal.aborted) setError(e instanceof Error ? e.message : "取得年份失敗"); }
       finally { if (!controller.signal.aborted) setLoadingAvailable(false); }
     }
@@ -52,6 +56,7 @@ export default function SubjectsPage() {
   }, [selectedSubject]);
 
   function availableCount(row: Row) {
+    if (row.chapter) return chapterAvailable.filter((a) => a.subject === row.subject && a.chapter === row.chapter && (!row.years.length || (a.year !== null && row.years.includes(a.year)))).reduce((sum, a) => sum + Number(a.count), 0);
     return available.filter((a) => a.subject === row.subject && (!row.years.length || (a.year !== null && row.years.includes(a.year)))).reduce((sum, a) => sum + Number(a.count), 0);
   }
 
@@ -76,7 +81,7 @@ export default function SubjectsPage() {
     >
       <span className={styles.icon}><StudyIcon name={subjectIcons[subject]} /></span>
       <span className={styles.title}>{subject}</span>
-      <span className={styles.description}>設定科目、年份與題數</span>
+      <span className={styles.description}>設定科目、章節、年份與題數</span>
       <span className={styles.action}>開始練習 <StudyIcon name="arrow" /></span>
     </button>)}</div>
   </div>
@@ -85,11 +90,12 @@ export default function SubjectsPage() {
     <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-3xl border border-gray-100 bg-white p-6 shadow-xl md:p-8">
       <div className="flex items-start justify-between"><div><h2 className="text-2xl font-bold">開始刷題</h2><p className="mt-1 text-gray-500">每組條件獨立出題，題數不足時使用全部符合題目；重複題目只計一次。</p></div><button onClick={() => setSelectedSubject(null)} className="min-h-11 min-w-11 rounded-full px-3 py-2 text-[#6F7873] hover:bg-[#E9F2ED]">✕</button></div>
       <div className="mt-6 space-y-4">{rows.map((row, index) => <div key={index} className="rounded-2xl border border-gray-200 bg-gray-50/70 p-4"><div className="grid gap-3 md:grid-cols-2 md:items-end">
-        <label><span className="text-sm font-bold text-gray-600">科目</span><select value={row.subject} onChange={(e) => updateRow(index, { subject: e.target.value, years: [] })} className="mt-1 w-full rounded-xl border border-gray-200 bg-white p-3">{subjects.map((s) => <option key={s}>{s}</option>)}</select></label>
+        <label><span className="text-sm font-bold text-gray-600">科目</span><select value={row.subject} onChange={(e) => updateRow(index, { subject: e.target.value, years: [], chapter: '' })} className="mt-1 w-full rounded-xl border border-gray-200 bg-white p-3">{subjects.map((s) => <option key={s}>{s}</option>)}</select></label>
         <fieldset className="min-w-0"><legend className="text-sm font-bold text-gray-600">考試年份（可多選）</legend><div className="mt-1 flex flex-wrap gap-2">
           <button aria-pressed={!row.years.length} onClick={() => updateRow(index, { years: [] })} className={"study-button " + (!row.years.length ? "study-button-primary" : "")}>全部年份</button>
           {available.filter((a) => a.subject === row.subject && a.year !== null).map((a) => a.year as number).map((year) => <button key={year} aria-pressed={row.years.includes(year)} onClick={() => updateRow(index, { years: row.years.includes(year) ? row.years.filter((y) => y !== year) : [...row.years, year] })} className={"study-button " + (row.years.includes(year) ? "study-button-primary" : "")}>{formatExamYear(year)}</button>)}
         </div></fieldset>
+        <div className="min-w-0 md:col-span-2"><ChapterPicker subject={row.subject} value={row.chapter || ''} onChange={(chapter) => updateRow(index, { chapter })} /></div>
         <fieldset className="min-w-0 md:col-span-2"><legend className="text-sm font-bold text-gray-600">本次要做幾題？</legend><div className="mt-2 flex flex-wrap gap-2">{["10", "20", "40", "all"].map((count) => <button key={count} aria-pressed={row.count === count} onClick={() => updateRow(index, { count })} className={"study-button " + (row.count === count ? "study-button-primary" : "")}>{count === "all" ? "全部" : count + " 題"}</button>)}</div><label className="mt-2 block text-sm text-gray-600">自訂題數<input type="number" min={1} step={1} value={row.count === "all" ? "" : row.count} placeholder="全部" onChange={(e) => updateRow(index, { count: e.target.value || "all" })} className="mt-1 w-full rounded-xl border border-gray-200 bg-white p-3" /></label></fieldset>
         {rows.length > 1 && <button onClick={() => removeRow(index)} className="rounded-xl px-3 py-3 text-red-500 hover:bg-red-50">刪除</button>}
       </div><p className="mt-2 text-sm text-gray-500">{loadingAvailable ? "正在查詢可用題目…" : `符合條件共有 ${availableCount(row)} 題`}</p></div>)}</div>

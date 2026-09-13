@@ -15,7 +15,7 @@ function load(path, mocks = {}) {
   }, exports);
   return exports;
 }
-const search = load('lib/question-search.ts');
+const search = load('lib/question-search.ts', { '../data/exam-chapters': load('data/exam-chapters.ts') });
 const stats = load('lib/question-stats.ts');
 const detail = load('lib/question-detail-answer.ts', { './question-answer': load('lib/question-answer.ts'), './question-stats': stats });
 

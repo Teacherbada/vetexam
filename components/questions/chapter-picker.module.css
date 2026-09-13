@@ -1,0 +1,8 @@
+.root { min-width: 0; }
+.picker { border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+.picker summary { padding: 12px; min-height: 48px; cursor: pointer; overflow-wrap: anywhere; font-size: 14px; font-weight: 600; }
+.options { padding: 0 12px 12px; max-height: 320px; overflow-y: auto; }
+.options .choice { width: 100%; min-width: 0; justify-content: flex-start; margin-top: 8px; white-space: normal; overflow-wrap: anywhere; text-align: left; }
+.group { margin-top: 16px; font-size: 14px; font-weight: 600; color: var(--text-secondary); }
+.hint { margin-top: 12px; color: var(--text-secondary); font-size: 14px; }
+.picker summary:focus-visible, .choice:focus-visible { outline: 3px solid var(--primary); outline-offset: 2px; }

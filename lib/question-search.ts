@@ -1,21 +1,24 @@
+import { EXAM_SUBJECTS, validChapter } from '../data/exam-chapters';
+
 export const SEARCH_PAGE_SIZE = 20;
-export const SEARCH_SUBJECTS = ['獸醫病理學', '獸醫藥理學', '獸醫實驗診斷學', '獸醫普通疾病學', '獸醫傳染病學', '獸醫公共衛生學'];
+export const SEARCH_SUBJECTS = EXAM_SUBJECTS;
 export type SearchParams = Record<string, string | string[] | undefined>;
 export function parseSearch(params: SearchParams) {
   const value = (key: string) => typeof params[key] === 'string' ? params[key].trim() : '';
   const integer = (key: string, max: number) => /^\d+$/.test(value(key)) && Number(value(key)) > 0 && Number(value(key)) <= max ? Number(value(key)) : null;
   const q = value('q').slice(0, 200);
   const subject = value('subject');
+  const chapter = value('chapter');
   const year = integer('year', 9999);
   const number = integer('number', 2147483647);
   const set = integer('set', 2147483647);
-  const invalid = (subject !== '' && !SEARCH_SUBJECTS.includes(subject)) || ['year', 'number', 'set'].some(key => value(key) !== '' && !integer(key, key === 'year' ? 9999 : 2147483647));
-  return { q, subject, year, number, set, page: integer('page', 10000) ?? 1, invalid, active: Boolean(q || subject || year || number || set) };
+  const invalid = !validChapter(subject, chapter) || Array.isArray(params.chapter) || (subject !== '' && !SEARCH_SUBJECTS.includes(subject)) || ['year', 'number', 'set'].some(key => value(key) !== '' && !integer(key, key === 'year' ? 9999 : 2147483647));
+  return { q, subject, chapter, year, number, set, page: integer('page', 10000) ?? 1, invalid, active: Boolean(q || subject || chapter || year || number || set) };
 }
 export type SearchFilters = ReturnType<typeof parseSearch>;
 export function searchUrl(filters: SearchFilters, page = 1) {
   const params = new URLSearchParams();
-  for (const key of ['q', 'subject', 'year', 'number', 'set'] as const) if (filters[key]) params.set(key, String(filters[key]));
+  for (const key of ['q', 'subject', 'chapter', 'year', 'number', 'set'] as const) if (filters[key]) params.set(key, String(filters[key]));
   if (page > 1) params.set('page', String(page));
   return `/questions/search?${params}`;
 }
@@ -31,8 +34,10 @@ export function searchQuery(filters: SearchFilters) {
       AND ($3::integer IS NULL OR qs.exam_year = $3 OR qs.exam_year = $4)
       AND ($5::integer IS NULL OR q.question_number = $5)
       AND ($6::integer IS NULL OR q.question_set_id = $6)
+      ${filters.chapter ? 'AND q.chapter = $9' : ''}
     ORDER BY qs.exam_year DESC NULLS LAST, q.question_number ASC, q.id ASC
     LIMIT $7 OFFSET $8`, values: [keyword, filters.subject || null, filters.year,
       filters.year === null ? null : filters.year >= 1912 ? filters.year - 1911 : filters.year + 1911,
-      filters.number, filters.set, SEARCH_PAGE_SIZE + 1, (filters.page - 1) * SEARCH_PAGE_SIZE] };
+      filters.number, filters.set, SEARCH_PAGE_SIZE + 1, (filters.page - 1) * SEARCH_PAGE_SIZE,
+      ...(filters.chapter ? [filters.chapter] : [])] };
 }
