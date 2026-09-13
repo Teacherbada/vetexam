@@ -1,0 +1,17 @@
+.page { max-width: 1060px; margin: auto; padding: 24px; display: grid; gap: 20px; }
+.intro h1 { font-size: 28px; font-weight: 650; margin-bottom: 8px; }
+.intro p { color: var(--text-secondary); }
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+.card { display: flex; flex-direction: column; gap: 18px; }
+.card[data-selected="true"] { outline: 2px solid var(--primary); outline-offset: -2px; }
+.card .headline { font-size: 20px; font-weight: 600; }
+.difference { color: var(--primary); font-weight: 600; }
+.card ul { padding-left: 22px; list-style: disc; }
+.card li + li { margin-top: 6px; }
+.card button { margin-top: auto; white-space: normal; }
+.card button:disabled { cursor: default; opacity: .65; }
+.status { display: grid; gap: 12px; justify-items: start; }
+@media (max-width: 680px) {
+  .page { padding: 20px 16px; }
+  .grid { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+}
