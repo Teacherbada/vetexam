@@ -39,6 +39,7 @@ test("ROC display handles ROC and western input without modifying filter values"
 test("stats POST uses session identity, skips guests, validates origin/payload, and returns no answer", async () => {
   let user = null, writes = 0, failure = false;
   const route = load("app/api/stats/answers/route.ts", {
+    "@/lib/question-detail-answer": { answerPublicQuestion: () => { throw new Error('Unexpected reveal'); } },
     "next/server": { NextResponse: { json: (body, init) => Response.json(body, init) } },
     "@/lib/auth": { auth: { api: { getSession: async () => user ? { user: { id: user } } : null } } },
     "@/lib/question-transaction": { questionTransaction: async run => run({ query: async () => ({ rows: [] }) }) },

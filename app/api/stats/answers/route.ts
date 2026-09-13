@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { questionTransaction } from "@/lib/question-transaction";
 import { auth } from "@/lib/auth";
 import { parseAnswerSubmissions, recordFirstAnswers } from "@/lib/question-stats";
+import { answerPublicQuestion } from "@/lib/question-detail-answer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,7 +17,8 @@ export async function POST(request: Request) {
   }
   try {
     const session = await auth.api.getSession({ headers: request.headers });
-    if (!session?.user?.id) return NextResponse.json({ success: true, recorded: false });
+    const reveal = new URL(request.url).searchParams.get("reveal") === "1";
+    if (!session?.user?.id && !reveal) return NextResponse.json({ success: true, recorded: false });
     // Bound the stream, including chunked requests without Content-Length.
     const reader = request.body?.getReader();
     if (!reader) return NextResponse.json({ error: "缺少答題資料" }, { status: 400 });
@@ -34,13 +36,18 @@ export async function POST(request: Request) {
     catch { return NextResponse.json({ error: "答題資料格式錯誤" }, { status: 400 }); }
     const answers = parseAnswerSubmissions(body);
     if (!answers) return NextResponse.json({ error: "答題資料格式錯誤" }, { status: 400 });
+    if (reveal) {
+      if (answers.length !== 1) return NextResponse.json({ error: "請一次作答一題" }, { status: 400 });
+      const result = await questionTransaction(client => answerPublicQuestion(client, session?.user?.id ?? null, answers[0]));
+      return NextResponse.json(result.body, { status: result.status, headers: { "Cache-Control": "private, no-store" } });
+    }
     const databaseUrl = process.env.DATABASE_URL;
     if (!databaseUrl) throw new Error("Missing database configuration");
     await questionTransaction(async client => {
       // Acquire the writer lock before the INSERT statement takes its snapshot.
       // Admin corrections hold a conflicting lock through answer + stats updates.
       await client.query('LOCK TABLE question_answer_stats IN ROW EXCLUSIVE MODE');
-      await recordFirstAnswers(async (text, values) => (await client.query(text, values)).rows, session.user.id, answers);
+      await recordFirstAnswers(async (text, values) => (await client.query(text, values)).rows, session!.user.id, answers);
     });
     // Never return correctness, the answer key, or per-user records.
     return NextResponse.json({ success: true });

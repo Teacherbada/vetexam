@@ -63,7 +63,7 @@ export default function SubjectsPage() {
   const invalid = loadingAvailable || !!error || rows.some((r) => r.count !== "all" && (!Number.isInteger(Number(r.count)) || Number(r.count) < 1));
 
   return <main className={`${analysisStyles.page}`}><div className={analysisStyles.container}>
-    <nav className={analysisStyles.breadcrumb} aria-label="麵包屑"><Link href="/" aria-label="回首頁"><StudyIcon name="home" />首頁</Link><span aria-hidden="true">/</span><span aria-current="page">選擇科目</span></nav>
+    <nav className={analysisStyles.breadcrumb} aria-label="麵包屑"><Link href="/" aria-label="回首頁"><StudyIcon name="home" />首頁</Link><span aria-hidden="true">/</span><span aria-current="page">選擇科目</span><Link href="/questions/search">題目搜尋</Link></nav>
     <header className={analysisStyles.header}><div><h1>選擇科目</h1><p>選擇你想練習的科目，開始今天的刷題。</p></div><Link href="/most-missed" className="study-button"><StudyIcon name="target" />最多人答錯</Link></header>
     <div className={styles.grid}>{subjects.map((subject) => <button
       key={subject}
