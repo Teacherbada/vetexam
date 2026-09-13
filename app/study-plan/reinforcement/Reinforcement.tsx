@@ -58,12 +58,16 @@ export default function Reinforcement({ preview = false }: { preview?: boolean }
   if (!data) return <section className={`study-card ${styles.stack}`}>{error ? <><p role="alert">{error}</p>{refresh}</> : <p role="status">讀取補強進度中…</p>}</section>;
   if (data.mode !== "coach") return <section className={`study-card ${styles.stack}`}><h2>先選擇國考教練模式</h2><p>切回國考教練後可繼續原有補強任務。</p><Link href="/study-plan" className="study-button">設定學習模式</Link></section>;
   const task = data.task;
+  const active = Boolean(task && !['short_term', 'stable', 'queued'].includes(task.status));
+  const due = data.due ?? [];
   const session = data.session;
   const current = session?.current;
   const attempt = data.attempts.find(row => row.attempt === task?.review_count);
   const button = (action: Parameters<typeof send>[0], label: string, primary = true) => <button className={`study-button ${primary ? "study-button-primary" : ""}`} disabled={busy} onClick={() => void send(action)}>{busy ? "儲存中…" : label}</button>;
   return <div className={styles.stack} aria-busy={busy}>
     {error && <section className={`study-card ${styles.stack}`}><p role="alert">{error}</p>{refresh}</section>}
+    {!active && due.map(row => <section key={row.id} className={`study-card ${styles.stack}`}><h2>今日複習追蹤</h2><h3>{row.subject} → {row.chapter}</h3><p>這項複習追蹤已可進行。快速確認之前補強過的內容是否還記得。</p><Link href={`/study-plan/follow-up?id=${row.id}`} className="study-button study-button-primary">{row.session_id ? '繼續快速確認' : '開始快速確認'}</Link></section>)}
+    {(!preview || active || !due.length) &&
     <section className={`study-card ${styles.stack}`}>
       <h2 ref={heading} tabIndex={-1}>{task ? "目前補強任務" : "建議下一步"}</h2>
       {task ? <>
@@ -71,7 +75,7 @@ export default function Reinforcement({ preview = false }: { preview?: boolean }
         <p role="status">{REINFORCEMENT_LABELS[task.status]}</p>
         <p>補強前有效樣本：{task.source_analysis.correct} / {task.source_analysis.count} 題正確（{Math.round((task.source_analysis.accuracy ?? 0) * 100)}%） · {WEAKNESS_LABELS[task.source_analysis.status]}</p>
         <p className="study-muted">你在這些有效樣本中的表現較不穩定，因此建議先複習這個章節。補強前分析會保留，確認結果另外記錄。</p>
-        {preview && task.status !== "short_term" && <Link href="/study-plan/reinforcement" className="study-button study-button-primary">{task.status === "reviewed" ? "開始確認" : task.status === "verifying" ? "繼續確認測驗" : task.status === "needs_work" ? "再次複習" : "繼續你的補強任務"}</Link>}
+        {preview && active && <Link href="/study-plan/reinforcement" className="study-button study-button-primary">{task.status === "reviewed" ? "開始確認" : task.status === "verifying" ? "繼續確認測驗" : task.status === "needs_work" ? "再次複習" : "繼續你的補強任務"}</Link>}
         {!preview && task.status === "reviewing" && <>
           <h3>自行複習 · 第 {task.review_count} 次</h3>
           <p>請使用你平常的課本、講義或其他可信學習資料完成複習。未來 VetExam 將在此加入相關重點筆記與學習內容。</p>
@@ -82,14 +86,16 @@ export default function Reinforcement({ preview = false }: { preview?: boolean }
           <h3>用幾題確認一下</h3><p>優先使用同一章節的其他題目，確認剛才複習的內容。預計最多 {REINFORCEMENT_VERIFICATION_QUESTION_COUNT} 題；題庫不足時會使用較少題目或先前做過的題目並標示。</p>
           {button("verify", "開始確認")}
         </>}
-        {task.status === "short_term" && <><h3>目前已達短期掌握</h3><p>你在剛完成複習後的確認測驗表現良好。這代表本次短期表現；後續間隔追蹤功能尚未開放。</p></>}
+        {task.status === "short_term" && <><h3>目前已達短期掌握</h3><p>你在剛完成複習後的確認測驗表現良好。已安排後續間隔追蹤，完成各階段確認後再評估是否掌握穩定。</p><Link href="/study-plan/follow-up" className="study-text-link">查看複習追蹤時間</Link></>}
+        {task.status === "stable" && <><h3>掌握穩定</h3><p>你在補強後的後續追蹤中仍保持良好表現。</p><Link href="/study-plan/follow-up" className="study-text-link">查看追蹤紀錄</Link></>}
+        {task.status === "queued" && <><p>後續追蹤顯示這個章節仍有些不穩定，已加入再次補強佇列。之前的診斷、補強成功與追蹤成績會分開保留。</p>{!due.length && button('start', '開始再次補強')}</>}
         {task.status === "needs_work" && <><h3>建議再複習一次</h3><p>{attempt && attempt.total < attempt.minQuestions ? "本次題目數不足以判定短期掌握，請持續複習，待題庫補充後再確認。" : "這個章節目前仍有部分觀念不穩定，建議再次複習後再進行確認。"}</p>{!preview && button("again", "再次複習")}</>}
         {!preview && task.status === "deferred" && <><p>稍後複習的任務已保留，尚未完成補強。</p>{button("resume", "繼續補強")}</>}
-        {!preview && !["short_term", "deferred"].includes(task.status) && button("defer", "稍後再複習", false)}
+        {!preview && active && task.status !== 'deferred' && button("defer", "稍後再複習", false)}
       </> : !data.next && <><p>目前沒有足夠證據推薦新的章節補強。先完成初始診斷與弱點確認，累積不同題目的章節資料。</p><Link href="/study-plan/diagnostic" className="study-button">查看診斷進度</Link><Link href="/study-plan/confirmation" className="study-button">前往弱點確認</Link></>}
-      {(!task || task.status === "short_term") && data.next && <><h3>建議下一步：{data.next.subject} → {data.next.chapter}</h3><p>先複習這個章節，再用幾題確認是否理解。</p>{button("start", task ? "繼續下一個任務" : "開始補強")}</>}
+      {!due.length && (!task || ['short_term','stable'].includes(task.status)) && data.next && <><h3>建議下一步：{data.next.subject} → {data.next.chapter}</h3><p>先複習這個章節，再用幾題確認是否理解。</p>{button("start", task ? "繼續下一個任務" : "開始補強")}</>}
       <Link href="/subjects" className="study-text-link">繼續一般練習</Link>
-    </section>
+    </section>}
     {!preview && task && <section className={`study-card ${styles.stack}`}><h2>相關學習內容</h2><p className="study-muted">相關 VetExam 筆記功能準備中。</p></section>}
     {!preview && task?.status === "verifying" && session && current && <section className={`study-card ${styles.stack}`}>
       <h2>補強確認測驗</h2><p role="status">已儲存 {session.answered} / {session.total} 題</p>
@@ -107,6 +113,6 @@ export default function Reinforcement({ preview = false }: { preview?: boolean }
     </section>}
     {attempt?.completedAt && <section className={`study-card ${styles.stack}`}><h2>補強確認完成</h2><p>{attempt.correct} / {attempt.total} 正確（{Math.round(attempt.correct / attempt.total * 100)}%）</p><p className="study-muted">含 {attempt.repeatedCount} 題重複題；通過條件為至少 {attempt.minQuestions} 題、正確率 {Math.round(attempt.passThreshold * 100)}%。</p></section>}
     {!preview && data.attempts.length > 0 && <section className={`study-card ${styles.stack}`}><h2>本章節複習與確認紀錄</h2><ul>{data.attempts.map(row => <li key={row.id}>第 {row.attempt} 次複習後確認：{row.completedAt ? `${row.correct} / ${row.total} 正確（${Math.round(row.correct / row.total * 100)}%），${new Date(row.completedAt).toLocaleString("zh-TW")}` : `已儲存 ${row.answered} / ${row.total} 題`}；重複 {row.repeatedCount} 題</li>)}</ul></section>}
-    {data.completed.length > 0 && <section className={`study-card ${styles.stack}`}><h2>已達短期掌握的章節</h2><ul>{data.completed.map(row => <li key={`${row.subject}/${row.chapter}`}>{row.subject} → {row.chapter}：補強前 {row.baseline === null ? "資料不足" : `${Math.round(row.baseline * 100)}%`} → 補強確認 {row.correct} / {row.total}（{Math.round(row.correct / row.total * 100)}%）；目前狀態：短期掌握</li>)}</ul></section>}
+    {data.completed.length > 0 && <section className={`study-card ${styles.stack}`}><h2>補強後的章節狀態</h2><ul>{data.completed.map(row => <li key={`${row.subject}/${row.chapter}`}>{row.subject} → {row.chapter}：補強前 {row.baseline === null ? "資料不足" : `${Math.round(row.baseline * 100)}%`} → 補強確認 {row.correct} / {row.total}（{Math.round(row.correct / row.total * 100)}%）；目前狀態：{row.status === 'stable' ? '掌握穩定' : '短期掌握'}</li>)}</ul><Link href="/study-plan/follow-up" className="study-text-link">查看各階段追蹤紀錄</Link></section>}
   </div>;
 }

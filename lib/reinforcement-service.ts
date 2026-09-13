@@ -4,6 +4,7 @@ import type { PoolClient } from "pg";
 import { answerDiagnostic, createDiagnosticSession, diagnosticCandidates, DiagnosticError, planMode, readDiagnostic } from "@/lib/diagnostic-service";
 import { readWeaknessAnalysis } from "@/lib/confirmation-service";
 import type { parseDiagnosticAnswer } from "@/lib/diagnostic";
+import { dueFollowUps, scheduleFollowUp } from '@/lib/follow-up-store';
 import { nextReinforcement, reinforcementPassed, selectVerificationQuestions, REINFORCEMENT_MIN_VERIFICATION_QUESTIONS, REINFORCEMENT_PASS_THRESHOLD, REINFORCEMENT_RECENT_DAYS, type ReinforcementCommand, type ReinforcementTask, type ReinforcementView, type VerificationMetadata, type VerificationAttempt } from "@/lib/reinforcement";
 
 async function attempts(client: PoolClient, userId: string, taskId: string): Promise<VerificationAttempt[]> {
@@ -23,25 +24,30 @@ export async function readReinforcement(client: PoolClient, userId: string): Pro
   const mode = await planMode(client, userId, false);
   const { rows } = await client.query<ReinforcementTask>(`SELECT id, subject, chapter, status, source_analysis, source_session_id,
     review_count, created_at, started_at, review_completed_at, verification_completed_at
-    FROM reinforcement_tasks WHERE user_id = $1 ORDER BY (status <> 'short_term') DESC, created_at DESC, id DESC`, [userId]);
+    FROM reinforcement_tasks WHERE user_id = $1 ORDER BY (status NOT IN ('short_term','stable','queued')) DESC, (status = 'queued') DESC, created_at DESC, id DESC`, [userId]);
   const task = rows[0] ?? null;
   const completed: ReinforcementView['completed'] = [];
-  for (const row of rows.filter(row => row.status === 'short_term')) {
+  for (const row of rows.filter(row => ['short_term','stable'].includes(row.status))) {
     const history = await attempts(client, userId, row.id);
     const last = history.at(-1);
-    if (last) completed.push({ subject: row.subject, chapter: row.chapter, baseline: row.source_analysis.accuracy, correct: last.correct, total: last.total });
+    if (last) completed.push({ subject: row.subject, chapter: row.chapter, baseline: row.source_analysis.accuracy, correct: last.correct, total: last.total, status: row.status });
   }
   const history = task ? await attempts(client, userId, task.id) : [];
   const current = history.find(row => row.attempt === task?.review_count);
   const session = current ? (await readDiagnostic(client, userId, 'verification', current.id)).session : null;
   const next = await readWeaknessAnalysis(client, userId).then(analysis => nextReinforcement(analysis, completed));
-  return { mode, task, next: task && task.status !== 'short_term' ? null : next, session, attempts: history, completed };
+  return { mode, task, next: task && !['short_term','stable'].includes(task.status) ? null : next, session, attempts: history, completed, due: await dueFollowUps(client, userId) };
 }
 
 export async function startReinforcement(client: PoolClient, userId: string) {
   await planMode(client, userId, true);
   const view = await readReinforcement(client, userId);
-  if (view.task && view.task.status !== 'short_term') return view;
+  if (view.task && !['short_term','stable','queued'].includes(view.task.status)) return view;
+  if (view.due.length) throw new DiagnosticError(409, '請先完成已到期的複習追蹤，再開始下一個補強任務。');
+  if (view.task?.status === 'queued') {
+    await client.query("UPDATE reinforcement_tasks SET status='reviewing', review_count=review_count+1, review_completed_at=NULL, verification_completed_at=NULL WHERE id=$1", [view.task.id]);
+    return readReinforcement(client, userId);
+  }
   const initial = await readDiagnostic(client, userId);
   if (!initial.session?.completed) throw new DiagnosticError(409, '請先完成初始診斷與弱點確認。');
   if (!view.next?.chapter) throw new DiagnosticError(409, '目前沒有足夠證據推薦新的章節補強，請先繼續弱點確認或一般練習。');
@@ -73,7 +79,7 @@ export async function changeReinforcement(client: PoolClient, userId: string, co
       await client.query("UPDATE reinforcement_tasks SET status = 'reviewing', review_count = review_count + 1, review_completed_at = NULL, verification_completed_at = NULL WHERE id = $1", [task.id]);
       break;
     case 'defer':
-      if (task.status === 'short_term') reject();
+      if (['short_term','stable','queued'].includes(task.status)) reject();
       if (task.status !== 'deferred') await client.query("UPDATE reinforcement_tasks SET paused_status = status, status = 'deferred' WHERE id = $1", [task.id]);
       break;
     case 'resume':
@@ -113,6 +119,7 @@ export async function answerReinforcement(client: PoolClient, userId: string, ta
     const correct = view.session.results.reduce((sum, row) => sum + row.correct, 0);
     const status = reinforcementPassed(correct, view.session.total, metadata.pass_threshold, metadata.min_questions) ? 'short_term' : 'needs_work';
     await client.query('UPDATE reinforcement_tasks SET status = $2, verification_completed_at = clock_timestamp() WHERE id = $1', [task.id, status]);
+    if (status === 'short_term') await scheduleFollowUp(client, task.id);
   }
   return readReinforcement(client, userId);
 }

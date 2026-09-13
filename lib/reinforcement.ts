@@ -1,15 +1,17 @@
 import { validChapter } from "../data/exam-chapters";
 import type { Candidate, DiagnosticView } from "./diagnostic";
 import type { Performance, WeaknessAnalysis } from "./weakness";
+import type { FollowUp } from './follow-up';
 
 export const REINFORCEMENT_VERIFICATION_QUESTION_COUNT = 5;
 export const REINFORCEMENT_PASS_THRESHOLD = 0.8;
 export const REINFORCEMENT_MIN_VERIFICATION_QUESTIONS = 3;
 export const REINFORCEMENT_RECENT_DAYS = 7;
-export type ReinforcementStatus = "reviewing" | "reviewed" | "verifying" | "short_term" | "needs_work" | "deferred";
+export type ReinforcementStatus = "reviewing" | "reviewed" | "verifying" | "short_term" | "needs_work" | "deferred" | "stable" | "queued";
 export const REINFORCEMENT_LABELS: Record<ReinforcementStatus, string> = {
   reviewing: "補強中・等待複習", reviewed: "補強中・等待確認", verifying: "補強中・確認測驗進行中",
   short_term: "短期掌握", needs_work: "仍需加強", deferred: "需要補強・稍後複習",
+  stable: "掌握穩定", queued: "需要再次補強",
 };
 export type VerificationMetadata = {
   review_attempt: number; reviewed_at: string; repeated_question_ids: number[];
@@ -27,7 +29,8 @@ export type ReinforcementTask = {
 export type ReinforcementView = {
   mode: string | null; task: ReinforcementTask | null; next: Performance | null;
   session: DiagnosticView["session"]; attempts: VerificationAttempt[];
-  completed: { subject: string; chapter: string; baseline: number | null; correct: number; total: number }[];
+  completed: { subject: string; chapter: string; baseline: number | null; correct: number; total: number; status: ReinforcementStatus }[];
+  due: FollowUp[];
 };
 export type ReinforcementCommand = {
   action: "review" | "verify" | "again" | "defer" | "resume";

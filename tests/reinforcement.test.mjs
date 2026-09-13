@@ -28,8 +28,10 @@ const service = load('lib/diagnostic-service.ts', {
   '@/lib/question-answer': load('lib/question-answer.ts'), '@/lib/question-stats': load('lib/question-stats.ts'),
 });
 const confirmation = load('lib/confirmation-service.ts', { '@/lib/diagnostic-service': service, '@/lib/weakness': weakness });
+const followUpConfig = load('lib/follow-up-config.ts');
+const followUpStore = load('lib/follow-up-store.ts', { 'node:crypto': { randomUUID }, './follow-up-config': followUpConfig });
 const reinforcement = load('lib/reinforcement-service.ts', { 'node:crypto': { randomUUID }, '@/lib/diagnostic-service': service,
-  '@/lib/confirmation-service': confirmation, '@/lib/reinforcement': rules });
+  '@/lib/confirmation-service': confirmation, '@/lib/reinforcement': rules, '@/lib/follow-up-store': followUpStore });
 const subject = chapters.EXAM_SUBJECTS[0];
 const names = chapters.chapterGroups(subject)[0].chapters.slice(0, 3);
 const chapter = names[0];
@@ -105,6 +107,7 @@ test('PostgreSQL: single persistent task, review gate, exact questions, fail/rev
     await client.query(sql('20260915_diagnostic_confirmation.sql'));
     await client.query(sql('20260916_reinforcement_tasks.sql'));
     await client.query(sql('20260916_reinforcement_tasks.sql'));
+    await client.query(sql('20260917_follow_ups.sql'));
     const initialId = randomUUID(), confirmationId = randomUUID();
     await client.query("INSERT INTO diagnostic_sessions(id,user_id,completed_at) VALUES ($1,'alice',CURRENT_TIMESTAMP)", [initialId]);
     await client.query("INSERT INTO diagnostic_sessions(id,user_id,kind,parent_session_id,completed_at) VALUES ($1,'alice','confirmation',$2,CURRENT_TIMESTAMP)", [confirmationId, initialId]);

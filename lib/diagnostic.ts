@@ -9,7 +9,7 @@ export const DIAGNOSTIC_CONFIG = {
 } as const;
 
 export type Candidate = { id: number; subject: string; chapter: string | null; last_answered: string | null };
-export type DiagnosticKind = "initial" | "confirmation" | "verification";
+export type DiagnosticKind = "initial" | "confirmation" | "verification" | "follow_up";
 export type DiagnosticSummary = { subject: string; total: number; answered: number; correct: number; insufficient: boolean; suspect: boolean };
 export type DiagnosticView = {
   mode: string | null;
