@@ -101,6 +101,7 @@ test('PostgreSQL: create, persist, replay, account isolation, snapshots, complet
       INSERT INTO question_sets VALUES (1,'public'), (2,'private');`);
     const migration = readFileSync(new URL('../migrations/20260914_initial_diagnostic.sql', import.meta.url), 'utf8').replaceAll('CREATE TABLE IF NOT EXISTS', 'CREATE TEMP TABLE IF NOT EXISTS');
     await client.query(migration); await client.query(migration);
+    await client.query(readFileSync(new URL('../migrations/20260915_diagnostic_confirmation.sql', import.meta.url), 'utf8'));
     const fixtures = subjects.flatMap((subject, index) => Array.from({ length: 12 }, (_, n) => ({ id: index * 100 + n + 1, subject })));
     await client.query(`INSERT INTO questions (id, question_set_id, subject, question, answer, option_a, option_b, option_e)
       SELECT id, 1, subject, 'Fixture question', 'E', 'Option A', 'Option B', 'Option E'

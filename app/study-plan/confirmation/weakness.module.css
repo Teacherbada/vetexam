@@ -1,0 +1,14 @@
+.section { display: grid; gap: 18px; }
+.priorities { list-style: decimal; padding-left: 24px; }
+.priorities li + li { margin-top: 18px; }
+.subjects { display: grid; gap: 12px; }
+.subject { border: 1px solid var(--border); border-radius: 14px; padding: 16px; min-width: 0; }
+.subject summary { display: flex; justify-content: space-between; align-items: center; gap: 16px; min-height: 44px; }
+.subject summary > span:first-child { display: grid; gap: 4px; }
+.subject summary > span:last-child { flex-shrink: 0; color: var(--primary); }
+.subject[open] > p { margin-top: 16px; }
+.chapters { list-style: none; margin-top: 16px; }
+.chapters li { padding: 14px 0; border-top: 1px solid var(--border); }
+.chapters li > div { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; }
+.chapters p { margin-top: 5px; }
+@media (max-width: 600px) { .subject summary { align-items: flex-start; flex-direction: column; gap: 8px; } }

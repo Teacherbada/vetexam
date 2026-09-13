@@ -94,7 +94,7 @@ try {
   }
   await page.getByRole('heading', { name: '初步診斷完成', exact: true }).waitFor();
   assert.equal(await page.getByText('資料不足，暫不判定', { exact: true }).count(), 6);
-  assert(await page.getByRole('button', { name: '繼續弱點確認', exact: true }).isDisabled());
+  assert.equal(await page.getByRole('link', { name: '繼續弱點確認', exact: true }).getAttribute('href'), '/study-plan/confirmation');
   await page.reload();
   await page.getByRole('heading', { name: '初步診斷完成', exact: true }).waitFor();
   guest = true; await page.reload();

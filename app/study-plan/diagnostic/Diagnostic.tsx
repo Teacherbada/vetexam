@@ -6,9 +6,11 @@ import { ProgressBar, StudyIcon } from "@/components/dashboard/StudyUI";
 import { DIAGNOSTIC_CONFIG, type DiagnosticView } from "@/lib/diagnostic";
 import quiz from "@/app/questions/quiz.module.css";
 import styles from "./diagnostic.module.css";
+import { WEAKNESS_CONFIG, type ConfirmationView } from "@/lib/weakness";
+import WeaknessOverview from "../confirmation/WeaknessOverview";
 
-const endpoint = "/api/study-plan/diagnostic";
-export default function Diagnostic({ preview = false }: { preview?: boolean }) {
+export default function Diagnostic({ preview = false, confirmation = false }: { preview?: boolean; confirmation?: boolean }) {
+  const endpoint = confirmation ? "/api/study-plan/confirmation" : "/api/study-plan/diagnostic";
   const [data, setData] = useState<DiagnosticView | null>(null);
   const [error, setError] = useState("");
   const [guest, setGuest] = useState(false);
@@ -34,7 +36,7 @@ export default function Diagnostic({ preview = false }: { preview?: boolean }) {
     }
     void load();
     return () => controller.abort();
-  }, [reload]);
+  }, [reload, endpoint]);
 
   async function send(action: "start" | "answer") {
     if (locked.current) return;
@@ -56,25 +58,38 @@ export default function Diagnostic({ preview = false }: { preview?: boolean }) {
 
   const session = data?.session;
   const current = session?.current;
+  const confirmationData = confirmation && data ? data as ConfirmationView : null;
+  const canConfirm = confirmationData?.available.some(row => row.count > 0) ?? false;
   const reloadButton = <button className="study-button" disabled={busy} onClick={() => { setData(null); setError(""); setReload(value => value + 1); }}>重新載入診斷</button>;
   if (guest) return <section className={`study-card ${styles.stack}`}><h2>請先登入</h2><p>診斷進度會儲存至你的帳號，方便下次繼續。</p><Link href="/login" className="study-button">登入帳號</Link></section>;
   if (!data) return <section className={`study-card ${styles.stack}`}>{error ? <><p role="alert">{error}</p>{reloadButton}</> : <p role="status">讀取診斷進度中…</p>}</section>;
   if (data.mode !== "coach") return <section className={`study-card ${styles.stack}`}><h2>先選擇國考教練模式</h2><p>既有診斷進度會保留，切回國考教練後可以繼續。</p><Link href="/study-plan" className="study-button">設定學習模式</Link></section>;
+  if (confirmationData && !confirmationData.initialCompleted) return <section className={`study-card ${styles.stack}`}><h2>請先完成初始診斷</h2><p>先了解六科表現，再決定要進一步確認的科目。</p><Link href="/study-plan/diagnostic" className="study-button study-button-primary">前往初始診斷</Link></section>;
 
   return <div className={styles.stack} aria-busy={busy}>
     {error && <div className={`study-card ${styles.stack}`}><p role="alert">{error}</p>{reloadButton}</div>}
-    {!session ? <section className={`study-card ${styles.stack}`}>
+    {confirmationData && (!session || session.completed) && <section className={`study-card ${styles.stack}`}>
+      <h2>進一步確認學習狀況</h2>
+      <p>{confirmationData.targets.length ? `根據初始診斷，先確認：${confirmationData.targets.join("、")}。` : "目前沒有需要優先確認的科目。你可以先繼續一般練習。"}</p>
+      {confirmationData.targets.length > 0 && <><p>每科最多 {WEAKNESS_CONFIG.questionsPerSubject} 題，盡量集中足夠的不同章節題目，暫時避開最近 {WEAKNESS_CONFIG.avoidRepeatDays} 天做過的題目。</p>
+        <p className="study-muted">{confirmationData.available.map(row => `${row.subject}：可用 ${row.count} 題`).join("；")}。未分類題目只用於確認科目表現。</p>
+        {canConfirm ? <button className="study-button study-button-primary" disabled={busy} onClick={() => void send("start")}>{busy ? "準備題目中…" : session ? "再做一輪確認" : "開始弱點確認"}</button>
+          : <p role="status">目前沒有足夠的不同題目可供確認，請待題庫補充或間隔一段時間後再試。既有結果已保留。</p>}</>}
+      <Link href="/subjects" className="study-text-link">先繼續一般練習<StudyIcon name="arrow" /></Link>
+    </section>}
+    {!session && !confirmation ? <section className={`study-card ${styles.stack}`}>
       <h2 ref={heading} tabIndex={-1}>先讓 VetExam 了解你</h2>
       <p>在開始安排個人化學習計畫前，我們會先透過一份診斷測驗了解你目前六科的學習狀況。</p>
       <p>這不是正式考試，目的是幫助我們找出之後值得優先確認的科目與章節。</p>
       <p className="study-muted">每科預計 {DIAGNOSTIC_CONFIG.questionsPerSubject} 題；題量不足時會使用實際可用題目並標示缺口。每題送出後會儲存，可隨時離開後續作。</p>
       {preview ? <Link href="/study-plan/diagnostic" className="study-button study-button-primary">開始診斷<StudyIcon name="arrow" /></Link>
         : <button className="study-button study-button-primary" disabled={busy} onClick={() => void send("start")}>{busy ? "準備題目中…" : "開始診斷"}</button>}
-    </section> : <>
+    </section> : session ? <>
       <section className={`study-card ${styles.stack}`}>
-        <h2 ref={heading} tabIndex={-1}>{session.completed ? "初步診斷完成" : "診斷進度"}</h2>
+        <h2 ref={heading} tabIndex={-1}>{session.completed ? confirmation ? "弱點確認完成" : "初步診斷完成" : confirmation ? "弱點確認進度" : "診斷進度"}</h2>
         <p role="status">已儲存 {session.answered} / {session.total} 題</p>
         <ProgressBar value={session.total ? session.answered / session.total * 100 : 0} label="診斷完成百分比" />
+        {confirmationData && session.total < confirmationData.targets.length * WEAKNESS_CONFIG.questionsPerSubject && <p className="study-muted">本輪依可用題目進行，共 {session.total} 題；缺少的題目不計零分，樣本不足時不判定章節弱點。</p>}
         {session.shortages.length > 0 && <div className={styles.shortages}><p>部分科目題量不足，本次依實際可用題目進行；缺題科目不視為零分，也不判定弱科。</p><ul>{session.shortages.map(row => <li key={row.subject}>{row.subject}：{row.available} / {DIAGNOSTIC_CONFIG.questionsPerSubject} 題</li>)}</ul></div>}
         {preview && <Link href="/study-plan/diagnostic" className="study-button study-button-primary">{session.completed ? "查看初步結果" : "繼續診斷"}<StudyIcon name="arrow" /></Link>}
       </section>
@@ -91,14 +106,15 @@ export default function Diagnostic({ preview = false }: { preview?: boolean }) {
         <p className="study-muted">選擇後按送出即鎖定答案。請等待「已儲存」題數更新；初步結果會在完成後顯示。</p>
         <button className="study-button study-button-primary" disabled={busy || !selected} onClick={() => void send("answer")}>{busy ? "儲存中…" : session.answered + 1 === session.total ? "送出並完成診斷" : "送出並繼續"}</button>
       </section>}
-      {!preview && session.completed && <section className={`study-card ${styles.stack}`}>
+      {!preview && !confirmation && session.completed && <section className={`study-card ${styles.stack}`}>
         <h2>各科初步表現</h2>
         <div className={styles.results}>{session.results.map(row => <div key={row.subject}><h3>{row.subject}</h3><p>{row.total ? `${row.correct} / ${row.total}` : "尚無可用題目"}</p><p className="study-muted">{row.insufficient ? "資料不足，暫不判定" : row.suspect ? "目前可能需要進一步確認" : "本次未列為優先確認科目"}</p></div>)}</div>
         <p>這只是初步診斷。VetExam 接下來會針對目前表現較弱的科目進一步確認，避免因題目數不足而誤判。</p>
-        <button className="study-button" disabled aria-describedby="confirmation-coming">繼續弱點確認</button>
-        <p id="confirmation-coming" className="study-muted">弱點確認將於下一階段開放；本次結果已儲存，目前尚未判定章節弱點。</p>
+        <Link href="/study-plan/confirmation" className="study-button study-button-primary">繼續弱點確認<StudyIcon name="arrow" /></Link>
+        <p className="study-muted">透過更多不同題目確認科目與章節表現；資料不足時不判定章節弱點。</p>
         <Link href="/subjects" className="study-text-link">先繼續一般練習<StudyIcon name="arrow" /></Link>
       </section>}
-    </>}
+    </> : null}
+    {confirmationData && (!session || session.completed) && <WeaknessOverview analysis={confirmationData.analysis} />}
   </div>;
 }
