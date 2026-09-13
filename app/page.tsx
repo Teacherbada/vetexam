@@ -129,6 +129,7 @@ export default function Home() {
     { href: "/", label: "首頁", icon: "home" },
     { href: "/subjects", label: "國考題庫", icon: "book" },
     ...(isAdmin ? [{ href: "/pdf", label: "國考解析", icon: "folder" as StudyIconName }] : []),
+    { href: "/study-plan", label: "設定學習計畫", icon: "calendar" },
     { href: "/manual", label: "手動建立題庫", icon: "file", comingSoon: true },
     { href: "/questions/search", label: "查詢題目", icon: "search" },
     { href: "/wrong", label: "錯題本", icon: "wrong" },
@@ -176,7 +177,6 @@ export default function Home() {
             <h1>今天也刷一點吧</h1>
             <p className="study-hero-description">每一題的累積，都是成為更好獸醫的力量。</p>
             <Link href="/subjects" className="study-button study-button-primary study-welcome-action">開始刷題<StudyIcon name="arrow" /></Link>
-            <Link href="/study-plan" className="study-button study-welcome-action"><StudyIcon name="calendar" />學習計畫</Link>
           </section>
           <div className="study-hero-visual"><p>Small progress.<br />A little closer, every day.</p><StudyCompanions /></div>
           <section className="study-card study-countdown"><h2><StudyIcon name="calendar" />國考倒數</h2><p className="study-days">{daysLeft}<span>天</span></p><label htmlFor="exam-date">我的目標考試日期</label><input id="exam-date" type="date" value={examDate} onChange={(event) => { if (event.target.value) { setExamDate(event.target.value); localStorage.setItem("examDate", event.target.value); } }} /><p className="study-muted">照自己的步調，準備每一天。</p></section>
