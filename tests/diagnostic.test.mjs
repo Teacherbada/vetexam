@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import ts from 'typescript';
 import nextEnv from '@next/env';
 import pg from 'pg';
+import { diagnosticTestConnectionString } from './diagnostic-database.mjs';
 
 function load(path, mocks = {}) {
   const exports = {};
@@ -85,7 +86,7 @@ test('API protects identity, origin, request size and error details', async () =
 
 test('PostgreSQL: create, persist, replay, account isolation, snapshots, completion and fallback', { skip: process.env.DIAGNOSTIC_DB_TEST !== '1', timeout: 240000 }, async () => {
   nextEnv.loadEnvConfig(process.cwd());
-  const client = new pg.Client({ connectionString: process.env.DATABASE_URL, connectionTimeoutMillis: 10000 });
+  const client = new pg.Client({ connectionString: diagnosticTestConnectionString(), connectionTimeoutMillis: 10000 });
   await client.connect();
   try {
     await client.query('BEGIN');

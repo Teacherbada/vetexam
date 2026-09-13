@@ -5,6 +5,7 @@ import { EXAM_SUBJECTS } from "@/data/exam-chapters";
 import { usableAnswer } from "@/lib/question-answer";
 import { recordFirstAnswers } from "@/lib/question-stats";
 import { DIAGNOSTIC_CONFIG, selectDiagnosticQuestions, summarizeDiagnostic, type Candidate, type DiagnosticView, type DiagnosticKind, type parseDiagnosticAnswer } from "@/lib/diagnostic";
+import type { VerificationMetadata } from "@/lib/reinforcement";
 
 export class DiagnosticError extends Error {
   constructor(public status: number, message: string) { super(message); }
@@ -23,9 +24,9 @@ export async function planMode(client: PoolClient, userId: string, write: boolea
   return mode;
 }
 
-export async function readDiagnostic(client: PoolClient, userId: string, kind: DiagnosticKind = "initial"): Promise<DiagnosticView> {
+export async function readDiagnostic(client: PoolClient, userId: string, kind: DiagnosticKind = "initial", sessionId: string | null = null): Promise<DiagnosticView> {
   const mode = await planMode(client, userId, false);
-  const { rows: sessions } = await client.query("SELECT id, completed_at FROM diagnostic_sessions WHERE user_id = $1 AND kind = $2 ORDER BY created_at DESC, id DESC LIMIT 1", [userId, kind]);
+  const { rows: sessions } = await client.query("SELECT id, completed_at FROM diagnostic_sessions WHERE user_id = $1 AND kind = $2 AND ($3::uuid IS NULL OR id = $3) ORDER BY created_at DESC, id DESC LIMIT 1", [userId, kind, sessionId]);
   if (!sessions[0]) return { mode, session: null };
   const session = sessions[0];
   const { rows } = await client.query<Item>("SELECT position, source_question_id, subject, chapter, question, options, image, selected_answer, is_correct FROM diagnostic_items WHERE session_id = $1 ORDER BY position", [session.id]);
@@ -72,14 +73,15 @@ export async function diagnosticCandidates(client: PoolClient, userId: string): 
   return candidates;
 }
 
-export async function createDiagnosticSession(client: PoolClient, userId: string, selected: Candidate[], kind: DiagnosticKind = "initial", parentId: string | null = null) {
-  const { rows: source } = await client.query(`SELECT q.id, q.question, q.answer, q.image_data_url,
+export async function createDiagnosticSession(client: PoolClient, userId: string, selected: Candidate[], kind: DiagnosticKind = "initial", parentId: string | null = null, verification?: { taskId: string; metadata: VerificationMetadata }) {
+  const { rows: source } = await client.query(`SELECT q.id, q.subject, q.chapter, q.question, q.answer, q.image_data_url,
     q.option_a, q.option_b, q.option_c, q.option_d, q.option_e
     FROM questions q JOIN question_sets qs ON qs.id = q.question_set_id
     WHERE q.id = ANY($1::integer[]) AND qs.visibility = 'public' FOR SHARE OF q, qs`, [selected.map(row => row.id)]);
   const snapshots = selected.flatMap(candidate => {
     const row = source.find(row => row.id === candidate.id);
     if (!row) return [];
+    if (kind === "verification" && (row.subject !== candidate.subject || row.chapter !== candidate.chapter)) return [];
     const options = [row.option_a, row.option_b, row.option_c, row.option_d, row.option_e].map(value => value ?? "");
     const answer = usableAnswer({ answer: row.answer, options });
     if (!answer) return [];
@@ -87,7 +89,13 @@ export async function createDiagnosticSession(client: PoolClient, userId: string
   });
   if (!snapshots.length) throw new DiagnosticError(409, "題庫正在更新，請重新開始診斷。");
   const id = randomUUID();
-  await client.query("INSERT INTO diagnostic_sessions (id, user_id, kind, parent_session_id, created_at) VALUES ($1, $2, $3, $4, clock_timestamp())", [id, userId, kind, parentId]);
+  if (kind === "verification") {
+    if (!verification) throw new DiagnosticError(400, "缺少補強任務資料。");
+    const metadata = { ...verification.metadata, repeated_question_ids: verification.metadata.repeated_question_ids.filter(id => snapshots.some(row => row.id === id)) };
+    await client.query("INSERT INTO diagnostic_sessions (id, user_id, kind, parent_session_id, created_at, reinforcement_task_id, verification_metadata) VALUES ($1, $2, $3, $4, clock_timestamp(), $5, $6::jsonb)", [id, userId, kind, parentId, verification.taskId, JSON.stringify(metadata)]);
+  } else {
+    await client.query("INSERT INTO diagnostic_sessions (id, user_id, kind, parent_session_id, created_at) VALUES ($1, $2, $3, $4, clock_timestamp())", [id, userId, kind, parentId]);
+  }
   await client.query(`INSERT INTO diagnostic_items
     (session_id, position, question_id, source_question_id, subject, chapter, question, options, image, answer_key)
     SELECT $1, item.position, item.id, item.id, item.subject, item.chapter, item.question, item.options, item.image, item.answer
@@ -105,7 +113,7 @@ export async function answerDiagnostic(client: PoolClient, userId: string, submi
   if (!item) throw new DiagnosticError(400, "診斷題目無效。");
   if (item.selected_answer !== null) {
     if (item.selected_answer !== submission.answer) throw new DiagnosticError(409, "本題已儲存其他答案，請重新載入診斷。");
-    return readDiagnostic(client, userId, kind); // Safe retry after an ambiguous network failure.
+    return readDiagnostic(client, userId, kind, kind === "verification" ? submission.sessionId : null); // Safe retry after an ambiguous network failure.
   }
   if (rows.find(row => row.selected_answer === null)?.position !== item.position) throw new DiagnosticError(409, "請先完成目前題目，再繼續診斷。");
   if (!item.options[submission.answer.charCodeAt(0) - 65]?.trim()) throw new DiagnosticError(400, "請選擇有效選項。");
@@ -118,5 +126,5 @@ export async function answerDiagnostic(client: PoolClient, userId: string, submi
   if (rows.filter(row => row.selected_answer === null).length === 1) {
     await client.query("UPDATE diagnostic_sessions SET completed_at = CURRENT_TIMESTAMP WHERE id = $1 AND completed_at IS NULL", [submission.sessionId]);
   }
-  return readDiagnostic(client, userId, kind);
+  return readDiagnostic(client, userId, kind, kind === "verification" ? submission.sessionId : null);
 }

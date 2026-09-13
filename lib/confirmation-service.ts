@@ -8,7 +8,7 @@ async function evidence(client: PoolClient, userId: string): Promise<Evidence[]>
   const { rows } = await client.query<Evidence>(`
     SELECT i.source_question_id AS question_id, i.subject, i.chapter, i.is_correct, i.answered_at::text, d.kind
     FROM diagnostic_items i JOIN diagnostic_sessions d ON d.id = i.session_id
-    WHERE d.user_id = $1 AND d.completed_at IS NOT NULL AND i.answered_at IS NOT NULL
+    WHERE d.user_id = $1 AND d.kind IN ('initial', 'confirmation') AND d.completed_at IS NOT NULL AND i.answered_at IS NOT NULL
     UNION ALL
     SELECT s.question_id, q.subject, q.chapter, s.is_correct, s.created_at::text AS answered_at, 'first' AS kind
     FROM question_answer_stats s JOIN questions q ON q.id = s.question_id
@@ -17,15 +17,20 @@ async function evidence(client: PoolClient, userId: string): Promise<Evidence[]>
       AND NOT EXISTS (
         SELECT 1 FROM diagnostic_items i JOIN diagnostic_sessions d ON d.id = i.session_id
         WHERE d.user_id = $1 AND i.source_question_id = s.question_id AND i.answered_at IS NOT NULL
+          AND (d.kind IN ('initial', 'confirmation') OR i.answered_at <= s.created_at)
       )
   `, [userId]);
   return rows;
 }
 
+export async function readWeaknessAnalysis(client: PoolClient, userId: string) {
+  return buildWeaknessAnalysis(await evidence(client, userId));
+}
+
 export async function readConfirmation(client: PoolClient, userId: string): Promise<ConfirmationView> {
   const initial = await readDiagnostic(client, userId);
   const view = await readDiagnostic(client, userId, "confirmation");
-  const analysis = buildWeaknessAnalysis(await evidence(client, userId));
+  const analysis = await readWeaknessAnalysis(client, userId);
   const targets = initial.session ? confirmationTargets(initial.session) : [];
   const selected = targets.length ? selectConfirmationQuestions(await diagnosticCandidates(client, userId), targets, analysis) : [];
   return { ...view, initialCompleted: initial.session?.completed === true, targets,
@@ -40,7 +45,7 @@ export async function startConfirmation(client: PoolClient, userId: string): Pro
   if (latest.session && !latest.session.completed) return readConfirmation(client, userId);
   const targets = confirmationTargets(initial.session);
   if (!targets.length) throw new DiagnosticError(409, "目前沒有需要優先確認的科目，可以先繼續一般練習。");
-  const analysis = buildWeaknessAnalysis(await evidence(client, userId));
+  const analysis = await readWeaknessAnalysis(client, userId);
   const selected = selectConfirmationQuestions(await diagnosticCandidates(client, userId), targets, analysis);
   if (!selected.length) throw new DiagnosticError(409, "目前沒有足夠的不同題目可供確認，請待題庫補充或間隔一段時間後再試。既有結果已保留。");
   await createDiagnosticSession(client, userId, selected, "confirmation", initial.session.id);

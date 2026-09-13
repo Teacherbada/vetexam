@@ -6,6 +6,7 @@ import { StudyIcon } from "@/components/dashboard/StudyUI";
 import { isStudyMode, type StudyMode } from "@/lib/study-plan";
 import styles from "./study-plan.module.css";
 import Diagnostic from "./diagnostic/Diagnostic";
+import Reinforcement from "./reinforcement/Reinforcement";
 
 const options = [
   { mode: "coach", title: "國考教練模式", icon: "target", headline: "不用再想今天該讀什麼。",
@@ -65,9 +66,9 @@ export default function ModeSelector() {
       <p role="status">{state === "loading" ? "讀取學習模式中…" : state === "guest" ? "登入後即可儲存你的學習模式。" : state === "error" ? "學習模式暫時無法讀取。" : mode ? `目前模式：${options.find(option => option.mode === mode)?.title}` : "先選擇你的學習模式"}</p>
       {state === "guest" && <Link href="/login" className="study-button">登入帳號</Link>}
       {state === "error" && <button className="study-button" onClick={() => { setState("loading"); setReload(value => value + 1); }}>重新載入</button>}
-      <p className="study-muted">國考教練已開放初始診斷；自動安排及自訂進度設定將陸續開放。你也可以繼續使用國考題庫練習。</p>
+      <p className="study-muted">國考教練已開放診斷、弱點確認與補強驗證；自訂進度設定將陸續開放。你也可以繼續使用國考題庫練習。</p>
     </section>
-    {state === "ready" && mode === "coach" && <Diagnostic preview />}
+    {state === "ready" && mode === "coach" && <><Reinforcement preview /><Diagnostic preview /></>}
     <div className={styles.grid} aria-busy={saving !== null}>
       {options.map(option => <section key={option.mode} className={`study-card ${styles.card}`} data-selected={mode === option.mode}>
         <h2><StudyIcon name={option.icon} />{option.title}</h2>
