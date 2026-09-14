@@ -71,8 +71,10 @@ try {
   await page.getByRole('button', { name: '我已完成複習', exact: true }).waitFor();
   // Reuse exactly the same component at the coach entry.
   await page.route('**/api/study-plan', route => route.fulfill({ json: { mode: 'coach' } }));
+  await page.route('**/api/study-plan/daily', route => route.fulfill({ json: { mode:'coach',owner:'fixture',date:'2026-09-14',target:20,task:null,receipts:[],active:null,next:'done' } }));
   await page.route('**/api/study-plan/diagnostic', route => route.fulfill({ json: { mode: 'coach', session: null } }));
   await page.goto(base + '/study-plan');
+  await page.getByText('目前補強任務與學習建議', { exact:true }).click();
   await page.getByRole('link', { name: '繼續你的補強任務', exact: true }).waitFor();
   for (const width of [320, 375, 768, 1280]) {
     await page.setViewportSize({ width, height: 900 });

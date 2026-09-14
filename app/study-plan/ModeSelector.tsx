@@ -7,6 +7,7 @@ import { isStudyMode, type StudyMode } from "@/lib/study-plan";
 import styles from "./study-plan.module.css";
 import Diagnostic from "./diagnostic/Diagnostic";
 import Reinforcement from "./reinforcement/Reinforcement";
+import DailyTask from './daily/DailyTask';
 
 const options = [
   { mode: "coach", title: "國考教練模式", icon: "target", headline: "不用再想今天該讀什麼。",
@@ -68,7 +69,7 @@ export default function ModeSelector() {
       {state === "error" && <button className="study-button" onClick={() => { setState("loading"); setReload(value => value + 1); }}>重新載入</button>}
       <p className="study-muted">國考教練已開放診斷、弱點確認與補強驗證；自訂進度設定將陸續開放。你也可以繼續使用國考題庫練習。</p>
     </section>
-    {state === "ready" && mode === "coach" && <><Reinforcement preview /><Diagnostic preview /></>}
+    {state === "ready" && mode === "coach" && <><DailyTask preview /><details><summary>目前補強任務與學習建議</summary><Reinforcement preview /></details><details><summary>初始診斷與弱點確認</summary><Diagnostic preview /></details></>}
     <div className={styles.grid} aria-busy={saving !== null}>
       {options.map(option => <section key={option.mode} className={`study-card ${styles.card}`} data-selected={mode === option.mode}>
         <h2><StudyIcon name={option.icon} />{option.title}</h2>

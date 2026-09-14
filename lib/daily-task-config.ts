@@ -1,0 +1,11 @@
+import { dailyGoal } from '../data/tasks';
+export const DEFAULT_DAILY_QUESTION_TARGET = dailyGoal.target;
+export const DAILY_TARGET_MIN = 5;
+export const DAILY_TARGET_MAX = 60;
+export const DAILY_TASK_TIME_ZONE = 'Asia/Taipei';
+export const DAILY_TASK_NORMAL_RATIO = 0.6;
+export const DAILY_TASK_WEAKNESS_RATIO = 0.27;
+export const DAILY_TASK_REVIEW_RATIO = 0.13;
+export const MAX_WEAKNESS_RATIO_PER_DAILY_TASK = 0.35;
+export const MAX_CHAPTER_RATIO_PER_DAILY_TASK = 0.4;
+export const DAILY_TASK_RECENT_DAYS = 7;

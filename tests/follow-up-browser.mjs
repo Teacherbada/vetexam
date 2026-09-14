@@ -51,10 +51,11 @@ try {
   const rem={mode:'coach',task:{id,subject,chapter,status:'reviewing',source_analysis:source,review_count:1},session:null,attempts:[],completed:[],next:source,due:[{...row,status:'due',session_id:null}]};
   await page.route('**/api/study-plan/reinforcement',r=>r.fulfill({json:rem}));
   await page.route('**/api/study-plan',r=>r.fulfill({json:{mode:'coach'}}));
+  await page.route('**/api/study-plan/daily',r=>r.fulfill({json:{mode:'coach',owner:'fixture',date:'2026-09-14',target:20,task:null,receipts:[],active:null,next:'done'}}));
   await page.route('**/api/study-plan/diagnostic',r=>r.fulfill({json:{mode:'coach',session:null}}));
-  await page.goto(base+'/study-plan'); await page.getByRole('link',{name:'繼續你的補強任務',exact:true}).waitFor();
+  await page.goto(base+'/study-plan'); await page.getByText('目前補強任務與學習建議',{exact:true}).click(); await page.getByRole('link',{name:'繼續你的補強任務',exact:true}).waitFor();
   assert.equal(await page.getByRole('heading',{name:'今日複習追蹤',exact:true}).count(),0);
-  rem.task.status='short_term';await page.reload();await page.getByRole('heading',{name:'今日複習追蹤',exact:true}).waitFor();
+  rem.task.status='short_term';await page.reload();await page.getByText('目前補強任務與學習建議',{exact:true}).click();await page.getByRole('heading',{name:'今日複習追蹤',exact:true}).waitFor();
   assert.equal(await page.getByRole('button',{name:'繼續下一個任務',exact:true}).count(),0);
   for(const width of [320,375,768,1280]) {await page.setViewportSize({width,height:900});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'coach overflow '+width);}
   assert.deepEqual(errors,[]);

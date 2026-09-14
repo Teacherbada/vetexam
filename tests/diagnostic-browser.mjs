@@ -49,6 +49,7 @@ try {
   const makeView = () => ({ mode: 'coach', session });
   const current = position => ({ position, questionId: position, subject: subjects[position - 1], chapter: null, question: '診斷題目 ' + position, options: ['選項甲', '選項乙', '', '', '選項戊'], image: null });
   await page.route('**/api/study-plan', route => route.fulfill({ json: { mode: 'coach' } }));
+  await page.route('**/api/study-plan/daily', route => route.fulfill({ json: { mode:'coach',owner:'fixture',date:'2026-09-14',target:20,task:null,receipts:[],active:null,next:'done' } }));
   await page.route('**/api/study-plan/diagnostic', route => {
     if (guest) return route.fulfill({ status: 401, json: { error: 'login' } });
     if (fail) return route.fulfill({ status: 503, json: { error: '診斷暫時無法連線。請重新載入確認已儲存進度。' } });
@@ -65,6 +66,7 @@ try {
     return route.fulfill({ json: makeView() });
   });
   await page.goto(base + '/study-plan');
+  await page.getByText('初始診斷與弱點確認', { exact:true }).click();
   await page.getByRole('heading', { name: '先讓 VetExam 了解你' }).waitFor();
   await page.getByRole('link', { name: '開始診斷', exact: true }).click();
   await page.getByRole('button', { name: '開始診斷', exact: true }).click();
@@ -78,6 +80,7 @@ try {
   await page.getByRole('button', { name: '送出並繼續', exact: true }).click();
   await page.getByText('已儲存 1 / 6 題', { exact: true }).waitFor();
   await page.goto(base + '/study-plan');
+  await page.getByText('初始診斷與弱點確認', { exact:true }).click();
   await page.getByRole('link', { name: '繼續診斷', exact: true }).click();
   await page.getByRole('heading', { name: '診斷題目 2', exact: true }).waitFor();
   await page.reload();

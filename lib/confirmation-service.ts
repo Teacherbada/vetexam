@@ -6,9 +6,10 @@ import { buildWeaknessAnalysis, confirmationTargets, selectConfirmationQuestions
 
 async function evidence(client: PoolClient, userId: string): Promise<Evidence[]> {
   const { rows } = await client.query<Evidence>(`
-    SELECT i.source_question_id AS question_id, i.subject, i.chapter, i.is_correct, i.answered_at::text, d.kind
+    SELECT i.source_question_id AS question_id, i.subject, i.chapter, i.is_correct, i.answered_at::text, CASE WHEN d.kind='daily' THEN 'first' ELSE d.kind END AS kind
     FROM diagnostic_items i JOIN diagnostic_sessions d ON d.id = i.session_id
-    WHERE d.user_id = $1 AND d.kind IN ('initial', 'confirmation') AND d.completed_at IS NOT NULL AND i.answered_at IS NOT NULL
+    WHERE d.user_id = $1 AND d.kind IN ('initial', 'confirmation', 'daily') AND i.answered_at IS NOT NULL
+      AND (d.completed_at IS NOT NULL OR d.kind='daily')
     UNION ALL
     SELECT s.question_id, q.subject, q.chapter, s.is_correct, s.created_at::text AS answered_at, 'first' AS kind
     FROM question_answer_stats s JOIN questions q ON q.id = s.question_id

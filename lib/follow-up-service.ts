@@ -26,12 +26,12 @@ async function ownedFollowUp(client: PoolClient, userId: string, id: string) {
   if (!rows[0]) throw new DiagnosticError(404, '找不到你的複習追蹤。');
   return rows[0];
 }
-export async function startFollowUp(client: PoolClient, userId: string, id: string) {
+export async function startFollowUp(client: PoolClient, userId: string, id: string, daily = false) {
   const followUp = await ownedFollowUp(client, userId, id);
   if (followUp.session_id) return readFollowUp(client, userId, id);
   if (followUp.status !== 'pending' || !followUp.is_due) throw new DiagnosticError(409, '這項追蹤尚未到期或已結束。');
-  if (await activeReinforcement(client, userId)) throw new DiagnosticError(409, '請先繼續目前的補強任務，再進行到期追蹤。');
-  if ((await dueFollowUps(client, userId))[0]?.id !== id) throw new DiagnosticError(409, '請先完成目前推薦的追蹤，再開始下一項。');
+  if (!daily && await activeReinforcement(client, userId)) throw new DiagnosticError(409, '請先繼續目前的補強任務，再進行到期追蹤。');
+  if (!daily && (await dueFollowUps(client, userId))[0]?.id !== id) throw new DiagnosticError(409, '請先完成目前推薦的追蹤，再開始下一項。');
   const { rows: tasks } = await client.query('SELECT source_session_id, review_completed_at FROM reinforcement_tasks WHERE id=$1 AND user_id=$2 AND review_count=$3 AND status=\'short_term\'', [followUp.reinforcement_task_id, userId, followUp.review_attempt]);
   if (!tasks[0]) throw new DiagnosticError(409, '章節補強狀態已更新，請重新載入。');
   const candidates = await diagnosticCandidates(client, userId);

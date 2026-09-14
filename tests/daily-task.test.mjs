@@ -1,0 +1,133 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { test } from 'node:test';
+import ts from 'typescript';
+import nextEnv from '@next/env';
+import pg from 'pg';
+import { diagnosticTestConnectionString } from './diagnostic-database.mjs';
+function load(path,mocks={}) {
+  const exports={};new Function('require','exports',ts.transpileModule(readFileSync(new URL('../'+path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText)(name=>{if(name==='server-only')return{};if(Object.hasOwn(mocks,name))return mocks[name];throw new Error('Unexpected import '+name)},exports);return exports;
+}
+const chapters=load('data/exam-chapters.ts'),followConfig=load('lib/follow-up-config.ts');
+const config=load('lib/daily-task-config.ts',{'../data/tasks':load('data/tasks.ts')});
+const rules=load('lib/daily-task.ts',{'../data/exam-chapters':chapters,'./daily-task-config':config,'./follow-up-config':followConfig});
+const diagnostic=load('lib/diagnostic.ts',{'../data/exam-chapters':chapters}),weakness=load('lib/weakness.ts',{'../data/exam-chapters':chapters});
+const remRules=load('lib/reinforcement.ts',{'../data/exam-chapters':chapters});
+const service=load('lib/diagnostic-service.ts',{'node:crypto':{randomUUID},'@/data/exam-chapters':chapters,'@/lib/diagnostic':diagnostic,'@/lib/question-answer':load('lib/question-answer.ts'),'@/lib/question-stats':load('lib/question-stats.ts')});
+const confirmation=load('lib/confirmation-service.ts',{'@/lib/diagnostic-service':service,'@/lib/weakness':weakness});
+const followRules=load('lib/follow-up.ts',{'../data/exam-chapters':chapters,'./follow-up-config':followConfig});
+const store=load('lib/follow-up-store.ts',{'node:crypto':{randomUUID},'./follow-up-config':followConfig});
+const follow=load('lib/follow-up-service.ts',{'@/lib/diagnostic-service':service,'@/lib/follow-up':followRules,'@/lib/follow-up-store':store,'@/lib/follow-up-config':followConfig});
+const daily=load('lib/daily-task-service.ts',{'node:crypto':{randomUUID},'@/lib/diagnostic-service':service,'@/lib/follow-up-service':follow,'@/lib/confirmation-service':confirmation,'@/lib/daily-task-config':config,'@/lib/daily-task':rules});
+const subject=chapters.EXAM_SUBJECTS[0], chapter=chapters.chapterGroups(subject)[0].chapters[0];
+const candidate=(id,extra={})=>({id,subject,chapter:null,last_answered:null,last_seen:null,appearances:0,...extra});
+test('Taipei date switches at local midnight and targets/ratios are bounded',()=>{
+  assert.equal(rules.dailyLocalDate(new Date('2026-09-14T15:59:59Z')),'2026-09-14');
+  assert.equal(rules.dailyLocalDate(new Date('2026-09-14T16:00:00Z')),'2026-09-15');
+  assert.equal(rules.dailyLocalDate(new Date('2026-09-14T12:00:00Z')),'2026-09-14');
+  assert.deepEqual(rules.dailyQuotas(30),{weakness:8,review:4});
+  for(const value of [4,61,NaN,'30',2.5])assert.equal(rules.validDailyTarget(value),false);
+  for(const value of [5,20,30,60])assert.equal(rules.validDailyTarget(value),true);
+});
+test('normal fills unused quotas with balanced subjects, weakness cap and question deduplication',()=>{
+  const pool=chapters.EXAM_SUBJECTS.flatMap((subject,s)=>Array.from({length:40},(_,n)=>candidate(s*100+n,{subject,chapter:s===0?chapter:null})));
+  const normal=rules.selectDailyQuestions(pool,30,[],[],Date.now(),()=>0);
+  assert.equal(normal.length,30);assert(normal.every(r=>r.source==='normal'));
+  for(const subject of chapters.EXAM_SUBJECTS)assert.equal(normal.filter(r=>r.subject===subject).length,5);
+  const reserved=pool.slice(100,104);
+  const mixed=rules.selectDailyQuestions([...pool,pool[0]],30,reserved,[{subject,chapter}],Date.now(),()=>0);
+  assert.equal(mixed.length,26);assert.equal(mixed.filter(r=>r.source==='weakness').length,8);
+  assert.equal(new Set([...mixed,...reserved].map(r=>r.id)).size,30);
+  assert(mixed.filter(r=>r.subject===subject&&r.chapter===chapter).length<=12);
+  const only=rules.selectDailyQuestions(pool.slice(0,30),30,[],[{subject,chapter}],Date.now(),()=>0);
+  assert.equal(only.length,12,'chapter cap is not silently bypassed to fill target');
+});
+test('fallback prefers unused/old over recent allocated questions and handles shortages',()=>{
+  const now=Date.parse('2026-09-14T00:00:00Z'),old='2026-07-01T00:00:00Z',recent='2026-09-13T00:00:00Z';
+  const pool=[candidate(1,{last_seen:recent}),candidate(2,{last_seen:old,last_answered:old}),candidate(3),candidate(4,{last_seen:old,last_answered:old,appearances:2})];
+  const selected=rules.selectDailyQuestions(pool,3,[],[],now,()=>0);
+  assert.deepEqual(new Set(selected.map(r=>r.id)),new Set([2,3,4]));
+  assert.equal(rules.selectDailyQuestions(pool,30,[],[],now,()=>0).length,4);
+  assert.equal(rules.selectDailyQuestions([],30,[],[]).length,0);
+  const streams=rules.interleaveDailyStreams([[1,2,3],[4,5],[6]],()=>.4);
+  assert.equal(streams.length,6);assert(streams.indexOf(1)<streams.indexOf(2));assert(streams.indexOf(2)<streams.indexOf(3));assert(streams.indexOf(4)<streams.indexOf(5));
+});
+test('server-confirmed answers bridge into existing browser progress and wrong stores once',()=>{
+  const values=new Map();globalThis.localStorage={getItem:key=>values.get(key)??null,setItem:(key,value)=>values.set(key,value)};
+  const bridge=load('lib/daily-progress-client.ts',{'../data/progress':load('data/progress.ts'),'../data/wrongAnswers':load('data/wrongAnswers.ts'),'../data/tasksProgress':load('data/tasksProgress.ts')});
+  const view={owner:'alice',receipts:[{eventId:'session:1',id:1,subject,question:'Fixture',options:['A','B'],answer:'A',userAnswer:'B',correct:false}]};
+  bridge.syncDailyProgress(view);bridge.syncDailyProgress(view);
+  assert.equal(JSON.parse(values.get('wrongQuestions')).length,1);
+  assert.equal(Object.values(JSON.parse(values.get('dailyProgress')))[0].completed,1);
+  assert.deepEqual(JSON.parse(values.get('progress'))[subject].answered,[1]);
+  values.set('wrongQuestions','[]');bridge.syncDailyProgress(view);assert.equal(JSON.parse(values.get('wrongQuestions')).length,0,'do not restore a manually removed wrong item on refresh');
+  delete globalThis.localStorage;
+});
+test('daily API protects identity, origin, payload bounds and hidden server errors',async()=>{
+  const api=userId=>load('app/api/study-plan/daily/route.ts',{'next/server':{NextResponse:{json:(body,init)=>Response.json(body,init)}},'@/lib/auth':{auth:{api:{getSession:async()=>userId?{user:{id:userId}}:null}}},'@/lib/question-transaction':{questionTransaction:()=>{throw new Error('secret')}},'@/lib/diagnostic-service':service,'@/lib/daily-task-service':daily,'@/lib/daily-task':rules,'@/lib/daily-task-config':config,'@/lib/reinforcement':remRules});
+  const url='https://test.local/api/study-plan/daily';
+  for(const method of ['GET','POST','PUT','PATCH'])assert.equal((await api(null)[method](new Request(url,{method}))).status,401);
+  for(const method of ['POST','PUT','PATCH'])assert.equal((await api('alice')[method](new Request(url,{method,headers:{origin:'https://evil.local'}}))).status,403);
+  for(const method of ['PUT','PATCH'])for(const [body,status] of [['{',400],['x'.repeat(1025),413],[JSON.stringify({target:30,userId:'bob'}),400]])assert.equal((await api('alice')[method](new Request(url,{method,headers:{'Content-Type':'application/json'},body}))).status,status);
+  const failed=await api('alice').GET(new Request(url));assert.equal(failed.status,503);assert.doesNotMatch(await failed.text(),/secret/);
+});
+test('PostgreSQL daily persistence, shared follow-up, 12/30 resume, history, next-day expiry and settings', {skip:process.env.DAILY_TASK_DB_TEST!=='1',timeout:300000},async()=>{
+  nextEnv.loadEnvConfig(process.cwd());const client=new pg.Client({connectionString:diagnosticTestConnectionString(),connectionTimeoutMillis:10000});await client.connect();
+  try {
+    await client.query('BEGIN');await client.query(`CREATE TEMP TABLE study_plans(user_id text PRIMARY KEY,mode text);
+      CREATE TEMP TABLE question_sets(id integer PRIMARY KEY,visibility text);
+      CREATE TEMP TABLE questions(id integer PRIMARY KEY,question_set_id integer,subject text,chapter text,question text,answer text,option_a text,option_b text,option_c text,option_d text,option_e text,image_data_url text,explanation text);
+      CREATE TEMP TABLE question_answer_stats(id bigserial,user_id text,question_id integer,is_correct boolean,selected_answer text,created_at timestamptz DEFAULT CURRENT_TIMESTAMP,UNIQUE(user_id,question_id));
+      INSERT INTO study_plans VALUES('alice','coach'),('bob','coach'),('empty','coach'),('custom','custom');INSERT INTO question_sets VALUES(1,'public'),(2,'private');`);
+    for(const name of ['20260914_initial_diagnostic.sql','20260915_diagnostic_confirmation.sql','20260916_reinforcement_tasks.sql','20260917_follow_ups.sql','20260918_daily_tasks.sql','20260918_daily_tasks.sql'])await client.query(readFileSync(new URL('../migrations/'+name,import.meta.url),'utf8').replaceAll('CREATE TABLE IF NOT EXISTS','CREATE TEMP TABLE IF NOT EXISTS'));
+    const pool=chapters.EXAM_SUBJECTS.flatMap((subject,s)=>Array.from({length:30},(_,n)=>({id:s*100+n+1,subject,chapter:chapters.chapterGroups(subject)[0].chapters[n<15?0:1]})));
+    await client.query(`INSERT INTO questions(id,question_set_id,subject,chapter,question,answer,option_a,option_b,explanation)
+      SELECT id,1,subject,chapter,'Fixture '||id,'A','A','B','Fixture explanation' FROM jsonb_to_recordset($1::jsonb) AS item(id integer,subject text,chapter text)`,[JSON.stringify(pool)]);
+    const initial=randomUUID(),active=randomUUID(),tracked=randomUUID();
+    await client.query("INSERT INTO diagnostic_sessions(id,user_id,completed_at) VALUES($1,'alice',CURRENT_TIMESTAMP)",[initial]);
+    await client.query(`INSERT INTO reinforcement_tasks(id,user_id,subject,chapter,source_session_id,source_analysis,status,review_completed_at,verification_completed_at)
+      VALUES($1,'alice',$2,$3,$4,'{}','reviewing',NULL,NULL),($5,'alice',$6,$7,$4,'{}','short_term',CURRENT_TIMESTAMP-interval '10 days',CURRENT_TIMESTAMP-interval '10 days')`,[active,subject,chapter,initial,tracked,chapters.EXAM_SUBJECTS[1],chapters.chapterGroups(chapters.EXAM_SUBJECTS[1])[0].chapters[0]]);
+    await store.scheduleFollowUp(client,tracked);const followId=(await store.dueFollowUps(client,'alice'))[0].id;
+    await assert.rejects(follow.startFollowUp(client,'alice',followId),e=>e.status===409,'standalone retains active-remediation priority');
+    await daily.setDailyTarget(client,'alice',30);
+    let view=await daily.ensureDailyTask(client,'alice');const taskId=view.task.id;
+    assert.equal(view.task.total,30);assert.equal(view.task.target,30);assert(view.active);assert.equal(view.task.current.position,1);
+    assert.equal((await daily.ensureDailyTask(client,'alice')).task.id,taskId);
+    assert.deepEqual(view.task.summary,[]);assert.equal(view.receipts.length,0);assert.doesNotMatch(JSON.stringify(view.task.current),/source|chapter|subject|answer_key/);
+    const links=(await client.query('SELECT * FROM daily_task_items WHERE task_id=$1 ORDER BY position',[taskId])).rows;
+    assert.equal(links.filter(r=>r.source==='follow_up').length,2);assert.equal(links.filter(r=>r.source==='weakness').length,8);assert.equal(links.filter(r=>r.source==='normal').length,20);
+    assert.equal(new Set(links.map(r=>r.source_question_id)).size,30);
+    const trackedItems=links.filter(r=>r.source==='follow_up');
+    const sessionId=trackedItems[0].session_id;
+    assert.equal((await follow.startFollowUp(client,'alice',followId)).session.id,sessionId);
+    await follow.answerFollowUp(client,'alice',followId,{sessionId,position:1,answer:'A'});
+    view=await daily.ensureDailyTask(client,'alice');assert.equal(view.task.answered,1);
+    await assert.rejects(daily.answerDailyTask(client,'bob',{taskId,position:view.task.current.position,answer:'A'}),e=>e.status===404);
+    await assert.rejects(daily.ensureDailyTask(client,'custom'),e=>e.status===409);
+    while(view.task.answered<12)view=await daily.answerDailyTask(client,'alice',{taskId,position:view.task.current.position,answer:'A'});
+    await client.query('COMMIT');await client.query('BEGIN');
+    view=await daily.ensureDailyTask(client,'alice');assert.equal(view.task.id,taskId);assert.equal(view.task.answered,12);
+    const previous=links.find(row=>view.receipts.some(receipt=>receipt.eventId===`${row.session_id}:${row.item_position}`));
+    assert.equal((await daily.answerDailyTask(client,'alice',{taskId,position:previous.position,answer:'A'})).task.answered,12);
+    await assert.rejects(daily.answerDailyTask(client,'alice',{taskId,position:previous.position,answer:'B'}),e=>e.status===409);
+    while(!view.task.completed)view=await daily.answerDailyTask(client,'alice',{taskId,position:view.task.current.position,answer:'A'});
+    assert.equal(view.task.answered,30);assert.equal(view.task.correct,30);assert.equal(view.task.followUpsCompleted,1);
+    const trackedView=await follow.readFollowUp(client,'alice',followId);assert.equal(trackedView.followUp.status,'completed');assert(trackedView.history.some(row=>row.stage===2));
+    assert.equal((await client.query('SELECT status FROM reinforcement_tasks WHERE id=$1',[active])).rows[0].status,'reviewing','daily score cannot mark remediation mastered');
+    assert.equal((await client.query('SELECT COUNT(*)::int AS count FROM question_answer_stats WHERE user_id=\'alice\'')).rows[0].count,30);
+    const analysis=await confirmation.readWeaknessAnalysis(client,'alice');assert.equal(analysis.subjects.reduce((sum,row)=>sum+row.count,0),28,'follow-up remains separate while daily answers feed normal evidence');
+    view=await daily.setDailyTarget(client,'alice',40);assert.equal(view.target,40);assert.equal(view.task.total,30);assert.equal(view.task.target,30);
+    assert.equal((await daily.ensureDailyTask(client,'alice')).task.id,taskId);
+    await client.query('SAVEPOINT unique_date');await assert.rejects(client.query('INSERT INTO daily_tasks(id,user_id,local_date,target_count) SELECT $1,user_id,local_date,30 FROM daily_tasks WHERE id=$2',[randomUUID(),taskId]),e=>e.code==='23505');await client.query('ROLLBACK TO SAVEPOINT unique_date');
+    await daily.setDailyTarget(client,'bob',6);let yesterday=await daily.ensureDailyTask(client,'bob');
+    const oldId=yesterday.task.id,oldIds=(await client.query('SELECT source_question_id FROM daily_task_items WHERE task_id=$1',[oldId])).rows.map(r=>r.source_question_id);
+    yesterday=await daily.answerDailyTask(client,'bob',{taskId:oldId,position:yesterday.task.current.position,answer:'B'});
+    await client.query("UPDATE daily_tasks SET local_date=local_date-1 WHERE id=$1",[oldId]);
+    const today=await daily.ensureDailyTask(client,'bob');assert.notEqual(today.task.id,oldId);assert.equal(today.task.total,6);assert.equal(today.task.answered,0);
+    assert.equal((await client.query('SELECT status FROM daily_tasks WHERE id=$1',[oldId])).rows[0].status,'expired');
+    const newIds=(await client.query('SELECT source_question_id FROM daily_task_items WHERE task_id=$1',[today.task.id])).rows.map(r=>r.source_question_id);assert(newIds.every(id=>!oldIds.includes(id)));
+    await assert.rejects(daily.answerDailyTask(client,'bob',{taskId:oldId,position:yesterday.task.current.position,answer:'A'}),e=>e.status===409);
+    await client.query('UPDATE questions SET question_set_id=2');assert.equal((await daily.ensureDailyTask(client,'empty')).task,null);
+  } finally {await client.query('ROLLBACK').catch(()=>{});await client.end();}
+});
