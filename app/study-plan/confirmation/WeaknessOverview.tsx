@@ -1,6 +1,8 @@
 import { WEAKNESS_CONFIG, WEAKNESS_LABELS, type Performance, type WeaknessAnalysis } from "@/lib/weakness";
 import styles from "./weakness.module.css";
 import Reinforcement from "../reinforcement/Reinforcement";
+import Link from 'next/link';
+import { relatedNotesHref } from '@/lib/notes';
 
 function score(row: Performance) {
   return row.accuracy === null ? "尚無作答資料" : `${row.correct} / ${row.count} 題 · ${Math.round(row.accuracy * 100)}%`;
@@ -14,6 +16,7 @@ export default function WeaknessOverview({ analysis }: { analysis: WeaknessAnaly
       {analysis.priorities.length ? <ol className={styles.priorities}>{analysis.priorities.map(row => <li key={`${row.subject}/${row.chapter}`}>
         <h3>{row.subject} → {row.chapter}</h3><p>{WEAKNESS_LABELS[row.status]} · {score(row)}</p>
         <p className="study-muted">近期 {row.recentCount} 題中有 {row.distinctErrors} 道不同題目答錯，建議先複習這個章節。</p>
+        {row.chapter && <Link href={relatedNotesHref(row.subject, row.chapter)} className="study-text-link">查看相關筆記</Link>}
       </li>)}</ol> : <p>{hasChapterEvidence ? "目前有足夠資料的章節尚未列出優先補強項目；其他章節仍依各自的資料狀態評估。" : "目前沒有足夠證據列出章節補強建議。請參考各科資料狀態，完成更多不同題目的確認後再評估。"}</p>}
       <p className="study-muted">這是依診斷與弱點確認整理的歷史分析；補強後的目前狀態與下一步顯示於上方，不會覆寫這些成績。</p>
     </section>

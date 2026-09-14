@@ -1,0 +1,18 @@
+.page { max-width: 1040px; margin: 0 auto; padding: 32px 20px 64px; display: grid; gap: 24px; }
+.page > h1 { font-size: 28px; line-height: 1.4; font-weight: 700; }
+.stack { display: grid; gap: 16px; min-width: 0; }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.filters { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 16px; }
+.field { display: grid; gap: 8px; min-width: 0; }
+.field input,.field select,.field textarea { width: 100%; min-width: 0; border: 1px solid #dce5e1; border-radius: 10px; background: white; padding: 12px; font: inherit; color: inherit; }
+.field textarea { min-height: 320px; resize: vertical; line-height: 1.8; }
+.field :focus-visible { outline: 3px solid #98c9bd; outline-offset: 2px; }
+.badge { display: inline-block; font-size: 13px; font-weight: 700; padding: 4px 10px; border-radius: 16px; background: #edf4ef; }
+.community { background: #f1f2f5; }
+.content { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 16px; line-height: 1.9; }
+.title { overflow-wrap: anywhere; font-size: 26px; line-height: 1.5; }
+.card { min-width: 0; overflow-wrap: anywhere; }
+.card h2 { font-size: 20px; line-height: 1.5; }
+.card h2 a { font-size: inherit; line-height: inherit; }
+.actions [aria-current=page],.actions [aria-pressed=true] { background: #e4efe7; border-color: #83aa94; }
+@media(max-width:600px) { .page { padding: 24px 16px 56px; gap: 20px; } .filters { grid-template-columns: 1fr; } .title { font-size: 23px; } }

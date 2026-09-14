@@ -8,6 +8,7 @@ import { REINFORCEMENT_LABELS, REINFORCEMENT_VERIFICATION_QUESTION_COUNT, type R
 import { WEAKNESS_LABELS } from "@/lib/weakness";
 import styles from "../diagnostic/diagnostic.module.css";
 import quiz from "@/app/questions/quiz.module.css";
+import RelatedNotes from '@/app/notes/RelatedNotes';
 
 export default function Reinforcement({ preview = false }: { preview?: boolean }) {
   const router = useRouter();
@@ -78,7 +79,7 @@ export default function Reinforcement({ preview = false }: { preview?: boolean }
         {preview && active && <Link href="/study-plan/reinforcement" className="study-button study-button-primary">{task.status === "reviewed" ? "開始確認" : task.status === "verifying" ? "繼續確認測驗" : task.status === "needs_work" ? "再次複習" : "繼續你的補強任務"}</Link>}
         {!preview && task.status === "reviewing" && <>
           <h3>自行複習 · 第 {task.review_count} 次</h3>
-          <p>請使用你平常的課本、講義或其他可信學習資料完成複習。未來 VetExam 將在此加入相關重點筆記與學習內容。</p>
+          <p>請使用你平常的課本、講義或其他可信學習資料完成複習，也可參考下方相關筆記。</p>
           <p className="study-muted">完成複習後還需要確認測驗，才會評估是否達到短期掌握。</p>
           {button("review", "我已完成複習")}
         </>}
@@ -96,7 +97,7 @@ export default function Reinforcement({ preview = false }: { preview?: boolean }
       {!due.length && (!task || ['short_term','stable'].includes(task.status)) && data.next && <><h3>建議下一步：{data.next.subject} → {data.next.chapter}</h3><p>先複習這個章節，再用幾題確認是否理解。</p>{button("start", task ? "繼續下一個任務" : "開始補強")}</>}
       <Link href="/subjects" className="study-text-link">繼續一般練習</Link>
     </section>}
-    {!preview && task && <section className={`study-card ${styles.stack}`}><h2>相關學習內容</h2><p className="study-muted">相關 VetExam 筆記功能準備中。</p></section>}
+    {!preview && task && <section className={`study-card ${styles.stack}`}><h2>相關學習內容</h2><RelatedNotes key={`${task.subject}/${task.chapter}`} subject={task.subject} chapter={task.chapter} /></section>}
     {!preview && task?.status === "verifying" && session && current && <section className={`study-card ${styles.stack}`}>
       <h2>補強確認測驗</h2><p role="status">已儲存 {session.answered} / {session.total} 題</p>
       <ProgressBar value={session.total ? session.answered / session.total * 100 : 0} label="補強確認完成百分比" />

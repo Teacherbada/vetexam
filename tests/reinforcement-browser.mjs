@@ -10,6 +10,7 @@ try {
   const errors = []; page.on('pageerror', error => errors.push(error.message));
   const source = { subject: '獸醫病理學', chapter: '細胞傷害與適應', correct: 1, count: 5, accuracy: .2, status: 'strengthen' };
   let state = { mode: 'coach', task: null, next: source, session: null, attempts: [], completed: [] };
+  await page.route('**/api/notes?**', route => route.fulfill({ json: { notes: [], page: 1, hasMore: false, signedIn: true, admin: false } }));
   await page.route('**/api/study-plan/reinforcement', async route => {
     const request = route.request();
     if (request.method() === 'POST') state.task = { id: '12345678-1234-1234-1234-123456789012', ...source, source_analysis: source, status: 'reviewing', review_count: 1 };
@@ -39,7 +40,7 @@ try {
   });
   assert.equal((await page.goto(base + '/study-plan/reinforcement')).status(), 200);
   await page.getByRole('button', { name: '開始補強', exact: true }).click();
-  await page.getByText('相關 VetExam 筆記功能準備中。').waitFor();
+  await page.getByText('目前這個章節還沒有可用的筆記。').waitFor();
   await page.getByRole('button', { name: '我已完成複習', exact: true }).click();
   await page.getByText('補強中・等待確認', { exact: true }).waitFor();
   assert.equal(await page.getByText('目前已達短期掌握', { exact: true }).count(), 0);

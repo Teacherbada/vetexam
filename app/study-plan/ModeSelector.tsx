@@ -89,5 +89,6 @@ export default function ModeSelector() {
     {error && <p role="alert">{error}</p>}
     <p className="study-muted">隨時可以切換模式。切換後會保留作答紀錄、錯題、收藏、既有分析與學習進度。</p>
     <Link href="/subjects" className="study-text-link">前往國考題庫練習<StudyIcon name="arrow" /></Link>
+    <Link href="/notes" className="study-text-link">學習筆記<StudyIcon name="book" /></Link>
   </>;
 }
