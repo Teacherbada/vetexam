@@ -8,6 +8,7 @@ import styles from "./study-plan.module.css";
 import Diagnostic from "./diagnostic/Diagnostic";
 import Reinforcement from "./reinforcement/Reinforcement";
 import DailyTask from './daily/DailyTask';
+import CustomPlan from './custom/CustomPlan';
 
 const options = [
   { mode: "coach", title: "國考教練模式", icon: "target", headline: "不用再想今天該讀什麼。",
@@ -67,9 +68,10 @@ export default function ModeSelector() {
       <p role="status">{state === "loading" ? "讀取學習模式中…" : state === "guest" ? "登入後即可儲存你的學習模式。" : state === "error" ? "學習模式暫時無法讀取。" : mode ? `目前模式：${options.find(option => option.mode === mode)?.title}` : "先選擇你的學習模式"}</p>
       {state === "guest" && <Link href="/login" className="study-button">登入帳號</Link>}
       {state === "error" && <button className="study-button" onClick={() => { setState("loading"); setReload(value => value + 1); }}>重新載入</button>}
-      <p className="study-muted">國考教練已開放診斷、弱點確認與補強驗證；自訂進度設定將陸續開放。你也可以繼續使用國考題庫練習。</p>
+      <p className="study-muted">國考教練依學習狀況安排任務；自訂進度由你決定每日題數、日期與練習範圍。</p>
     </section>
     {state === "ready" && mode === "coach" && <><DailyTask preview /><details><summary>目前補強任務與學習建議</summary><Reinforcement preview /></details><details><summary>初始診斷與弱點確認</summary><Diagnostic preview /></details></>}
+    {state === "ready" && mode === "custom" && <CustomPlan preview />}
     <div className={styles.grid} aria-busy={saving !== null}>
       {options.map(option => <section key={option.mode} className={`study-card ${styles.card}`} data-selected={mode === option.mode}>
         <h2><StudyIcon name={option.icon} />{option.title}</h2>

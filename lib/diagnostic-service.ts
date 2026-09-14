@@ -17,10 +17,10 @@ type Item = {
   selected_answer: string | null; is_correct: boolean | null;
 };
 
-export async function planMode(client: PoolClient, userId: string, write: boolean) {
+export async function planMode(client: PoolClient, userId: string, write: boolean, requiredMode: 'coach' | 'custom' = 'coach') {
   const { rows } = await client.query(`SELECT mode FROM study_plans WHERE user_id = $1 ${write ? "FOR UPDATE" : "FOR SHARE"}`, [userId]);
   const mode = rows[0]?.mode ?? null;
-  if (write && mode !== "coach") throw new DiagnosticError(409, "請先選擇國考教練模式，再開始或繼續診斷。");
+  if (write && mode !== requiredMode) throw new DiagnosticError(409, requiredMode === 'custom' ? '請先切換至自訂進度模式。原有計畫已保留。' : "請先選擇國考教練模式，再開始或繼續診斷。");
   return mode;
 }
 
@@ -81,7 +81,7 @@ export async function createDiagnosticSession(client: PoolClient, userId: string
   const snapshots = selected.flatMap(candidate => {
     const row = source.find(row => row.id === candidate.id);
     if (!row) return [];
-    if ((kind === "verification" || kind === "follow_up" || kind === "daily") && (row.subject !== candidate.subject || row.chapter !== candidate.chapter)) return [];
+    if ((kind === "verification" || kind === "follow_up" || kind === "daily" || kind === 'custom') && (row.subject !== candidate.subject || row.chapter !== candidate.chapter)) return [];
     const options = [row.option_a, row.option_b, row.option_c, row.option_d, row.option_e].map(value => value ?? "");
     const answer = usableAnswer({ answer: row.answer, options });
     if (!answer) return [];
@@ -105,7 +105,7 @@ export async function createDiagnosticSession(client: PoolClient, userId: string
 }
 
 export async function answerDiagnostic(client: PoolClient, userId: string, submission: NonNullable<ReturnType<typeof parseDiagnosticAnswer>>, kind: DiagnosticKind = "initial"): Promise<DiagnosticView> {
-  await planMode(client, userId, true);
+  await planMode(client, userId, true, kind === 'custom' ? 'custom' : 'coach');
   const { rows: sessions } = await client.query("SELECT id FROM diagnostic_sessions WHERE user_id = $1 AND id = $2 AND kind = $3 FOR UPDATE", [userId, submission.sessionId, kind]);
   if (!sessions.length) throw new DiagnosticError(404, "找不到你的診斷，請重新載入。");
   const { rows } = await client.query<Item>("SELECT * FROM diagnostic_items WHERE session_id = $1 ORDER BY position", [submission.sessionId]);
@@ -113,7 +113,7 @@ export async function answerDiagnostic(client: PoolClient, userId: string, submi
   if (!item) throw new DiagnosticError(400, "診斷題目無效。");
   if (item.selected_answer !== null) {
     if (item.selected_answer !== submission.answer) throw new DiagnosticError(409, "本題已儲存其他答案，請重新載入診斷。");
-    return readDiagnostic(client, userId, kind, (kind === "verification" || kind === "follow_up" || kind === "daily") ? submission.sessionId : null); // Safe retry after an ambiguous network failure.
+    return readDiagnostic(client, userId, kind, (kind === "verification" || kind === "follow_up" || kind === "daily" || kind === 'custom') ? submission.sessionId : null); // Safe retry after an ambiguous network failure.
   }
   if (rows.find(row => row.selected_answer === null)?.position !== item.position) throw new DiagnosticError(409, "請先完成目前題目，再繼續診斷。");
   if (!item.options[submission.answer.charCodeAt(0) - 65]?.trim()) throw new DiagnosticError(400, "請選擇有效選項。");
@@ -126,5 +126,5 @@ export async function answerDiagnostic(client: PoolClient, userId: string, submi
   if (rows.filter(row => row.selected_answer === null).length === 1) {
     await client.query("UPDATE diagnostic_sessions SET completed_at = CURRENT_TIMESTAMP WHERE id = $1 AND completed_at IS NULL", [submission.sessionId]);
   }
-  return readDiagnostic(client, userId, kind, (kind === "verification" || kind === "follow_up" || kind === "daily") ? submission.sessionId : null);
+  return readDiagnostic(client, userId, kind, (kind === "verification" || kind === "follow_up" || kind === "daily" || kind === 'custom') ? submission.sessionId : null);
 }

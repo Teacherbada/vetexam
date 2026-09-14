@@ -5,7 +5,7 @@ import type { DailyView } from './daily-task';
 
 // Bridge confirmed server answers into the existing browser-only review/progress stores.
 // Session/item IDs deduplicate refreshes and answers shared with the standalone follow-up.
-export function syncDailyProgress(view: DailyView) {
+export function syncDailyProgress(view: Pick<DailyView, 'owner' | 'receipts'>) {
   const key=`coachDailySynced:${view.owner}`;
   const raw: unknown=JSON.parse(localStorage.getItem(key)||'[]');
   const seen=new Set<string>(Array.isArray(raw)?raw.filter(item=>typeof item==='string'):[]);
