@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { useEffect, useState, type CSSProperties } from "react";
@@ -230,7 +230,8 @@ export default function Home() {
             <div className="study-footer-brand"><b>VetExam</b><p>陪未來的獸醫，走好每一步。</p></div>
             <address className="study-footer-contact">
               <div><span>客服信箱</span><a href="mailto:vetexam.support.tw@gmail.com">vetexam.support.tw@gmail.com</a></div>
-              <div><span>客服電話</span><a href="tel:0988058090">0988-058-090</a></div>
+              <div><span>Instagram</span><a href="https://www.instagram.com/vetexam.tw/">@vetexam.tw</a></div>
+              <div><span>Threads</span><a href="https://www.threads.net/@vetexam.tw">@vetexam.tw</a></div>
             </address>
             <PolicyLinks />
             <div className="study-footer-meta"><small>© 2026 VetExam. All rights reserved.</small><Link href="/feedback">聯絡與意見回饋 <StudyIcon name="arrow" /></Link></div>
