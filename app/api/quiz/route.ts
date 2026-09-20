@@ -80,6 +80,7 @@ export async function GET(request: Request) {
         subject: q.subject ?? "", question: q.question ?? "",
         options: [q.option_a ?? "", q.option_b ?? "", q.option_c ?? "", q.option_d ?? ""],
         answer: q.answer ?? "", explanation: q.explanation ?? "",
+        imageDataUrl: q.image_data_url ?? null,
         examYear: q.exam_year == null ? null : Number(q.exam_year), questionSetName: q.question_set_name ?? "",
       })) });
     }
@@ -107,7 +108,7 @@ export async function GET(request: Request) {
 
     const rows = await sql`
       SELECT q.id, q.question_set_id, q.question_number, q.subject, q.question,
-             q.option_a, q.option_b, q.option_c, q.option_d, q.answer, q.explanation,
+             q.option_a, q.option_b, q.option_c, q.option_d, q.answer, q.explanation, q.image_data_url,
              qs.exam_year, qs.name AS question_set_name
       FROM questions q
       INNER JOIN question_sets qs ON qs.id = q.question_set_id
@@ -128,6 +129,7 @@ export async function GET(request: Request) {
         options: [q.option_a ?? "", q.option_b ?? "", q.option_c ?? "", q.option_d ?? ""],
         answer: q.answer ?? "",
         explanation: q.explanation ?? "",
+        imageDataUrl: q.image_data_url ?? null,
         examYear: q.exam_year == null ? null : Number(q.exam_year),
         questionSetName: q.question_set_name ?? "",
       })),

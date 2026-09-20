@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { Suspense, useEffect, useRef, useState } from "react";
 import SubjectsPage from "@/app/subjects/page";
@@ -15,7 +15,7 @@ import OptionDistribution from "@/components/questions/OptionDistribution";
 import { sendStatistics } from "@/lib/answer-statistics-client";
 import { usableAnswer } from "@/lib/question-answer";
 
-type Question = { id: number; questionSetId: number; questionNumber: number; subject: string; question: string; options: string[]; answer: string; explanation: string; examYear: number | null; questionSetName: string };
+type Question = { id: number; questionSetId: number; questionNumber: number; subject: string; question: string; options: string[]; answer: string; explanation: string; imageDataUrl?: string | null; examYear: number | null; questionSetName: string };
 
 function QuestionsContent() {
   const searchParams = useSearchParams();
@@ -120,6 +120,7 @@ function QuestionsContent() {
     <h2 className="mb-4 text-xl font-bold">題目回顧</h2>{questions.map((question, index) => <article key={question.id} className={styles.card + " mb-4"}>
       <div className={styles.meta}><span>第 {index + 1} 題 · {question.subject}</span><button className={styles.favorite} aria-pressed={favorites.some((item) => item.id === question.id)} onClick={() => setFavorites(toggleFavorite(question))}><StudyIcon name="heart" />{favorites.some((item) => item.id === question.id) ? "已收藏" : "收藏題目"}</button></div>
       <h3 className={styles.question}>{question.question}</h3>
+      {question.imageDataUrl && <img src={question.imageDataUrl} alt={`第 ${question.questionNumber} 題圖片`} className={styles.questionImage} />}
       {question.options.map((option, optionIndex) => <p key={optionIndex} className={styles.explanationText}>{String.fromCharCode(65 + optionIndex)}. {option}</p>)}
       <section className={styles.explanation}><p className={!usableAnswer(question) ? undefined : answers[question.id] === usableAnswer(question) ? styles.correctText : styles.wrongText}>{!usableAnswer(question) ? "本題正確答案尚未設定，不計入作答統計。" : !answers[question.id] ? "未作答" : answers[question.id] === usableAnswer(question) ? "✓ 正確" : "✗ 錯誤"}</p><p>你的答案：{answers[question.id] || "未作答"} · 正確答案：{usableAnswer(question) || "尚未設定"}</p>{question.explanation && <><h2>解析</h2><p className={styles.explanationText}>{question.explanation}</p></>}</section>
       {usableAnswer(question) && <OptionDistribution questionId={question.id} selectedAnswer={answers[question.id] || ""} correctAnswer={question.answer} />}
@@ -129,12 +130,13 @@ function QuestionsContent() {
   const completedCount = Object.keys(answers).length;
   return <main className={styles.page}><div className={styles.container}>
     <header className={styles.topbar}><span><StudyIcon name="paw" />VetExam <small>專心練習，一題一步</small></span><button onClick={exitQuiz} className="study-button">退出測驗</button></header>
-    <section className={styles.card} aria-label="本次練習">
+    <section key={currentQuestion.id} className={styles.card} aria-label="本次練習">
       <div className={styles.meta}><span>{currentQuestion.subject}{currentQuestion.examYear ? ` · ${formatExamYear(currentQuestion.examYear)}` : ""}</span><span className={styles.tag}>{mode === "exam" ? "模擬考" : "練習"} · {order === "random" ? "隨機順序" : "原始順序"}</span></div>
       <div className={styles.progressLabel}><span>第 <strong>{currentIndex + 1}</strong> / {questions.length} 題</span><span>已完成 {completedCount} 題{mode === "practice" && " · 答對 " + score + " 題"}</span></div>
       <div className={styles.progress} role="progressbar" aria-label="已完成題數" aria-valuenow={completedCount} aria-valuemin={0} aria-valuemax={questions.length}><span style={{ width: `${completedCount / questions.length * 100}%` }} /></div>
       <div className={styles.questionHeader}><span>單選題</span><button onClick={favoriteQuestion} aria-pressed={isFavorite} className={styles.favorite}><StudyIcon name="heart" />{isFavorite ? "已收藏" : "收藏題目"}</button></div>
       <h1 className={styles.question} key={currentQuestion.id}>{currentQuestion.question}</h1>
+      {currentQuestion.imageDataUrl && <img key={`image-${currentQuestion.id}`} src={currentQuestion.imageDataUrl} alt={`第 ${currentQuestion.questionNumber} 題圖片`} className={styles.questionImage} />}
       <div className={styles.options} role="group" aria-label="答案選項">{currentQuestion.options.map((option, index) => {
         const letter = String.fromCharCode(65 + index);
         const correctOption = showResult && letter === currentAnswer;

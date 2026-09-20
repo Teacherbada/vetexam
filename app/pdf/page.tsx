@@ -60,6 +60,8 @@ export default function PDFPage(){
   if(!questions.length){setMessage('目前沒有可以確認的題目。');return}
   if(!isLoggedIn){setMessage('請先登入後再匯入題庫。');return}
   if(!fileHash){setMessage('找不到這份 PDF 的檔案指紋，請重新解析 PDF 後再確認匯入。');return}
+  const missingImage=questions.findIndex(q=>q.hasImage&&!q.imageDataUrl);
+  if(missingImage>=0){setMessage(`第 ${missingImage+1} 題圖片尚未擷取完成，請捲動到該題確認圖片，或手動上傳圖片後再匯入。`);return}
   const body=JSON.stringify({questions,filename:file?.name||'PDF 題庫.pdf',fileHash,visibility,examSubject,examYear:Number(examYear)+1911});
   if(new TextEncoder().encode(body).byteLength>IMPORT_BATCH_LIMIT){setBatchEnabled(true);setMessage('題目與圖片資料超過 4 MB，已開啟分批匯入。請在檢查解析結果下方設定每批題號範圍。');return}
   setLoading(true);setMessage('正在正式匯入資料庫，請稍候...');
