@@ -2,6 +2,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 import type { PoolClient } from "pg";
 import { validateImportRanges, type ImportBatch, type ImportQuestion } from "./import-batches";
+import { validImportChapters } from './chapter-classification';
 
 export class ImportError extends Error {
   constructor(message: string, public status = 400) { super(message); }
@@ -20,13 +21,15 @@ export function parseImportBatch(value: unknown): ImportBatch {
   catch (error) { throw new ImportError((error as Error).message); }
   if (!Number.isInteger(body.batchIndex) || body.batchIndex < 0 || body.batchIndex >= body.ranges.length) throw new ImportError("批次編號錯誤。");
   const range = body.ranges[body.batchIndex];
+  if (!validImportChapters(body.examSubject.trim(), body.questions)) throw new ImportError('章節不屬於該科官方章節清單。');
   if (body.questions.length !== range.to - range.from + 1) throw new ImportError("批次題數與範圍不符。");
   const questions: ImportQuestion[] = body.questions.map((question, index) => {
     if (!question || typeof question.question !== "string" || !question.question.trim() ||
       !Array.isArray(question.options) || question.options.length < 4 || question.options.length > 5 || question.options.some((option) => typeof option !== "string" || !option.trim()) ||
       typeof question.answer !== "string" || !/^[A-E]?$/.test(question.answer) || typeof question.explanation !== "string" ||
       (question.imageDataUrl != null && (typeof question.imageDataUrl !== "string" || !/^data:image\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=\r\n]+$/i.test(question.imageDataUrl)))) throw new ImportError(`第 ${range.from + index} 題資料不完整或圖片格式錯誤。`);
-    return { question: question.question.trim(), options: question.options.map((option) => option.trim()), answer: question.answer, explanation: question.explanation, imageDataUrl: question.imageDataUrl || null };
+    return { question: question.question.trim(), options: question.options.map((option) => option.trim()), answer: question.answer, explanation: question.explanation, imageDataUrl: question.imageDataUrl || null,
+      ...(question.chapter !== undefined ? { chapter: question.chapter || null } : {}) };
   });
   return { importId: body.importId, filename: body.filename.trim(), fileHash: body.fileHash.toLowerCase(), visibility: body.visibility,
     examSubject: body.examSubject.trim(), examYear: body.examYear, totalQuestions: body.totalQuestions,
@@ -60,10 +63,10 @@ export async function saveImportBatch(client: Pick<PoolClient, "query">, userId:
   const name = `${input.examSubject} ${input.examYear - 1911} 年 · ${input.filename.replace(/\.pdf$/i, "")}`;
   const questionSetId = Number((await client.query("INSERT INTO question_sets(name,filename,total_questions,file_hash,visibility,owner_id,exam_subject,exam_year) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id",
     [name, input.filename, input.totalQuestions, input.fileHash, input.visibility, userId, input.examSubject, input.examYear])).rows[0].id);
-  await client.query(`INSERT INTO questions(question_set_id,question_number,subject,question,option_a,option_b,option_c,option_d,option_e,answer,explanation,image_data_url)
+  await client.query(`INSERT INTO questions(question_set_id,question_number,subject,question,option_a,option_b,option_c,option_d,option_e,answer,explanation,image_data_url,chapter)
     SELECT $2, (j.metadata->'ranges'->c.batch_index->>'from')::int + q.ordinality::int - 1,
       $3, q.value->>'question', q.value->'options'->>0, q.value->'options'->>1, q.value->'options'->>2, q.value->'options'->>3,
-      COALESCE(q.value->'options'->>4,''), q.value->>'answer', q.value->>'explanation', q.value->>'imageDataUrl'
+      COALESCE(q.value->'options'->>4,''), q.value->>'answer', q.value->>'explanation', q.value->>'imageDataUrl', q.value->>'chapter'
     FROM pdf_import_chunks c JOIN pdf_batch_imports j ON j.id=c.import_id
     CROSS JOIN LATERAL jsonb_array_elements(c.questions) WITH ORDINALITY q(value,ordinality)
     WHERE c.import_id=$1 ORDER BY c.batch_index,q.ordinality`, [importId, questionSetId, input.examSubject]);

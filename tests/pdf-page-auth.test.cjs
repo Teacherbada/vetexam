@@ -34,6 +34,8 @@ function mount() {
     if (id === 'react') return react;
     if (id === 'react/jsx-runtime') return { jsx, jsxs: jsx, Fragment: 'fragment' };
     if (id === '@/lib/auth-client') return { authClient: { useSession: () => session } };
+    if (id === '@/components/questions/useImportClassification') return { useImportClassification: () => ({ busy: false, ready: false }) };
+    if (id === '@/data/exam-chapters') return { EXAM_SUBJECTS: ['獸醫病理學'] };
     if (id.endsWith('.css')) return { default: new Proxy({}, { get: (_, key) => String(key) }) };
     return { default: 'stub', StudyIcon: 'icon' };
   } };

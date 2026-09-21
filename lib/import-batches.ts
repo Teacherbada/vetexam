@@ -1,6 +1,6 @@
 export const IMPORT_BATCH_LIMIT = 4_000_000;
 export type ImportRange = { from: number; to: number };
-export type ImportQuestion = { question: string; options: string[]; answer: string; explanation: string; imageDataUrl?: string | null };
+export type ImportQuestion = { question: string; options: string[]; answer: string; explanation: string; imageDataUrl?: string | null; chapter?: string | null };
 export type ImportMetadata = { filename: string; fileHash: string; visibility: "public" | "private"; examSubject: string; examYear: number };
 export type ImportBatch = ImportMetadata & { importId: string; ranges: ImportRange[]; totalQuestions: number; batchIndex: number; questions: ImportQuestion[] };
 
@@ -23,6 +23,7 @@ export function buildImportBatches(metadata: ImportMetadata, questions: ImportQu
       questions: questions.slice(range.from - 1, range.to).map((question) => ({
         question: question.question, options: [...question.options], answer: question.answer,
         explanation: question.explanation, imageDataUrl: question.imageDataUrl || null,
+        ...(question.chapter !== undefined ? { chapter: question.chapter } : {}),
       })),
     };
     const body = JSON.stringify(batch);

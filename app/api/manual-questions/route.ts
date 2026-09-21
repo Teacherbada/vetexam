@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { neon } from "@neondatabase/serverless";
 import { auth } from "@/lib/auth";
 import { hasProAccess } from "@/lib/subscription";
+import { EXAM_SUBJECTS } from '@/data/exam-chapters';
+import { validImportChapters } from '@/lib/chapter-classification';
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,6 +13,7 @@ type ManualQuestion = {
   options: string[];
   answer: string;
   explanation: string;
+  chapter: string | null;
 };
 
 export async function POST(request: Request) {
@@ -49,7 +52,8 @@ export async function POST(request: Request) {
     /*
      * 檢查 PRO
      */
-    const isPro = await hasProAccess(request.headers);
+    const isAdmin = userId === process.env.ADMIN_USER_ID?.trim();
+    const isPro = isAdmin || await hasProAccess(request.headers);
 
     if (!isPro) {
       return NextResponse.json(
@@ -68,7 +72,12 @@ export async function POST(request: Request) {
       questions,
     } = body;
 
-    const finalVisibility = "private";
+    const finalVisibility = body.visibility === 'public' && isAdmin ? 'public' : 'private';
+    if (body.visibility === 'public' && !isAdmin) return NextResponse.json({ error: '只有管理員可以建立公開國考題庫。' }, { status: 403 });
+    const examSubject = typeof body.examSubject === 'string' ? body.examSubject : '';
+    if (examSubject && !EXAM_SUBJECTS.includes(examSubject)) return NextResponse.json({ error: '請選擇官方國考科目。' }, { status: 400 });
+    const examYear = body.examYear == null ? null : Number(body.examYear);
+    if (examYear !== null && (!Number.isInteger(examYear) || examYear < 1990 || examYear > 2100)) return NextResponse.json({ error: '國考年份無效。' }, { status: 400 });
 
     if (!Array.isArray(questions)) {
       return NextResponse.json(
@@ -96,6 +105,8 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+
+    if (!validImportChapters(examSubject, questions)) return NextResponse.json({ error: '章節不屬於該科官方章節清單。' }, { status: 400 });
 
     /*
      * 驗證每一題
@@ -196,6 +207,7 @@ export async function POST(request: Request) {
         options,
         answer,
         explanation,
+        chapter: item.chapter || null,
       });
     }
 
@@ -227,8 +239,8 @@ export async function POST(request: Request) {
         ${cleanedQuestions.length},
         ${finalVisibility},
         ${userId},
-        ${null},
-        ${null}
+        ${examSubject || null},
+        ${examYear}
       )
       RETURNING
         id,
@@ -264,19 +276,21 @@ export async function POST(request: Request) {
           option_c,
           option_d,
           answer,
-          explanation
+          explanation,
+          chapter
         )
         VALUES (
           ${questionSetId},
           ${index + 1},
-          ${"手動題庫"},
+          ${examSubject || "手動題庫"},
           ${question.question},
           ${question.options[0] ?? ""},
           ${question.options[1] ?? ""},
           ${question.options[2] ?? ""},
           ${question.options[3] ?? ""},
           ${question.answer},
-          ${question.explanation}
+          ${question.explanation},
+          ${question.chapter}
         )
       `;
     }
@@ -287,8 +301,8 @@ export async function POST(request: Request) {
       questionSetId,
       total: cleanedQuestions.length,
       visibility: finalVisibility,
-      examSubject: null,
-      examYear: null,
+      examSubject: examSubject || null,
+      examYear,
     });
   } catch (error) {
     console.error(

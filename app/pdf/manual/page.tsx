@@ -1,6 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { EXAM_SUBJECTS } from "@/data/exam-chapters";
+import ImportClassification from "@/components/questions/ImportClassification";
+import { useImportClassification } from "@/components/questions/useImportClassification";
 
 type ManualQuestion = {
   question: string;
@@ -19,8 +22,10 @@ export default function ManualQuestionPage() {
     },
   ]);
 
+  const [subject, setSubject] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
+  const classification = useImportClassification(subject, questions);
 
   function updateQuestion(index: number, value: string) {
     setQuestions((current) =>
@@ -125,12 +130,13 @@ export default function ManualQuestionPage() {
       }
     }
 
+    if (!await classification.prepare()) { setMessage("請在章節分類區完成確認，或選擇稍後分類，再儲存題庫。"); return; }
     setLoading(true);
     setMessage("正在建立題庫...");
 
     try {
       const response = await fetch(
-        "/api/manual-question-set",
+        "/api/manual-questions",
         {
           method: "POST",
           headers: {
@@ -138,8 +144,9 @@ export default function ManualQuestionPage() {
           },
           body: JSON.stringify({
             name: "手動題庫",
+            examSubject: subject,
             visibility: "private",
-            questions,
+            questions: classification.questions,
           }),
         }
       );
@@ -200,6 +207,7 @@ export default function ManualQuestionPage() {
             手動輸入選擇題並建立成題庫。
           </p>
 
+          <label className="mt-6 block text-sm font-semibold">國考科目<select aria-label="國考科目" value={subject} onChange={e=>setSubject(e.target.value)} className="mt-2 w-full min-w-0 rounded-xl border bg-white p-3"><option value="">請選擇科目（稍後分類可略過）</option>{EXAM_SUBJECTS.map(item=><option key={item}>{item}</option>)}</select></label>
           <div className="mt-8 space-y-6">
             {questions.map((item, questionIndex) => (
               <div
@@ -319,6 +327,7 @@ export default function ManualQuestionPage() {
             ))}
           </div>
 
+        <ImportClassification subject={subject} questions={questions} state={classification} disabled={loading}/>
           <div className="mt-6 flex flex-wrap gap-3">
             <button
               type="button"
@@ -331,7 +340,7 @@ export default function ManualQuestionPage() {
             <button
               type="button"
               onClick={handleSubmit}
-              disabled={loading}
+              disabled={loading || classification.busy}
               className="rounded-lg bg-green-600 px-6 py-3 font-bold text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-gray-400"
             >
               {loading ? "建立中..." : "建立題庫"}

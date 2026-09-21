@@ -1,22 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import { EXAM_SUBJECTS } from "@/data/exam-chapters";
+import ImportClassification from "@/components/questions/ImportClassification";
+import { useImportClassification } from "@/components/questions/useImportClassification";
 
-const EXAM_SUBJECTS = [
-  "解剖學",
-  "生理學",
-  "生物化學",
-  "藥理學",
-  "病理學",
-  "微生物學",
-  "寄生蟲學",
-  "免疫學",
-  "內科學",
-  "外科學",
-  "繁殖學",
-  "公共衛生學",
-  "其他",
-];
 
 const EXAM_YEARS = Array.from(
   { length: 10 },
@@ -49,6 +37,7 @@ export default function ManualPage() {
 
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
+  const classification = useImportClassification(subject, questions);
 
   function updateQuestion(
     index: number,
@@ -149,21 +138,22 @@ export default function ManualPage() {
       }
     }
 
+    if (!await classification.prepare()) { setMessage("請在章節分類區完成確認，或選擇稍後分類，再儲存題庫。"); return; }
     setLoading(true);
     setMessage("正在儲存題庫...");
 
     try {
-      const response = await fetch("/api/manual-question-set", {
+      const response = await fetch("/api/manual-questions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
           name,
-          subject,
-          year,
+          examSubject: subject,
+          examYear: year,
           visibility,
-          questions,
+          questions: classification.questions,
         }),
       });
 
@@ -459,6 +449,7 @@ export default function ManualPage() {
           ))}
         </div>
 
+        <ImportClassification subject={subject} questions={questions} state={classification} disabled={loading}/>
         <div className="mt-6 flex flex-wrap gap-4">
           <button
             type="button"
@@ -471,7 +462,7 @@ export default function ManualPage() {
           <button
             type="button"
             onClick={handleSubmit}
-            disabled={loading}
+            disabled={loading || classification.busy}
             className="rounded-lg bg-green-600 px-8 py-3 font-bold text-white hover:bg-green-700 disabled:bg-gray-400"
           >
             {loading ? "正在儲存..." : "儲存整份題庫"}

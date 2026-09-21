@@ -17,7 +17,9 @@ function load(path, mocks = {}) {
   return exports;
 }
 const shared = load("lib/import-batches.ts");
-const service = load("lib/pdf-batch-import.ts", { "node:crypto": { createHash }, "./import-batches": shared });
+const taxonomy = load('data/exam-chapters.ts');
+const classification = load('lib/chapter-classification.ts', { '../data/exam-chapters': taxonomy });
+const service = load("lib/pdf-batch-import.ts", { "node:crypto": { createHash }, "./import-batches": shared, './chapter-classification': classification });
 const metadata = { filename: "exam.pdf", fileHash: "a".repeat(64), visibility: "public", examYear: 2026, examSubject: "subject" };
 const questions = Array.from({ length: 4 }, (_, i) => ({ id: 100 + i, subject: "unused", pageNumber: i + 1, imageSource: "manual", question: "題目" + (i + 1), options: ["a", "b", "c", "d", "e"], answer: "C", explanation: "解析", imageDataUrl: "data:image/png;base64,YQ==" }));
 const ranges = [{ from: 1, to: 2 }, { from: 3, to: 4 }];
@@ -61,7 +63,7 @@ test("PostgreSQL stages, resumes, finalizes atomically and rejects foreign/chang
     await client.query("BEGIN"); await client.query(`CREATE SCHEMA ${schema}`); await client.query(`SET LOCAL search_path TO ${schema},public`);
     await client.query('CREATE TABLE "user"(id text PRIMARY KEY)');
     await client.query("CREATE TABLE question_sets(id serial PRIMARY KEY,name text,filename text,total_questions integer,file_hash text,visibility text,owner_id text,exam_subject text,exam_year integer,UNIQUE(file_hash,visibility))");
-    await client.query("CREATE TABLE questions(id serial PRIMARY KEY,question_set_id integer,question_number integer,subject text,question text,option_a text,option_b text,option_c text,option_d text,option_e text,answer text,explanation text,image_data_url text)");
+    await client.query("CREATE TABLE questions(id serial PRIMARY KEY,question_set_id integer,question_number integer,subject text,question text,option_a text,option_b text,option_c text,option_d text,option_e text,answer text,explanation text,image_data_url text,chapter text)");
     const migration = readFileSync(new URL("../migrations/20260912_pdf_batch_imports.sql", import.meta.url), "utf8");
     await client.query(migration); await client.query(migration);
     await client.query('INSERT INTO "user" VALUES (\'owner\'),(\'other\')');
@@ -101,5 +103,10 @@ test("PostgreSQL stages, resumes, finalizes atomically and rejects foreign/chang
     // Even out-of-order arrival cannot reorder the final question numbers.
     await save(privateInputs[1], "owner", false); await save(privateInputs[0], "owner", false);
     assert.equal((await client.query("SELECT total_questions FROM question_sets WHERE visibility='private'")).rows[0].total_questions, 4);
+    const mixed = shared.buildImportBatches({ ...metadata, examSubject: '獸醫病理學', fileHash: 'c'.repeat(64) },
+      questions.map((q, i) => ({ ...q, chapter: ['腫瘤', '泌尿系統', null, '循環障礙'][i] })), ranges, randomUUID())
+      .map(b => service.parseImportBatch(JSON.parse(b.body)));
+    await save(mixed[0]); const classified = await save(mixed[1]);
+    assert.deepEqual((await client.query('SELECT chapter FROM questions WHERE question_set_id=$1 ORDER BY question_number', [classified.questionSetId])).rows.map(q => q.chapter), ['腫瘤', '泌尿系統', null, '循環障礙']);
   } finally { await client.query("ROLLBACK"); await client.end(); }
 });

@@ -6,12 +6,13 @@ import styles from "./pdf.module.css";
 
 type Props = {
   enabled: boolean; onEnabled: (enabled: boolean) => void; disabled: boolean;
+  readyToImport?: boolean;
   metadata: ImportMetadata; questions: (ImportQuestion & { hasImage?: boolean })[];
   onBusy: (busy: boolean) => void; onMessage: (message: string) => void;
   onComplete: (questionSetId: number) => Promise<void>;
 };
 
-export default function BatchImportPanel({ enabled, onEnabled, disabled, metadata, questions, onBusy, onMessage, onComplete }: Props) {
+export default function BatchImportPanel({ enabled, onEnabled, disabled, readyToImport = true, metadata, questions, onBusy, onMessage, onComplete }: Props) {
   const middle = Math.ceil(questions.length / 2);
   const [ranges, setRanges] = useState<ImportRange[]>(questions.length > 1 ? [{ from: 1, to: middle }, { from: middle + 1, to: questions.length }] : [{ from: 1, to: 1 }]);
   const [progress, setProgress] = useState("");
@@ -25,7 +26,7 @@ export default function BatchImportPanel({ enabled, onEnabled, disabled, metadat
   } catch (error) { validationError = (error as Error).message; }
 
   async function start() {
-    if (running.current) return;
+    if (running.current || !readyToImport || disabled) return;
     running.current = true; onBusy(true);
     try {
       const incomplete = questions.findIndex((question) => !question.question.trim() || question.options.length < 4 || question.options.some((option) => !option.trim()));
@@ -64,8 +65,8 @@ export default function BatchImportPanel({ enabled, onEnabled, disabled, metadat
           <label className="min-w-0 text-sm">到第幾題<input aria-label={`第 ${index + 1} 批結束題號`} disabled={disabled} type="number" min={1} max={questions.length} value={range.to || ""} onChange={(event) => setRanges((current) => current.map((item, i) => i === index ? { ...item, to: Number(event.target.value) } : item))} className="mt-1 w-full min-w-0 rounded-xl border border-[#E8EBE8] bg-white p-3" /></label>
         </div>{ranges.length > 1 && <button type="button" disabled={disabled} onClick={() => setRanges((current) => current.filter((_, i) => i !== index))} className={styles.secondary + " mt-2"}>移除第 {index + 1} 批</button>}
       </div>)}</div>
-      <div className={styles.actions}><button type="button" disabled={disabled || ranges.length >= 200} onClick={() => setRanges((current) => [...current, { from: (current.at(-1)?.to || 0) + 1, to: questions.length }])} className={styles.secondary}>新增一批</button><button type="button" onClick={start} disabled={disabled || !!validationError} className={styles.primary}>{disabled ? "匯入中…" : "開始分批匯入"}</button></div>
-      <p className="mt-3 whitespace-pre-wrap break-words text-sm text-[#6F7873]" role="status">{validationError || summary}</p>
+      <div className={styles.actions}><button type="button" disabled={disabled || ranges.length >= 200} onClick={() => setRanges((current) => [...current, { from: (current.at(-1)?.to || 0) + 1, to: questions.length }])} className={styles.secondary}>新增一批</button><button type="button" onClick={start} disabled={disabled || !readyToImport || !!validationError} className={styles.primary}>{disabled ? "匯入中…" : "開始分批匯入"}</button></div>
+      <p className="mt-3 whitespace-pre-wrap break-words text-sm text-[#6F7873]" role="status">{!readyToImport ? '請先完成上方章節分類確認，或選擇稍後分類。' : validationError || summary}</p>
       {progress && <p className={styles.status} role="status">{progress}</p>}
     </>}
   </section>;

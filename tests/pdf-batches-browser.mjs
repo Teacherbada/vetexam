@@ -32,6 +32,7 @@ try {
     await page.getByLabel("選擇國考 PDF 檔案").setInputFiles({ name: "exam.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-fixture") });
     await page.getByRole("button", { name: "開始解析 PDF", exact: true }).click();
     await page.getByRole("heading", { name: "檢查解析結果" }).waitFor();
+    await page.getByLabel('分類方式').selectOption('later');
   };
   await parse();
   await page.getByRole("button", { name: "儲存至公開國考題庫", exact: true }).click();

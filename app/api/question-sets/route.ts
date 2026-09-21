@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { neon } from "@neondatabase/serverless";
 import { auth } from "@/lib/auth";
+import { validImportChapters } from '@/lib/chapter-classification';
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type NormalizedQuestion = { number:number; subject:string; question:string; optionA:string; optionB:string; optionC:string; optionD:string; optionE:string; answer:string; explanation:string; imageDataUrl:string|null };
+type NormalizedQuestion = { number:number; subject:string; question:string; optionA:string; optionB:string; optionC:string; optionD:string; optionE:string; answer:string; explanation:string; imageDataUrl:string|null; chapter:string|null };
 
 export async function GET(request: Request) {
   try {
@@ -36,6 +37,7 @@ export async function POST(request: Request) {
     if(!questions.length)return NextResponse.json({error:"沒有可以匯入的題目。"},{status:400});
     if(!filename)return NextResponse.json({error:"缺少 PDF 檔名。"},{status:400});
     if(!examSubject)return NextResponse.json({error:"缺少國考科目。"},{status:400});
+    if(!validImportChapters(examSubject,questions))return NextResponse.json({error:"章節不屬於該科官方章節清單。"},{status:400});
     if(!Number.isInteger(examYear)||examYear<1990||examYear>2100)return NextResponse.json({error:"國考年份無效。"},{status:400});
     const isAdmin=!!process.env.ADMIN_USER_ID&&process.env.ADMIN_USER_ID===userId;
     if(visibility==="public"&&!isAdmin)return NextResponse.json({error:"目前只有管理員可以建立公開國考題庫。",code:"ADMIN_REQUIRED"},{status:403});
@@ -47,7 +49,7 @@ export async function POST(request: Request) {
     const normalizedQuestions:NormalizedQuestion[]=questions.map((q:any,index:number)=>{
       const options=Array.isArray(q?.options)?q.options:[];
       const imageDataUrl=typeof q?.imageDataUrl==="string"&&q.imageDataUrl.startsWith("data:image/")?q.imageDataUrl:null;
-      return {number:index+1,subject:examSubject,question:typeof q?.question==="string"?q.question.trim():"",optionA:typeof options[0]==="string"?options[0].trim():"",optionB:typeof options[1]==="string"?options[1].trim():"",optionC:typeof options[2]==="string"?options[2].trim():"",optionD:typeof options[3]==="string"?options[3].trim():"",optionE:typeof options[4]==="string"?options[4].trim():"",answer:typeof q?.answer==="string"?q.answer.trim():"",explanation:typeof q?.explanation==="string"?q.explanation.trim():"",imageDataUrl};
+      return {number:index+1,subject:examSubject,question:typeof q?.question==="string"?q.question.trim():"",optionA:typeof options[0]==="string"?options[0].trim():"",optionB:typeof options[1]==="string"?options[1].trim():"",optionC:typeof options[2]==="string"?options[2].trim():"",optionD:typeof options[3]==="string"?options[3].trim():"",optionE:typeof options[4]==="string"?options[4].trim():"",answer:typeof q?.answer==="string"?q.answer.trim():"",explanation:typeof q?.explanation==="string"?q.explanation.trim():"",imageDataUrl,chapter:q.chapter||null};
     });
     const invalid=normalizedQuestions.find(q=>!q.question||!q.optionA||!q.optionB||!q.optionC||!q.optionD);
     if(invalid)return NextResponse.json({error:`第 ${invalid.number} 題資料不完整，請先檢查題目與至少四個選項。`},{status:400});
@@ -61,7 +63,7 @@ export async function POST(request: Request) {
     const [setResult]=await sql.transaction([sql`INSERT INTO question_sets (name,filename,total_questions,file_hash,visibility,owner_id,exam_subject,exam_year) VALUES (${name},${filename},${normalizedQuestions.length},${fileHash||null},${visibility},${userId},${examSubject},${examYear}) RETURNING id`]);
     const questionSetId=Number(setResult[0]?.id);
     if(!questionSetId)throw new Error("建立題庫失敗，沒有取得題庫 ID。");
-    await sql.transaction(normalizedQuestions.map(q=>sql`INSERT INTO questions (question_set_id,question_number,subject,question,option_a,option_b,option_c,option_d,option_e,answer,explanation,image_data_url) VALUES (${questionSetId},${q.number},${q.subject},${q.question},${q.optionA},${q.optionB},${q.optionC},${q.optionD},${q.optionE},${q.answer},${q.explanation},${q.imageDataUrl})`));
+    await sql.transaction(normalizedQuestions.map(q=>sql`INSERT INTO questions (question_set_id,question_number,subject,question,option_a,option_b,option_c,option_d,option_e,answer,explanation,image_data_url,chapter) VALUES (${questionSetId},${q.number},${q.subject},${q.question},${q.optionA},${q.optionB},${q.optionC},${q.optionD},${q.optionE},${q.answer},${q.explanation},${q.imageDataUrl},${q.chapter})`));
     return NextResponse.json({success:true,questionSetId,totalQuestions:normalizedQuestions.length,message:`已確認匯入 ${normalizedQuestions.length} 題。`});
   }catch(error){const errorCode=typeof error==="object"&&error!==null&&"code"in error?String((error as {code?:unknown}).code):"";if(errorCode==="23505")return NextResponse.json({error:"這份 PDF 已經存在於相同的題庫範圍，不需要再次匯入。",code:"DUPLICATE_FILE"},{status:409});console.error("Create question set error:",error);return NextResponse.json({error:"匯入題庫失敗",detail:error instanceof Error?error.message:"未知錯誤"},{status:500});}
 }

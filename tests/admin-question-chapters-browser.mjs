@@ -78,6 +78,7 @@ try {
   await page.locator('#exam-subject').selectOption('獸醫藥理學'); await page.locator('#exam-year').selectOption('115');
   await page.getByLabel('選擇國考 PDF 檔案').setInputFiles({ name: 'fixture.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.7 fixture') });
   await page.getByRole('button', { name: '開始解析 PDF', exact: true }).click(); await page.getByRole('heading', { name: '檢查解析結果' }).waitFor();
+  await page.getByLabel('分類方式').selectOption('later');
   await page.getByRole('button', { name: '確認匯入私人題庫', exact: true }).click();
   await current.getByRole('heading', { name: '第 1 題 · ID 4' }).waitFor();
   await page.waitForFunction(() => document.querySelector('[aria-label="分類題庫"]')?.value === '2');
