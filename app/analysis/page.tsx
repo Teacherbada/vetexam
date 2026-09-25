@@ -8,6 +8,7 @@ import styles from "./analysis.module.css";
 import { getLearning, getLearningStatus, learningOwner, subscribeLearning } from '@/lib/learning-client';
 import LearningStatus from '@/components/LearningStatus';
 import Trends from './Trends';
+import Frequency from './Frequency';
 
 function subscribe(onChange: () => void) {
   function onStorage(event: StorageEvent) {
@@ -53,6 +54,7 @@ export default function AnalysisPage() {
           <section className={styles.recommendation} id="recommendation" aria-labelledby="recommendation-title"><span className={styles.recommendIcon}><StudyIcon name="leaf" /></span><p className={styles.eyebrow}>讓下一次練習更有方向</p><h2 id="recommendation-title">建議優先複習</h2>{weakest ? <><h3>{weakest.subject}</h3><p>{weakest.accuracy! >= 80 ? "目前各科表現都不錯，可以從相對較低的科目持續鞏固。" : "今天先從這一科開始，一次專心練習一點點。"}</p><dl className={styles.recommendStats}><div><dt>目前掌握度</dt><dd>{percentage(weakest.accuracy)}</dd></div><div><dt>已完成</dt><dd>{weakest.answered}<small>題</small></dd></div><div><dt>答對</dt><dd>{weakest.correct}<small>題</small></dd></div></dl><Link className="study-button study-button-primary" href={practiceHref(weakest.subject)}>{practiceHref(weakest.subject) === "/subjects" ? "選擇練習題庫" : "開始加強練習"}<StudyIcon name="arrow" /></Link><small className={styles.ctaNote}>{practiceHref(weakest.subject) === "/subjects" ? "此歷史科目請至現有題庫選擇練習。" : `${weakest.subject} · 隨機 20 題`}</small></> : <><h3>從你想練習的科目開始</h3><p>資料不足時，先不判定最弱科目。累積更多答題紀錄後，再提供科目建議。</p><Link href="/subjects" className="study-button study-button-primary">選擇科目開始練習 <StudyIcon name="arrow" /></Link></>}</section></div>
         </>}
         {signedIn && account && <Trends history={account.history} />}
+        <Frequency />
         {signedIn && account?.legacy.map((archive, index) => {
           const old = buildAnalysis(JSON.stringify(archive.progress ?? {}));
           return old.answered > 0 ? <details className={styles.method} key={index}><summary>已保留的舊裝置摘要 {index + 1}：{old.answered} 題</summary><div><p>答對 {old.correct} 題 · 答錯 {old.wrong} 題 · 正確率 {percentage(old.accuracy)}</p><p>舊版只記錄各科總數，無法還原每題對錯與時間。此摘要完整保留，與上方帳號統計可能重疊，因此不直接相加，也不納入近期趨勢。</p></div></details> : null;
