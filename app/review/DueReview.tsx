@@ -1,6 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import PageHeader from "@/components/ui/PageHeader";
+import foundation from "@/components/ui/foundation.module.css";
+import review from './review.module.css';
 import Link from 'next/link';
 import QuestionCard, { type QuizQuestion } from '@/components/questions/QuestionCard';
 import LearningStatus from '@/components/LearningStatus';
@@ -82,16 +85,16 @@ export default function DueReview() {
   }
 
   const validData = data?.owner === owner ? data : null;
-  return <main className={styles.page}><div className={styles.container}>
+  return <main className={`${foundation.foundation} ${styles.page} ${review.page}`}><div className={review.container}>
     <Link href="/study-plan" className="study-button">回學習計畫</Link>
     <LearningStatus />
-    <section className={styles.state}>
-      <h1>到期複習</h1>
+    <section className={review.summary}>
+      <PageHeader title="到期複習" />
       {!owner ? <p>{status === 'loading' ? '載入中…' : <Link href="/login" className="study-button">登入後查看到期複習</Link>}</p> : validData ? <>
-        <p>今天待複習 <strong>{validData.dueToday} 題</strong> · 現在可複習 {validData.dueNow} 題</p>
+        <p className={review.due}>今天待複習 <strong>{validData.dueToday} 題</strong><small>現在可複習 {validData.dueNow} 題</small></p>
         <p>未來 7 天 <strong>{validData.upcoming7Days} 題</strong></p>
         {completed > 0 && <p role="status">已完成 {completed} 題，下次系統會再安排。</p>}
-        {!current && (validData.dueNow ? <div className={styles.actions}><button className="study-button study-button-primary" disabled={busy} onClick={start}>開始到期複習</button></div> : <>
+        {!current && (validData.dueNow ? <div className={review.actions}><button className="study-button study-button-primary" disabled={busy} onClick={start}>開始到期複習</button></div> : <>
           <p>{validData.dueToday === 0 ? '今天沒有需要複習的題目' : '目前沒有到期複習，今天稍後還有題目到期。'}</p>
           <p>未來 7 天預計有 {validData.upcoming7Days} 題</p>
           <button className="study-button" disabled={busy} onClick={start}>重新整理</button>

@@ -1,0 +1,31 @@
+.page { max-width: var(--ui-page-width); margin: auto; padding: 24px var(--ui-page-padding) 100px; display: grid; gap: var(--ui-grid-gap); }
+.background { background: var(--study-background); min-height: 100vh; }
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--ui-grid-gap); }
+.card { display: flex; flex-direction: column; gap: 18px; }
+.card[data-selected="true"] { outline: 2px solid var(--primary); outline-offset: -2px; }
+.card .headline { font-size: 20px; font-weight: 600; }
+.difference { color: #3f725f; font-weight: 600; }
+.card ul { padding-left: 22px; list-style: disc; }
+.card li + li { margin-top: 6px; }
+.card button { margin-top: auto; white-space: normal; }
+.card button:disabled { cursor: default; opacity: .65; }
+.status { display: grid; gap: 12px; justify-items: start; }
+.page > * { min-width: 0; }
+.page h2 { font-size: var(--ui-section-title); line-height: 1.4; font-weight: 600; }
+.page h3 { font-size: var(--ui-card-title); line-height: 1.5; font-weight: 600; }
+.page :global(.study-card) { padding: var(--ui-card-padding); border-radius: var(--ui-radius-card); box-shadow: var(--ui-shadow); }
+.page :global(.study-muted) { color: var(--text-secondary); font-size: var(--ui-secondary); }
+.page > details { padding: 4px var(--ui-card-padding); border: 1px solid var(--ui-border); border-radius: var(--ui-radius-card); background: var(--surface); }
+.page > details[open] { padding-bottom: var(--ui-card-padding); }
+.page > details summary { font-weight: 600; }
+.page :global(.study-text-link) { display: inline-flex; gap: 8px; min-height: 44px; align-items: center; color: #3f725f; font-size: var(--ui-secondary); }
+.page :global(.study-text-link):hover { text-decoration: underline; text-underline-offset: 4px; }
+.page :global(.study-progress) { border-radius: var(--ui-radius-badge); }
+.status { margin-top: 16px; background: var(--ui-neutral-bg); font-size: var(--ui-secondary); }
+.card { gap: 16px; font-size: var(--ui-secondary); }
+.card h2 { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: var(--ui-card-title); }
+.reviewLink { padding-bottom: 8px; }
+@media (max-width: 680px) {
+  .page { padding: 20px var(--ui-page-padding) 100px; }
+  .grid { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+}

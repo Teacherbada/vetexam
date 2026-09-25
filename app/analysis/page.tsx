@@ -1,10 +1,12 @@
 ﻿"use client";
 
+import PageHeader from "@/components/ui/PageHeader";
+import foundation from "@/components/ui/foundation.module.css";
 import Link from "next/link";
 import { useSyncExternalStore, type CSSProperties } from "react";
 import { StudyIcon } from "@/components/dashboard/StudyUI";
 import { buildAnalysis, getMasteryStatus, MIN_SAMPLE_SIZE, practiceHref } from "./analytics";
-import styles from "./analysis.module.css";
+import styles from "./foundation-analysis.module.css";
 import { getLearning, getLearningStatus, learningOwner, subscribeLearning } from '@/lib/learning-client';
 import LearningStatus from '@/components/LearningStatus';
 import Trends from './Trends';
@@ -40,10 +42,10 @@ export default function AnalysisPage() {
   const weakest = analysis.ranking[0];
   const loading = raw === null || status === 'loading';
 
-  return <main className={styles.page}>
+  return <main className={`${foundation.foundation} ${styles.page}`}>
     <div className={styles.container}>
       <nav className={styles.breadcrumb} aria-label="麵包屑"><Link href="/"><StudyIcon name="home" />首頁</Link><span aria-hidden="true">/</span><span aria-current="page">弱點分析</span></nav>
-      <header className={styles.header}><div><p className={styles.eyebrow}>每一次練習，都更了解自己</p><h1>弱點分析</h1><p>找出目前最需要加強的科目，讓每一次刷題更有效率。</p></div><span className={styles.scope}><StudyIcon name="chart" />{signedIn ? '帳號・全部紀錄' : '本裝置・全部紀錄'}</span></header>
+      <PageHeader title="弱點分析" eyebrow="每一次練習，都更了解自己" description="找出目前最需要加強的科目，讓每一次刷題更有效率。"><span className={styles.scope}><StudyIcon name="chart" />{signedIn ? '帳號・全部紀錄' : '本裝置・全部紀錄'}</span></PageHeader>
       <LearningStatus />
       {loading ? <section className={styles.empty} aria-busy="true" role="status">正在整理你的學習紀錄…</section> : <>
         {analysis.hasInvalidRecords && <p className={styles.notice} role="status">部分本機紀錄無法讀取，以下僅統計可用資料。原有紀錄未變更；你可以重新整理頁面再試一次。</p>}

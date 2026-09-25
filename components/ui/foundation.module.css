@@ -1,0 +1,73 @@
+/* Opt-in foundation: only the three Phase 1 page roots consume these tokens. */
+.foundation {
+  --ui-page-width: 1160px;
+  --ui-section-gap: 32px;
+  --ui-grid-gap: 16px;
+  --ui-card-padding: 24px;
+  --ui-page-padding: 24px;
+  --ui-title: clamp(28px, 3vw, 34px);
+  --ui-section-title: 22px;
+  --ui-card-title: 18px;
+  --ui-body: 16px;
+  --ui-secondary: 14px;
+  --ui-caption: 12px;
+  --ui-radius-button: 10px;
+  --ui-radius-input: 10px;
+  --ui-radius-card: 16px;
+  --ui-radius-badge: 999px;
+  --ui-radius-modal: 16px;
+  --ui-border: #dce3dd;
+  --ui-shadow: 0 1px 3px rgb(38 51 46 / 4%);
+  --ui-success: #356748;
+  --ui-success-bg: #eaf5ee;
+  --ui-warning: #73551d;
+  --ui-warning-bg: #fbf3df;
+  --ui-danger: #a44343;
+  --ui-danger-bg: #fbecec;
+  --ui-info: #305f7b;
+  --ui-info-bg: #edf4f8;
+  --ui-neutral: #56645c;
+  --ui-neutral-bg: #f1f3ed;
+  --text-secondary: #59675e;
+  --border: var(--ui-border);
+  --shadow-card: var(--ui-shadow);
+  --radius-card: var(--ui-radius-card);
+  --radius-button: var(--ui-radius-button);
+  color: var(--text-primary);
+  font-family: var(--study-font);
+  font-size: var(--ui-body);
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+.foundation :is(button, a, input, select, summary):focus-visible {
+  outline: 3px solid #3f725f;
+  outline-offset: 3px;
+}
+.foundation :global(.study-button) {
+  min-height: 44px;
+  max-width: 100%;
+  border-radius: var(--ui-radius-button);
+  font-size: var(--ui-secondary);
+  line-height: 1.5;
+  white-space: normal;
+  text-align: center;
+  transition: none;
+}
+.foundation :global(.study-button-primary) { background: #3f725f; border-color: #3f725f; color: #fff; }
+.foundation :global(.study-button-primary):hover { background: #345e4f; }
+.foundation :is(input, select) { min-height: 44px; max-width: 100%; min-width: 0; border-radius: var(--ui-radius-input); font-size: 16px; }
+.foundation summary { cursor: pointer; min-height: 44px; padding-block: 10px; }
+.foundation :global(.study-progress) { height: 8px; width: 100%; overflow: hidden; background: var(--ui-neutral-bg); border-radius: var(--ui-radius-badge); }
+.foundation :global(.study-progress) > span { display: block; width: var(--progress); height: 100%; background: var(--primary); border-radius: inherit; transition: width 200ms ease-out; }
+.foundation :is([role="alert"]) { color: var(--ui-danger); }
+.header { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 16px; margin-block: 16px 24px; }
+.header > div { min-width: 0; flex: 1 1 260px; }
+.header h1 { font-size: var(--ui-title); line-height: 1.25; font-weight: 650; letter-spacing: -.025em; margin: 0; }
+.description { color: var(--text-secondary); font-size: var(--ui-secondary); margin-top: 12px; max-width: 65ch; }
+.eyebrow { font-size: var(--ui-caption); color: var(--ui-neutral); margin-bottom: 8px; }
+@media (max-width: 600px) {
+  .foundation { --ui-page-padding: 16px; --ui-card-padding: 20px; --ui-section-gap: 24px; --ui-section-title: 20px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .foundation *, .foundation *::before, .foundation *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
