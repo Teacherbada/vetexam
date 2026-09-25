@@ -44,13 +44,39 @@ test('migration retries preserve originals and only mark success; archives stay 
   const client=load('lib/learning-client.ts');
   try {
     const original=values.get('progress');
-    await client.setLearningOwner('alice');assert.equal(values.get('learningMigrated:alice'),undefined);assert.equal(values.get('progress'),original);
-    fail=false;await client.setLearningOwner('alice');assert.equal(values.get('learningMigrated:alice'),'1');assert.equal(values.get('progress'),original);
+    await client.setLearningOwner('alice');assert.equal(values.get('learningMigrated:alice'),undefined);assert.equal(values.get('progress'),original);assert.equal(client.getLearningStatus(),'error');
+    fail=false;await client.retryLearning();assert.equal(values.get('learningMigrated:alice'),'1');assert.equal(values.get('progress'),original);assert.equal(client.getLearningStatus(),'ready');
     await client.setLearningOwner('alice');assert.equal(imports,2);
     current='bob';await client.setLearningOwner('bob');assert.equal(imports,2);assert.equal(client.getLearning().owner,'bob');
     await client.setLearningOwner(null);assert.equal(client.getLearning(),null);
     client.recordLearning([{question_id:1,selected_answer:'A'}]);assert.equal(values.has('learningOutbox:null'),false);
   } finally { globalThis.fetch=previous;delete globalThis.localStorage; }
+});
+test('interrupted answer queues retry the same event, preserve later attempts and isolate accounts', async () => {
+  const values=new Map(),previous=globalThis.fetch;
+  globalThis.localStorage={getItem:k=>values.get(k)??null,setItem:(k,v)=>values.set(k,v)};
+  let fail=true,owner='alice';const sent=[];
+  globalThis.fetch=async(_url,options)=>{
+    if(options?.method==='POST') {
+      const body=JSON.parse(options.body);
+      if(body.action==='answers'){sent.push(body);return Response.json({}, {status:fail?503:200});}
+      return Response.json({success:true});
+    }
+    return Response.json({owner,progress:{},favorites:[],wrongQuestions:[],history:[],legacy:[]});
+  };
+  const client=load('lib/learning-client.ts');
+  try {
+    await client.setLearningOwner(owner);
+    client.recordLearning([{question_id:1,selected_answer:'B'}]);await client.flushLearning();
+    const queued=JSON.parse(values.get('learningOutbox:alice'));assert.equal(queued.length,1);
+    const event=queued[0].answers[0].event_id;
+    owner='bob';await client.setLearningOwner(owner);assert.equal(JSON.parse(values.get('learningOutbox:alice')).length,1);
+    fail=false;owner='alice';await client.setLearningOwner(owner);assert.equal(JSON.parse(values.get('learningOutbox:alice')).length,0);
+    assert.equal(sent.at(-1).answers[0].event_id,event);
+    client.recordLearning([{question_id:1,selected_answer:'A'}]);await client.flushLearning();
+    assert.notEqual(sent.at(-1).answers[0].event_id,event);assert.ok(sent.every(body=>body.owner==='alice'));
+    await client.setLearningOwner(null);const before=sent.length;client.recordLearning([{question_id:1,selected_answer:'A'}]);await client.flushLearning();assert.equal(sent.length,before);
+  } finally {globalThis.fetch=previous;delete globalThis.localStorage;}
 });
 test('PostgreSQL: additive migration, retries, repeated attempts, shared first answer and scoped history', { skip: process.env.LEARNING_DB_TEST !== '1' }, async () => {
   const db=new pg.Client({connectionString:process.env.TEST_DATABASE_URL||process.env.DATABASE_URL,connectionTimeoutMillis:10000});await db.connect();
@@ -77,7 +103,61 @@ test('PostgreSQL: additive migration, retries, repeated attempts, shared first a
     await db.query("INSERT INTO diagnostic_items VALUES($1,1,'subject','chapter','A',TRUE,now())",[session]);
     await stats.recordFirstAnswers(async(t,v)=>(await db.query(t,v)).rows,'alice',[{question_id:1,selected_answer:'A'}]);
     const a=await service.readLearning(db,'alice'), b=await service.readLearning(db,'bob');
-    assert.equal(a.history.length,3);assert.equal(a.progress.subject.wrong,1);assert.equal(a.wrongQuestions.length,1);assert.deepEqual(b.progress,{});assert.equal(b.history.length,0);
+    assert.equal(a.history.length,3);assert.equal(a.progress.subject.wrong,1);assert.equal(a.wrongQuestions.length,1);assert.deepEqual(Object.keys(b.progress),[]);assert.equal(b.history.length,0);
     assert.deepEqual(await service.readLearning(db,'alice'),a,'another device reads identical state');
+    assert.equal(a.wrongQuestions[0].userAnswer,'B');
+    await db.query("INSERT INTO question_review_state(user_id,question_id,wrong,wrong_updated_at) VALUES('alice',1,FALSE,clock_timestamp())");
+    assert.equal((await service.readLearning(db,'alice')).wrongQuestions.length,0);
+    assert.deepEqual((await service.readQuestionState(db,'alice')).wrong,[1],'ever-wrong filter includes dismissed items');
+    const afterDismissal=(await db.query("SELECT clock_timestamp() + interval '1 second' AS instant")).rows[0].instant.toISOString();
+    await service.recordPractice(db,'alice',[{...event,event_id:randomUUID(),answered_at:afterDismissal}],'practice');
+    assert.equal((await service.readLearning(db,'alice')).wrongQuestions.length,1,'a later mistake reopens the review item');
+    const api=load('app/api/learning/route.ts',{
+      '@/lib/auth':{auth:{api:{getSession:async()=>({user:{id:'alice'}})}}},
+      '@/lib/question-stats':stats,'@/lib/learning-service':service,
+      '@/lib/question-transaction':{questionTransaction:async fn=>fn(db)},
+    });
+    const deviceId=randomUUID(),payload={progress:{s:{answered:[1,3],correct:1,wrong:1}},favorites:[{id:1},{id:1}],wrongQuestions:[{id:1,note:'legacy note'}]};
+    await db.query('DELETE FROM question_review_state');
+    const request=()=>new Request('https://test.local/api/learning',{method:'POST',headers:{'content-type':'application/json',origin:'https://test.local'},body:JSON.stringify({owner:'alice',action:'import',deviceId,payload})});
+    assert.equal((await api.POST(request())).status,200);assert.equal((await api.POST(request())).status,200);
+    assert.equal((await db.query('SELECT * FROM learning_imports')).rows.length,1);
+    const imported=(await db.query('SELECT * FROM question_review_state')).rows[0];
+    assert.equal(imported.favorite,true);assert.equal(imported.wrong,true);assert.equal(imported.note,'legacy note');
+    await db.query("UPDATE question_review_state SET favorite=FALSE,wrong=NULL,note='' WHERE user_id='alice'");
+    const secondImport=new Request('https://test.local/api/learning',{method:'POST',headers:{'content-type':'application/json',origin:'https://test.local'},body:JSON.stringify({owner:'alice',action:'import',deviceId:randomUUID(),payload})});
+    assert.equal((await api.POST(secondImport)).status,200);
+    const merged=(await db.query('SELECT * FROM question_review_state')).rows[0];
+    assert.equal(merged.favorite,false,'an explicit account removal wins over another browser archive');
+    assert.equal(merged.wrong,true,'unknown fields merge independently');assert.equal(merged.note,'','an explicitly cleared account note is preserved');
+    await db.query("UPDATE question_review_state SET favorite=TRUE WHERE user_id='alice'");
+    assert.equal((await db.query('SELECT * FROM question_answer_stats')).rows.length,1,'imports never fabricate first answers');
+    assert.deepEqual((await service.readQuestionState(db,'alice')).answered.sort(),[1,3]);
+    await db.query("ALTER TABLE questions ADD question_number integer DEFAULT 1; ALTER TABLE question_sets ADD exam_year integer DEFAULT 115; ALTER TABLE question_sets ADD name text DEFAULT 'fixture'");
+    function sql(strings,...values) {
+      const fragment={strings,values};
+      fragment.then=(resolve,reject)=>{
+        const parameters=[];
+        const render=part=>part.strings.reduce((text,item,index)=>{
+          if(!index)return item;const value=part.values[index-1];
+          if(value?.strings)return text+render(value)+item;
+          parameters.push(value);return text+'$'+parameters.length+item;
+        },'');
+        return db.query(render(fragment),parameters).then(result=>result.rows).then(resolve,reject);
+      };return fragment;
+    }
+    let quizOwner='alice';
+    const quiz=load('app/api/quiz/route.ts',{
+      'next/server':{NextResponse:{json:(body,init)=>Response.json(body,init)}},'@neondatabase/serverless':{neon:()=>sql},
+      '@/lib/auth':{auth:{api:{getSession:async()=>quizOwner?{user:{id:quizOwner}}:null}}},
+      '@/data/exam-chapters':load('data/exam-chapters.ts'),'@/lib/question-state':load('lib/question-state.ts'),
+      '@/lib/question-transaction':{questionTransaction:async fn=>fn(db)},'@/lib/learning-service':service,
+    });
+    const quizRequest=state=>new Request('https://test.local/api/quiz?'+new URLSearchParams({scope:'public',groups:JSON.stringify([{subject:'subject',years:[],count:'all'}]),state}));
+    for(const [state,total] of [['all',1],['unanswered',0],['wrong',1],['favorites',1]]){
+      const result=await quiz.GET(quizRequest(state));assert.equal(result.status,200);assert.equal((await result.json()).questions.length,total);
+    }
+    quizOwner=null;assert.equal((await quiz.GET(quizRequest('wrong'))).status,401);
+    assert.equal((await quiz.GET(quizRequest('all'))).status,200);
   } finally { await db.query('ROLLBACK');await db.end(); }
 });

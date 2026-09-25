@@ -4,6 +4,7 @@ export function saveWrongQuestion(
   userAnswer:string
 ) {
   if (learningOwner()) return;
+  try {
 
 
 
@@ -44,4 +45,5 @@ export function saveWrongQuestion(
   );
 
 
+  } catch { /* Preserve unavailable or malformed legacy data without blocking practice. */ }
 }

@@ -39,6 +39,7 @@ export function getTodayProgress() {
 
 export function addDailyProgress() {
   if (learningOwner()) return;
+  try {
 
 
 
@@ -72,4 +73,5 @@ export function addDailyProgress() {
   );
 
 
+  } catch { /* Preserve unavailable or malformed legacy data without blocking practice. */ }
 }

@@ -26,7 +26,9 @@ export async function POST(request: Request) {
     let size = 0; const chunks: Uint8Array[] = [];
     while (true) { const { done, value } = await reader.read(); if (done) break; size += value.length;
       if (size > 2_000_000) { await reader.cancel(); return response({ error: '資料過大，原始紀錄仍保留在本機' }, 413); } chunks.push(value); }
-    const body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    let body;
+    try { body = JSON.parse(Buffer.concat(chunks).toString('utf8')); }
+    catch { return response({ error: '資料格式錯誤' }, 400); }
     if (!body || body.owner !== session.user.id) return response({ error: '帳號已變更，請重新載入' }, 409);
     if (body.action === 'answers') {
       if (!Array.isArray(body.answers) || !body.answers.every((a: Record<string, unknown>) => a && typeof a.event_id === 'string' && uuid.test(a.event_id))) return response({ error: '作答格式錯誤' }, 400);
@@ -41,7 +43,7 @@ export async function POST(request: Request) {
         // Column names are selected exclusively from the above fixed allowlist.
         await client.query(`INSERT INTO question_review_state(user_id,question_id,${body.field})
           SELECT $1,q.id,$3 FROM questions q JOIN question_sets qs ON qs.id=q.question_set_id WHERE q.id=$2 AND qs.visibility='public'
-          ON CONFLICT(user_id,question_id) DO UPDATE SET ${body.field}=EXCLUDED.${body.field}`, [session.user.id, body.questionId, body.value]);
+          ON CONFLICT(user_id,question_id) DO UPDATE SET ${body.field}=EXCLUDED.${body.field}${body.field === 'wrong' ? ',wrong_updated_at=clock_timestamp()' : ''}`, [session.user.id, body.questionId, body.value]);
       });
     } else if (body.action === 'import') {
       if (typeof body.deviceId !== 'string' || !uuid.test(body.deviceId) || !body.payload || typeof body.payload !== 'object' || Array.isArray(body.payload)) return response({ error: '遷移格式錯誤' }, 400);
@@ -49,13 +51,13 @@ export async function POST(request: Request) {
         const saved = await client.query(`INSERT INTO learning_imports(user_id,device_id,payload) VALUES($1,$2,$3::jsonb)
           ON CONFLICT(user_id,device_id) DO NOTHING RETURNING device_id`, [session.user.id, body.deviceId, JSON.stringify(body.payload)]);
         if (!saved.rows.length) return;
-        const merged = new Map<number, { id: number; favorite: boolean; wrong: boolean | null; note: string }>();
+        const merged = new Map<number, { id: number; favorite: boolean | null; wrong: boolean | null; note: string | null }>();
         for (const [key, field] of [['favorites','favorite'],['wrongQuestions','wrong']] as const) {
           const rows = body.payload[key];
           if (!Array.isArray(rows)) continue;
           for (const row of rows) {
             if (!row || !Number.isInteger(row.id) || row.id < 1 || row.id > 2147483647) continue;
-            const item = merged.get(row.id) ?? { id: row.id, favorite: false, wrong: null, note: '' };
+            const item = merged.get(row.id) ?? { id: row.id, favorite: null, wrong: null, note: null };
             item[field] = true;
             if (typeof row.note === 'string') item.note = row.note.slice(0,10000);
             merged.set(row.id, item);
@@ -64,7 +66,10 @@ export async function POST(request: Request) {
         await client.query(`INSERT INTO question_review_state(user_id,question_id,favorite,wrong,note)
           SELECT $1,q.id,a.favorite,a.wrong,a.note FROM jsonb_to_recordset($2::jsonb) a(id integer,favorite boolean,wrong boolean,note text)
           JOIN questions q ON q.id=a.id JOIN question_sets qs ON qs.id=q.question_set_id WHERE qs.visibility='public'
-          ON CONFLICT(user_id,question_id) DO NOTHING`, [session.user.id, JSON.stringify([...merged.values()])]);
+          ON CONFLICT(user_id,question_id) DO UPDATE SET
+            favorite=COALESCE(question_review_state.favorite,EXCLUDED.favorite),
+            wrong=COALESCE(question_review_state.wrong,EXCLUDED.wrong),
+            note=COALESCE(question_review_state.note,EXCLUDED.note)`, [session.user.id, JSON.stringify([...merged.values()])]);
       });
     } else return response({ error: '未知操作' }, 400);
     return response({ success: true });

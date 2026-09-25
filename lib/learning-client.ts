@@ -4,6 +4,9 @@ export type Learning = { owner: string | null; progress: Record<string, { answer
 let owner: string | null = null;
 let snapshot: Learning | null = null;
 let status = 'loading';
+let migrationFailed = false;
+let identityKnown = false;
+let earlyCommands: Record<string, unknown>[] = [];
 const listeners = new Set<() => void>();
 const notify = () => { for (const listener of listeners) listener(); };
 export const subscribeLearning = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
@@ -19,8 +22,16 @@ async function post(body: Record<string, unknown>) {
 }
 let generation = 0;
 export async function setLearningOwner(next: string | null) {
-  owner = next; snapshot = null; status = 'loading'; const token = ++generation; notify();
+  owner = next; snapshot = null; status = 'loading'; identityKnown = true; migrationFailed = false; const token = ++generation; notify();
+  const early = earlyCommands; earlyCommands = [];
   if (!next) { status = 'guest'; notify(); return; }
+  for (const command of early) enqueueLearning(command);
+  await migrateLearning(next);
+  if (token !== generation) return;
+  await flushLearning(next);
+  await refreshLearning(token);
+}
+async function migrateLearning(next: string) {
   try {
     // An unscoped browser archive is claimed by exactly one account on this device.
     let claimed = localStorage.getItem('learningLegacyOwner');
@@ -32,10 +43,12 @@ export async function setLearningOwner(next: string | null) {
       await post({ action: 'import', owner: next, deviceId, payload });
       localStorage.setItem(`learningMigrated:${next}`, '1');
     }
-  } catch { /* Keep every original key and allow practice even when import fails. */ }
-  if (token !== generation) return;
-  await flushLearning(next);
-  await refreshLearning(token);
+    if (owner === next) migrationFailed = false;
+  } catch { if (owner === next) migrationFailed = true; }
+}
+export async function retryLearning() {
+  if (owner) await migrateLearning(owner);
+  await flushLearning(); await refreshLearning();
 }
 export async function refreshLearning(token = generation) {
   if (!owner) return;
@@ -44,15 +57,21 @@ export async function refreshLearning(token = generation) {
     if (!res.ok) throw new Error('unavailable');
     const data = await res.json();
     if (token !== generation || data.owner !== owner) return;
-    snapshot = data; status = 'ready'; notify();
+    snapshot = data; status = migrationFailed || localValue<Command[]>(`learningOutbox:${owner}`, []).length ? 'error' : 'ready'; notify();
   } catch { if (token === generation) { status = 'error'; notify(); } }
 }
 type Command = Record<string, unknown> & { owner: string; commandId: string };
-let flushing = false;
+let flushing: { owner: string; task: Promise<void> } | null = null;
 export async function flushLearning(forOwner = owner) {
-  if (!forOwner || flushing) return;
-  flushing = true;
+  if (!forOwner) return;
+  if (flushing) {
+    const previous = flushing;
+    await previous.task;
+    if (previous.owner !== forOwner && owner === forOwner) await flushLearning(forOwner);
+    return;
+  }
   const key = `learningOutbox:${forOwner}`;
+  const task = (async () => {
   try {
     while (localValue<Command[]>(key, []).length) {
       const command = localValue<Command[]>(key, [])[0];
@@ -61,9 +80,12 @@ export async function flushLearning(forOwner = owner) {
       localStorage.setItem(key, JSON.stringify(localValue<Command[]>(key, []).filter(c => c.commandId !== command.commandId)));
     }
   } catch { status = 'error'; notify(); }
-  finally { flushing = false; }
+  })();
+  flushing = { owner: forOwner, task };
+  try { await task; } finally { if (flushing?.task === task) flushing = null; }
 }
 export function enqueueLearning(command: Record<string, unknown>) {
+  if (!identityKnown) { earlyCommands.push(command); return; }
   if (!owner) return;
   const key = `learningOutbox:${owner}`;
   try { localStorage.setItem(key, JSON.stringify([...localValue<Command[]>(key, []), { ...command, owner, commandId: crypto.randomUUID() }])); }

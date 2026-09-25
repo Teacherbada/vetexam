@@ -15,23 +15,27 @@ export const HISTORY_SQL = `
 export async function readLearning(client: PoolClient, userId: string) {
   const { rows: first } = await client.query(`SELECT s.question_id, q.subject, s.is_correct FROM question_answer_stats s
     JOIN questions q ON q.id=s.question_id WHERE s.user_id=$1`, [userId]);
-  const progress: Record<string, { answered: number[]; correct: number; wrong: number }> = {};
+  const progress: Record<string, { answered: number[]; correct: number; wrong: number }> = Object.create(null);
   for (const row of first) {
     const group = progress[row.subject] ??= { answered: [], correct: 0, wrong: 0 };
     group.answered.push(row.question_id); group[row.is_correct ? 'correct' : 'wrong']++;
   }
   const { rows: history } = await client.query(`SELECT * FROM (${HISTORY_SQL}) h ORDER BY answered_at, question_id`, [userId]);
   const { rows: review } = await client.query(`WITH wrong AS (
-    SELECT question_id FROM question_answer_stats WHERE user_id=$1 AND NOT is_correct
-    UNION SELECT question_id FROM (${HISTORY_SQL}) h WHERE NOT is_correct
+    SELECT question_id,MAX(answered_at) AS last_wrong,(ARRAY_AGG(selected_answer ORDER BY answered_at DESC))[1] AS user_answer FROM (
+      SELECT question_id,created_at AS answered_at,selected_answer FROM question_answer_stats WHERE user_id=$1 AND NOT is_correct
+      UNION ALL SELECT question_id,answered_at,selected_answer FROM (${HISTORY_SQL}) h WHERE NOT is_correct
+    ) answers GROUP BY question_id
   ) SELECT q.id, q.subject, q.question, q.answer, q.explanation,
     jsonb_build_array(q.option_a,q.option_b,q.option_c,q.option_d) AS options,
-    COALESCE(r.favorite,FALSE) AS favorite, COALESCE(r.wrong,w.question_id IS NOT NULL) AS wrong,
+    COALESCE(r.favorite,FALSE) AS favorite,
+    (r.wrong IS TRUE OR w.question_id IS NOT NULL AND (r.wrong IS DISTINCT FROM FALSE OR w.last_wrong > r.wrong_updated_at)) AS wrong,
+    w.user_answer AS "userAnswer",
     COALESCE(r.note,'') AS note
     FROM questions q JOIN question_sets qs ON qs.id=q.question_set_id
     LEFT JOIN question_review_state r ON r.question_id=q.id AND r.user_id=$1
     LEFT JOIN wrong w ON w.question_id=q.id
-    WHERE qs.visibility='public' AND (r.favorite OR COALESCE(r.wrong,w.question_id IS NOT NULL))`, [userId]);
+    WHERE qs.visibility='public' AND (r.favorite OR r.wrong IS TRUE OR w.question_id IS NOT NULL AND (r.wrong IS DISTINCT FROM FALSE OR w.last_wrong > r.wrong_updated_at))`, [userId]);
   const { rows: imports } = await client.query('SELECT payload FROM learning_imports WHERE user_id=$1', [userId]);
   return { owner: userId, progress, history, favorites: review.filter(r => r.favorite), wrongQuestions: review.filter(r => r.wrong), legacy: imports.map(r => r.payload) };
 }

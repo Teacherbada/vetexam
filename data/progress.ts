@@ -5,6 +5,7 @@ export function saveProgress(
   subject:string
 ) {
   if (learningOwner()) return;
+  try {
 
 
 
@@ -61,4 +62,5 @@ export function saveProgress(
   );
 
 
+  } catch { /* Preserve unavailable or malformed legacy data without blocking practice. */ }
 }

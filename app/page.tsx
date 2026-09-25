@@ -1,7 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useState, useSyncExternalStore, type CSSProperties } from "react";
+import { getLearning, getLearningStatus, learningOwner, subscribeLearning } from '@/lib/learning-client';
+import { getTodayProgress } from '@/data/tasksProgress';
+import LearningStatus from '@/components/LearningStatus';
 import { dailyGoal } from "@/data/tasks";
 import { authClient } from "@/lib/auth-client";
 import { ProgressBar, StudyCompanions, StudyIcon, type StudyIconName } from "@/components/dashboard/StudyUI";
@@ -14,9 +17,14 @@ import WeeklyMostMissed from "@/components/dashboard/WeeklyMostMissed";
 export default function Home() {
   const availability = useHomeAvailability();
   const [search, setSearch] = useState("");
-  const [isLoadingProgress, setIsLoadingProgress] = useState(true);
-  const [todayProgress, setTodayProgress] = useState(0);
-  const [progress, setProgress] = useState<Record<string, { answered: number[]; correct: number; wrong: number }>>({});
+  const [isLoadingLocalProgress, setIsLoadingProgress] = useState(true);
+  const [localTodayProgress, setTodayProgress] = useState(0);
+  const [localProgress, setProgress] = useState<Record<string, { answered: number[]; correct: number; wrong: number }>>({});
+  const account = useSyncExternalStore(subscribeLearning, getLearning, () => null);
+  const syncStatus = useSyncExternalStore(subscribeLearning, getLearningStatus, () => 'loading');
+  const progress = learningOwner() ? account?.progress ?? {} : localProgress;
+  const todayProgress = learningOwner() ? getTodayProgress().completed : localTodayProgress;
+  const isLoadingProgress = isLoadingLocalProgress || syncStatus === 'loading';
   const [examDate, setExamDate] = useState("2027-07-31");
 
   const [user, setUser] = useState<{ name?: string; email: string } | null>(null);
@@ -196,13 +204,14 @@ export default function Home() {
         <div className="study-insights-grid">
           <WeeklyMostMissed variant="homepage" />
           <section className="study-card study-records" aria-labelledby="records-title">
+            {syncStatus === 'error' && <LearningStatus />}
             <div className="study-section-heading"><h2 id="records-title"><StudyIcon name="chart" />我的學習進度</h2><Link href="/analysis" className="study-text-link">查看詳情<StudyIcon name="arrow" /></Link></div>
             {isLoadingProgress ? <p className="study-empty">讀取學習進度中…</p> : completed ? <div className="study-progress-summary">
               <div className="study-accuracy" style={{ "--accuracy": Math.max(0, Math.min(accuracy, 100)) + "%" } as CSSProperties} role="img" aria-label={"整體正確率 " + accuracy + "%"}><span><strong>{accuracy}%</strong><small>整體正確率</small></span></div>
               <dl><div><dt>已答題數</dt><dd>{completed.toLocaleString()} 題</dd></div><div><dt>正確題數</dt><dd>{correct.toLocaleString()} 題</dd></div><div><dt>錯誤題數</dt><dd>{wrong.toLocaleString()} 題</dd></div><div><dt>整體正確率</dt><dd>{accuracy}%</dd></div></dl>
             </div> : <div className="study-empty"><StudyIcon name="book" /><h3>你的第一步，從這裡開始</h3><p>完成練習後，就能看見累積成果。</p></div>}
             <p className="study-progress-note"><StudyIcon name="leaf" />持續練習，讓每一次作答都更有把握。</p>
-            <details className="study-record-details"><summary>各科累積紀錄<span>本裝置紀錄</span></summary>              {isLoadingProgress ? <p className="study-empty">讀取紀錄中…</p> : studied.length ? studied.map((subject) => { const record = progress[subject]; const accuracy = Math.round(record.correct / record.answered.length * 100); return <div className="study-record" key={subject}><div className="study-section-heading"><h3>{subject}</h3><span>已完成 {record.answered.length} 題</span></div><ProgressBar value={accuracy} label={`${subject}正確率`} /><div className="study-record-stats"><span>正確 {record.correct} 題 · 錯題 {record.wrong} 題</span><strong>正確率 {accuracy}%</strong></div></div>; }) : <div className="study-empty"><span className="study-empty-icon"><StudyIcon name="book" /></span><h3>你的第一步，從這裡開始</h3><p>完成練習後，就能在這裡看見各科累積成果。</p><Link href="/subjects" className="study-text-link">選擇第一個科目 <StudyIcon name="arrow" /></Link></div>}</details>
+            <details className="study-record-details"><summary>各科累積紀錄<span>{learningOwner() ? '帳號紀錄' : '本裝置紀錄'}</span></summary>              {isLoadingProgress ? <p className="study-empty">讀取紀錄中…</p> : studied.length ? studied.map((subject) => { const record = progress[subject]; const accuracy = Math.round(record.correct / record.answered.length * 100); return <div className="study-record" key={subject}><div className="study-section-heading"><h3>{subject}</h3><span>已完成 {record.answered.length} 題</span></div><ProgressBar value={accuracy} label={`${subject}正確率`} /><div className="study-record-stats"><span>正確 {record.correct} 題 · 錯題 {record.wrong} 題</span><strong>正確率 {accuracy}%</strong></div></div>; }) : <div className="study-empty"><span className="study-empty-icon"><StudyIcon name="book" /></span><h3>你的第一步，從這裡開始</h3><p>完成練習後，就能在這裡看見各科累積成果。</p><Link href="/subjects" className="study-text-link">選擇第一個科目 <StudyIcon name="arrow" /></Link></div>}</details>
           </section>
         </div>
         <section className="study-card study-banks" aria-labelledby="banks-title">

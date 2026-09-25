@@ -13,11 +13,13 @@ CREATE INDEX IF NOT EXISTS practice_attempts_history_idx ON practice_attempts(us
 CREATE TABLE IF NOT EXISTS question_review_state (
   user_id TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
   question_id INTEGER NOT NULL REFERENCES questions(id) ON DELETE CASCADE,
-  favorite BOOLEAN NOT NULL DEFAULT FALSE,
+  favorite BOOLEAN,
   wrong BOOLEAN,
-  note TEXT NOT NULL DEFAULT '',
+  wrong_updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  note TEXT,
   PRIMARY KEY(user_id,question_id)
 );
+ALTER TABLE question_review_state ADD COLUMN IF NOT EXISTS wrong_updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP;
 -- Legacy summaries cannot reconstruct per-question correctness or timestamps.
 -- Preserve their complete original payload separately, never as measured attempts.
 CREATE TABLE IF NOT EXISTS learning_imports (
