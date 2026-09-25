@@ -2,6 +2,7 @@ import { EXAM_SUBJECTS, validChapter } from '../data/exam-chapters';
 import type { Candidate } from './diagnostic';
 import { DAILY_TASK_NORMAL_RATIO, DAILY_TASK_WEAKNESS_RATIO, DAILY_TASK_REVIEW_RATIO, MAX_WEAKNESS_RATIO_PER_DAILY_TASK, MAX_CHAPTER_RATIO_PER_DAILY_TASK, DAILY_TASK_RECENT_DAYS, DAILY_TASK_TIME_ZONE, DAILY_TARGET_MIN, DAILY_TARGET_MAX } from './daily-task-config';
 import { FOLLOW_UP_QUESTION_COUNT } from './follow-up-config';
+import type { MemorySignal } from './question-memory-service';
 export type DailyCandidate = Candidate & { last_seen: string | null; appearances: number };
 export type DailySource = 'normal' | 'weakness' | 'follow_up';
 export type DailyReceipt = { eventId: string; id: number; subject: string; question: string; options: string[]; answer: string; explanation: string; image: string | null; userAnswer: string; correct: boolean };
@@ -24,7 +25,7 @@ export function dailyQuotas(target: number) {
   return { weakness, review };
 }
 export function validDailyTarget(value: unknown): value is number { return typeof value === 'number' && Number.isInteger(value) && value >= DAILY_TARGET_MIN && value <= DAILY_TARGET_MAX; }
-export function selectDailyQuestions(candidates: DailyCandidate[], target: number, reserved: Candidate[], weaknesses: { subject: string; chapter: string | null }[], now = Date.now(), random = Math.random) {
+export function selectDailyQuestions(candidates: DailyCandidate[], target: number, reserved: Candidate[], weaknesses: { subject: string; chapter: string | null }[], now = Date.now(), random = Math.random, memory: ReadonlyMap<number, MemorySignal> = new Map()) {
   const used = new Set(reserved.map(row => row.id));
   const key = (row: Pick<Candidate, 'subject' | 'chapter'>) => JSON.stringify([row.subject, row.chapter]);
   const weak = new Set(weaknesses.filter(row => row.chapter && validChapter(row.subject, row.chapter)).map(key));
@@ -36,15 +37,19 @@ export function selectDailyQuestions(candidates: DailyCandidate[], target: numbe
   const cutoff = now - DAILY_TASK_RECENT_DAYS * 86400000;
   const tier = (row: DailyCandidate) => row.last_seen && Date.parse(row.last_seen) >= cutoff ? 2 : row.last_answered ? 1 : 0;
   const time = (row: DailyCandidate) => row.last_answered ? Date.parse(row.last_answered) : 0;
+  const memoryTime = (row: DailyCandidate) => Math.max(time(row), Date.parse(memory.get(row.id)?.last_review ?? '') || 0);
+  const recent = (row: DailyCandidate) => Number(Math.max(Date.parse(row.last_seen ?? '') || 0,memoryTime(row)) >= cutoff);
+  const memoryTier = (row: DailyCandidate) => Date.parse(memory.get(row.id)?.due ?? '') <= now ? 0 : memoryTime(row) ? 2 : 1;
   const chapterCap = Math.max(1, Math.floor(target * MAX_CHAPTER_RATIO_PER_DAILY_TASK));
   const selected: (DailyCandidate & { source: 'normal' | 'weakness' })[] = [];
   function pick(source: 'normal' | 'weakness', amount: number) {
     for (let n = 0; n < amount; n++) {
       const eligible = pool.filter(row => !used.has(row.id) && (source === 'normal' || weak.has(key(row))) &&
         (!row.chapter || !validChapter(row.subject, row.chapter) || (chapterCounts.get(key(row)) ?? 0) < chapterCap));
-      eligible.sort((a,b) => tier(a)-tier(b) || (subjectCounts.get(a.subject) ?? 0)-(subjectCounts.get(b.subject) ?? 0) ||
+      const useMemory = source === 'normal' && memory.size > 0;
+      eligible.sort((a,b) => (useMemory ? recent(a)-recent(b) : tier(a)-tier(b)) || (subjectCounts.get(a.subject) ?? 0)-(subjectCounts.get(b.subject) ?? 0) ||
         (chapterCounts.get(key(a)) ?? 0)-(chapterCounts.get(key(b)) ?? 0) || (lifetime.get(a.subject) ?? 0)-(lifetime.get(b.subject) ?? 0) ||
-        time(a)-time(b) || a.appearances-b.appearances || a.tie-b.tie || a.id-b.id);
+        (useMemory ? memoryTier(a)-memoryTier(b) || memoryTime(a)-memoryTime(b) : time(a)-time(b)) || a.appearances-b.appearances || a.tie-b.tie || a.id-b.id);
       const row = eligible[0]; if (!row) break;
       selected.push({ ...row, source }); used.add(row.id);
       subjectCounts.set(row.subject, (subjectCounts.get(row.subject) ?? 0)+1); chapterCounts.set(key(row),(chapterCounts.get(key(row)) ?? 0)+1);

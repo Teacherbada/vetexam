@@ -2,6 +2,7 @@ import 'server-only';
 import type { PoolClient } from 'pg';
 import { recordFirstAnswers } from './question-stats';
 import { legacyAnsweredIds } from './question-state';
+import { recordMemory } from './question-memory-service';
 
 // All history queries are scoped before aggregation. Existing coach snapshots stay authoritative.
 export const HISTORY_SQL = `
@@ -41,17 +42,20 @@ export async function readLearning(client: PoolClient, userId: string) {
 }
 
 export async function recordPractice(client: PoolClient, userId: string, answers: { question_id: number; selected_answer: string; event_id: string; answered_at?: string }[], mode: 'practice' | 'exam') {
+  // Includes first-ever cards: a row lock alone cannot lock a missing memory row.
+  await client.query("SELECT pg_advisory_xact_lock(hashtextextended('practice-memory:' || $1,0))", [userId]);
   await client.query('LOCK TABLE question_answer_stats IN ROW EXCLUSIVE MODE');
   // Use the existing validator/writer, including visibility and available-option checks.
   await recordFirstAnswers(async (text, values) => (await client.query(text, values)).rows, userId, answers);
-  await client.query(`INSERT INTO practice_attempts(user_id,event_id,question_id,selected_answer,is_correct,mode,answered_at)
+  const inserted = await client.query(`INSERT INTO practice_attempts(user_id,event_id,question_id,selected_answer,is_correct,mode,answered_at)
     SELECT $1,a.event_id,q.id,a.selected_answer,UPPER(BTRIM(q.answer))=a.selected_answer,$3,COALESCE(a.answered_at,CURRENT_TIMESTAMP)
     FROM jsonb_to_recordset($2::jsonb) a(event_id uuid,question_id integer,selected_answer text,answered_at timestamptz)
     JOIN questions q ON q.id=a.question_id JOIN question_sets qs ON qs.id=q.question_set_id
     WHERE qs.visibility='public' AND UPPER(BTRIM(q.answer)) ~ '^[A-E]$'
     AND NULLIF(BTRIM(CASE UPPER(BTRIM(q.answer)) WHEN 'A' THEN q.option_a WHEN 'B' THEN q.option_b WHEN 'C' THEN q.option_c WHEN 'D' THEN q.option_d WHEN 'E' THEN q.option_e END),'') IS NOT NULL
     AND NULLIF(BTRIM(CASE a.selected_answer WHEN 'A' THEN q.option_a WHEN 'B' THEN q.option_b WHEN 'C' THEN q.option_c WHEN 'D' THEN q.option_d WHEN 'E' THEN q.option_e END),'') IS NOT NULL
-    ON CONFLICT(user_id,event_id) DO NOTHING`, [userId, JSON.stringify(answers), mode]);
+    ON CONFLICT(user_id,event_id) DO NOTHING RETURNING question_id,is_correct,answered_at,event_id`, [userId, JSON.stringify(answers), mode]);
+  await recordMemory(client,userId,inserted.rows);
 }
 
 export async function readQuestionState(client: PoolClient, userId: string) {

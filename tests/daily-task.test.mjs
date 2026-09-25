@@ -6,6 +6,7 @@ import ts from 'typescript';
 import nextEnv from '@next/env';
 import pg from 'pg';
 import { diagnosticTestConnectionString } from './diagnostic-database.mjs';
+import { memoryService } from './memory-test-loader.mjs';
 function load(path,mocks={}) {
   const exports={};new Function('require','exports',ts.transpileModule(readFileSync(new URL('../'+path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText)(name=>{if(name==='server-only')return{};if(name==='../lib/learning-client')return{learningOwner:()=>null};if(Object.hasOwn(mocks,name))return mocks[name];throw new Error('Unexpected import '+name)},exports);return exports;
 }
@@ -19,7 +20,7 @@ const confirmation=load('lib/confirmation-service.ts',{'@/lib/diagnostic-service
 const followRules=load('lib/follow-up.ts',{'../data/exam-chapters':chapters,'./follow-up-config':followConfig});
 const store=load('lib/follow-up-store.ts',{'node:crypto':{randomUUID},'./follow-up-config':followConfig});
 const follow=load('lib/follow-up-service.ts',{'@/lib/diagnostic-service':service,'@/lib/follow-up':followRules,'@/lib/follow-up-store':store,'@/lib/follow-up-config':followConfig});
-const daily=load('lib/daily-task-service.ts',{'node:crypto':{randomUUID},'@/lib/diagnostic-service':service,'@/lib/follow-up-service':follow,'@/lib/confirmation-service':confirmation,'@/lib/daily-task-config':config,'@/lib/daily-task':rules});
+const daily=load('lib/daily-task-service.ts',{'node:crypto':{randomUUID},'@/lib/diagnostic-service':service,'@/lib/follow-up-service':follow,'@/lib/confirmation-service':confirmation,'@/lib/daily-task-config':config,'@/lib/daily-task':rules,'@/lib/question-memory-service':memoryService});
 const subject=chapters.EXAM_SUBJECTS[0], chapter=chapters.chapterGroups(subject)[0].chapters[0];
 const candidate=(id,extra={})=>({id,subject,chapter:null,last_answered:null,last_seen:null,appearances:0,...extra});
 test('Taipei date switches at local midnight and targets/ratios are bounded',()=>{
@@ -75,7 +76,9 @@ test('daily API protects identity, origin, payload bounds and hidden server erro
 test('PostgreSQL daily persistence, shared follow-up, 12/30 resume, history, next-day expiry and settings', {skip:process.env.DAILY_TASK_DB_TEST!=='1',timeout:300000},async()=>{
   nextEnv.loadEnvConfig(process.cwd());const client=new pg.Client({connectionString:diagnosticTestConnectionString(),connectionTimeoutMillis:10000});await client.connect();
   try {
-    await client.query('BEGIN');await client.query(`CREATE TEMP TABLE study_plans(user_id text PRIMARY KEY,mode text);
+    await client.query('BEGIN');await client.query(`CREATE TEMP TABLE "user"(id text PRIMARY KEY);
+      INSERT INTO "user" VALUES('alice'),('bob'),('empty'),('custom');
+      CREATE TEMP TABLE study_plans(user_id text PRIMARY KEY,mode text);
       CREATE TEMP TABLE question_sets(id integer PRIMARY KEY,visibility text);
       CREATE TEMP TABLE questions(id integer PRIMARY KEY,question_set_id integer,subject text,chapter text,question text,answer text,option_a text,option_b text,option_c text,option_d text,option_e text,image_data_url text,explanation text);
       CREATE TEMP TABLE question_answer_stats(id bigserial,user_id text,question_id integer,is_correct boolean,selected_answer text,created_at timestamptz DEFAULT CURRENT_TIMESTAMP,UNIQUE(user_id,question_id));
@@ -84,6 +87,8 @@ test('PostgreSQL daily persistence, shared follow-up, 12/30 resume, history, nex
     const pool=chapters.EXAM_SUBJECTS.flatMap((subject,s)=>Array.from({length:30},(_,n)=>({id:s*100+n+1,subject,chapter:chapters.chapterGroups(subject)[0].chapters[n<15?0:1]})));
     await client.query(`INSERT INTO questions(id,question_set_id,subject,chapter,question,answer,option_a,option_b,explanation)
       SELECT id,1,subject,chapter,'Fixture '||id,'A','A','B','Fixture explanation' FROM jsonb_to_recordset($1::jsonb) AS item(id integer,subject text,chapter text)`,[JSON.stringify(pool)]);
+    await client.query(readFileSync(new URL('../migrations/20260925_question_memory_state.sql',import.meta.url),'utf8').replaceAll('CREATE TABLE','CREATE TEMP TABLE'));
+    await memoryService.recordMemory(client,'alice',[{question_id:530,is_correct:true,answered_at:new Date(Date.now()-30*86400000),event_id:randomUUID()}]);
     const initial=randomUUID(),active=randomUUID(),tracked=randomUUID();
     await client.query("INSERT INTO diagnostic_sessions(id,user_id,completed_at) VALUES($1,'alice',CURRENT_TIMESTAMP)",[initial]);
     await client.query(`INSERT INTO reinforcement_tasks(id,user_id,subject,chapter,source_session_id,source_analysis,status,review_completed_at,verification_completed_at)
@@ -97,6 +102,7 @@ test('PostgreSQL daily persistence, shared follow-up, 12/30 resume, history, nex
     assert.deepEqual(view.task.summary,[]);assert.equal(view.receipts.length,0);assert.doesNotMatch(JSON.stringify(view.task.current),/source|chapter|subject|answer_key/);
     const links=(await client.query('SELECT * FROM daily_task_items WHERE task_id=$1 ORDER BY position',[taskId])).rows;
     assert.equal(links.filter(r=>r.source==='follow_up').length,2);assert.equal(links.filter(r=>r.source==='weakness').length,8);assert.equal(links.filter(r=>r.source==='normal').length,20);
+    assert(links.some(r=>r.source==='normal'&&r.source_question_id===530),'persisted due card reaches daily normal selection');
     assert.equal(new Set(links.map(r=>r.source_question_id)).size,30);
     const trackedItems=links.filter(r=>r.source==='follow_up');
     const sessionId=trackedItems[0].session_id;

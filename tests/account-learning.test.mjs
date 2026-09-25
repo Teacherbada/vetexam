@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import ts from 'typescript';
 import pg from 'pg';
 import { randomUUID } from 'node:crypto';
+import { memoryService } from './memory-test-loader.mjs';
 function load(path, mocks = {}) {
   const exports = {};
   new Function('require','exports',ts.transpileModule(readFileSync(new URL('../'+path,import.meta.url),'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText)(name => {
@@ -14,7 +15,7 @@ function load(path, mocks = {}) {
   return exports;
 }
 const stats = load('lib/question-stats.ts');
-const service = load('lib/learning-service.ts', { './question-stats': stats, './question-state': load('lib/question-state.ts') });
+const service = load('lib/learning-service.ts', { './question-stats': stats, './question-state': load('lib/question-state.ts'), './question-memory-service': memoryService });
 test('API rejects guests, cross-account queues, cross-origin writes and invalid answers', async () => {
   let owner = null, writes = 0;
   const api = load('app/api/learning/route.ts', {
@@ -93,6 +94,7 @@ test('PostgreSQL: additive migration, retries, repeated attempts, shared first a
     await db.query(first);await db.query('ALTER TABLE question_answer_stats ADD selected_answer text');
     const migration=readFileSync(new URL('../migrations/20260925_account_learning.sql',import.meta.url),'utf8').replaceAll('CREATE TABLE','CREATE TEMP TABLE');
     await db.query(migration);await db.query(migration);
+    await db.query(readFileSync(new URL('../migrations/20260925_question_memory_state.sql',import.meta.url),'utf8').replaceAll('CREATE TABLE','CREATE TEMP TABLE'));
     const event={question_id:1,selected_answer:'B',event_id:randomUUID()};
     await service.recordPractice(db,'alice',[event],'practice');await service.recordPractice(db,'alice',[event],'practice');
     await service.recordPractice(db,'alice',[{...event,event_id:randomUUID(),selected_answer:'A'}],'exam');

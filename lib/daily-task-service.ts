@@ -7,6 +7,7 @@ import { readWeaknessAnalysis } from '@/lib/confirmation-service';
 import { DEFAULT_DAILY_QUESTION_TARGET, DAILY_TASK_TIME_ZONE } from '@/lib/daily-task-config';
 import { dailyQuotas, interleaveDailyStreams, selectDailyQuestions, type DailySource, type DailyView } from '@/lib/daily-task';
 import type { Candidate } from '@/lib/diagnostic';
+import { dailyMemorySignals } from '@/lib/question-memory-service';
 
 type LinkItem = Candidate & { session_id: string; item_position: number; source: DailySource; follow_up_id: string | null };
 type StoredItem = LinkItem & { position: number; question: string; options: string[]; image: string | null; answer_key: string; selected_answer: string | null; is_correct: boolean | null; explanation: string };
@@ -81,6 +82,7 @@ export async function ensureDailyTask(client: PoolClient, userId: string): Promi
     } finally { await client.query('RELEASE SAVEPOINT daily_follow_up'); }
   }
   const candidates = await diagnosticCandidates(client,userId);
+  const memory = await dailyMemorySignals(client,userId,candidates.map(row=>row.id));
   const history = await client.query(`SELECT i.source_question_id AS id,COUNT(*)::int AS appearances,MAX(COALESCE(i.answered_at,d.created_at))::text AS last_seen
     FROM diagnostic_items i JOIN diagnostic_sessions d ON d.id=i.session_id WHERE d.user_id=$1 GROUP BY i.source_question_id`,[userId]);
   const analysis = await readWeaknessAnalysis(client,userId);
@@ -92,7 +94,7 @@ export async function ensureDailyTask(client: PoolClient, userId: string): Promi
     const past = history.rows.find(old=>old.id===row.id);
     const lastSeen = [past?.last_seen,row.last_answered].filter(Boolean).sort((a,b)=>Date.parse(b)-Date.parse(a))[0] ?? null;
     return {...row,last_seen:lastSeen,appearances:past?.appearances ?? 0};
-  }),config.target,reserved,weaknesses);
+  }),config.target,reserved,weaknesses,Date.now(),Math.random,memory);
   if (selected.length) {
     const sessionId = await createDiagnosticSession(client,userId,selected,'daily');
     const snapshots = await client.query('SELECT source_question_id AS id,subject,chapter,session_id,position AS item_position FROM diagnostic_items WHERE session_id=$1 ORDER BY position',[sessionId]);
