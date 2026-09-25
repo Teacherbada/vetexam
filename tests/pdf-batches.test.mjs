@@ -54,6 +54,14 @@ test("server validates plan and counts independently of frontend", () => {
   for (const value of [{ ...batch, questions: [] }, { ...batch, importId: "bad" }, { ...batch, fileHash: "bad" }, { ...batch, batchIndex: 5 }, { ...batch, totalQuestions: 5 }, { ...batch, questions: [{ ...batch.questions[0], imageDataUrl: "https://example.test/private" }, batch.questions[1]] }]) assert.throws(() => service.parseImportBatch(value));
 });
 
+test('PDF reviewed numbers survive batch serialization without retaining preview images/metadata', () => {
+  const edited = questions.map((q, i) => ({ ...q, questionNumber: i + 12, images: [{ src: q.imageDataUrl }], regions: [{ page: 1 }], confidence: 90 }));
+  const batches = shared.buildImportBatches(metadata, edited, ranges, randomUUID()).map(b => service.parseImportBatch(JSON.parse(b.body)));
+  assert.deepEqual(batches.flatMap(b => b.questions.map(q => q.questionNumber)), [12, 13, 14, 15]);
+  assert(!('images' in batches[0].questions[0]));
+  for (const value of [0, -1, 1.5, 1000, '12']) assert.throws(() => service.parseImportBatch({ ...batches[0], questions: [{ ...batches[0].questions[0], questionNumber: value }, batches[0].questions[1]] }));
+});
+
 test("PostgreSQL stages, resumes, finalizes atomically and rejects foreign/changed/duplicate imports", { skip: process.env.PDF_BATCH_DB_TEST !== "1" }, async () => {
   nextEnv.loadEnvConfig(process.cwd());
   const client = new pg.Client({ connectionString: process.env.DATABASE_URL, connectionTimeoutMillis: 10000 });

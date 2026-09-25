@@ -2,11 +2,13 @@
 
 import { memo, useEffect, useRef, useState } from "react";
 
+import type { PdfRegion } from "@/lib/pdf-layout";
 type Props = {
+  regions?: PdfRegion[];
   file: File | null;
   pageNumber?: number;
   questionNumber: number;
-  onImageLoaded?: (imageDataUrl: string) => void;
+  onImageLoaded?: (imageDataUrl: string, imageDataUrls: string[]) => void;
 };
 
 type ImageResponse = {
@@ -19,6 +21,8 @@ type ImageResponse = {
 
 const MAX_PARALLEL_IMAGE_REQUESTS = 2;
 const IMAGE_REQUEST_TIMEOUT_MS = 60_000;
+const fileIds = new WeakMap<File, number>();
+let nextFileId = 0;
 const imageRequestCache = new Map<string, Promise<ImageResponse>>();
 const imageDataCache = new Map<string, ImageResponse>();
 const imageRequestQueue: Array<{
@@ -44,7 +48,7 @@ function pumpImageRequests() {
   }
 }
 
-function requestImagePreview(file: File, pageNumber: number, questionNumber: number, key: string): Promise<ImageResponse> {
+function requestImagePreview(file: File, pageNumber: number, questionNumber: number, key: string, regions?: PdfRegion[]): Promise<ImageResponse> {
   const cached = imageDataCache.get(key);
   if (cached) return Promise.resolve(cached);
   const existing = imageRequestCache.get(key);
@@ -58,6 +62,7 @@ function requestImagePreview(file: File, pageNumber: number, questionNumber: num
       request: async () => {
         const fd = new FormData();
         fd.append("file", file);
+        if (regions) fd.append("regions", JSON.stringify(regions));
         fd.append("pageNumber", String(pageNumber));
         fd.append("questionNumber", String(questionNumber));
         const response = await fetch("/api/pdf/images-v10", { method: "POST", body: fd, signal: AbortSignal.timeout(IMAGE_REQUEST_TIMEOUT_MS) });
@@ -75,23 +80,26 @@ function requestImagePreview(file: File, pageNumber: number, questionNumber: num
   });
 
   imageRequestCache.set(key, promise);
-  promise.catch(() => imageRequestCache.delete(key));
+  void promise.finally(() => imageRequestCache.delete(key)).catch(() => {});
   return promise;
 }
 
-function ImagePreview({ file, pageNumber, questionNumber, onImageLoaded }: Props) {
+function ImagePreview({ file, pageNumber, questionNumber, onImageLoaded, regions }: Props) {
   const [srcs, setSrcs] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [extractionMode, setExtractionMode] = useState("");
   const [shouldLoad, setShouldLoad] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const loadedKeyRef = useRef<string | null>(null);
+  const callbackRef = useRef(onImageLoaded);
+  useEffect(() => { callbackRef.current = onImageLoaded; }, [onImageLoaded]);
+  const regionKey = JSON.stringify(regions);
+  const [retry, setRetry] = useState(0);
 
   useEffect(() => {
     const element = containerRef.current;
     if (!element) return;
-    if (typeof IntersectionObserver === "undefined") { setShouldLoad(true); return; }
+    if (typeof IntersectionObserver === "undefined") { queueMicrotask(() => setShouldLoad(true)); return; }
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries.some((entry) => entry.isIntersecting)) {
@@ -108,9 +116,9 @@ function ImagePreview({ file, pageNumber, questionNumber, onImageLoaded }: Props
   useEffect(() => {
     const currentFile = file;
     if (!shouldLoad || !currentFile || !pageNumber || !questionNumber) return;
-    const loadKey = `${currentFile.name}:${currentFile.size}:${currentFile.lastModified}:${pageNumber}:${questionNumber}`;
-    if (loadedKeyRef.current === loadKey) return;
-    loadedKeyRef.current = loadKey;
+    if (!fileIds.has(currentFile)) fileIds.set(currentFile, ++nextFileId);
+    const loadKey = `${fileIds.get(currentFile)}:${pageNumber}:${questionNumber}:${regionKey}`;
+
     let cancelled = false;
 
     async function load(pdfFile: File, pdfPageNumber: number, pdfQuestionNumber: number) {
@@ -118,7 +126,7 @@ function ImagePreview({ file, pageNumber, questionNumber, onImageLoaded }: Props
       setError("");
       setExtractionMode("");
       try {
-        const data = await requestImagePreview(pdfFile, pdfPageNumber, pdfQuestionNumber, loadKey);
+        const data = await requestImagePreview(pdfFile, pdfPageNumber, pdfQuestionNumber, loadKey, regions);
         if (cancelled) return;
         setExtractionMode(typeof data.extractionMode === "string" ? data.extractionMode : "unknown");
         const nextSrcs = Array.isArray(data.imageDataUrls) && data.imageDataUrls.length
@@ -128,7 +136,7 @@ function ImagePreview({ file, pageNumber, questionNumber, onImageLoaded }: Props
             : [];
         if (nextSrcs.length) {
           setSrcs(nextSrcs);
-          onImageLoaded?.(nextSrcs[0]);
+          callbackRef.current?.(nextSrcs[0], nextSrcs);
         } else {
           setError("目前找不到這題可用的圖片內容。");
         }
@@ -141,11 +149,11 @@ function ImagePreview({ file, pageNumber, questionNumber, onImageLoaded }: Props
 
     load(currentFile, pageNumber, questionNumber);
     return () => { cancelled = true; };
-  }, [file, pageNumber, questionNumber, onImageLoaded, shouldLoad]);
+  }, [file, pageNumber, questionNumber, regionKey, regions, shouldLoad, retry]);
 
   return (
     <div ref={containerRef} className="mt-4 w-full min-h-24 rounded-xl">
-      {error && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">圖片載入失敗：{error}</div>}
+      {error && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">圖片載入失敗：{error}<button type="button" className="ml-2 underline" onClick={()=>{imageDataCache.clear();imageRequestCache.clear();setRetry(n=>n+1)}}>重試圖片</button></div>}
       {loading && !srcs.length && <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">正在載入圖片預覽…</div>}
       {!shouldLoad && !error && <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-400">圖片即將載入…</div>}
       {srcs.length > 0 && (

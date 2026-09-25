@@ -49,9 +49,9 @@ export async function POST(request: Request) {
     const normalizedQuestions:NormalizedQuestion[]=questions.map((q:any,index:number)=>{
       const options=Array.isArray(q?.options)?q.options:[];
       const imageDataUrl=typeof q?.imageDataUrl==="string"&&q.imageDataUrl.startsWith("data:image/")?q.imageDataUrl:null;
-      return {number:index+1,subject:examSubject,question:typeof q?.question==="string"?q.question.trim():"",optionA:typeof options[0]==="string"?options[0].trim():"",optionB:typeof options[1]==="string"?options[1].trim():"",optionC:typeof options[2]==="string"?options[2].trim():"",optionD:typeof options[3]==="string"?options[3].trim():"",optionE:typeof options[4]==="string"?options[4].trim():"",answer:typeof q?.answer==="string"?q.answer.trim():"",explanation:typeof q?.explanation==="string"?q.explanation.trim():"",imageDataUrl,chapter:q.chapter||null};
+      return {number:q.questionNumber === undefined ? index+1 : Number(q.questionNumber),subject:examSubject,question:typeof q?.question==="string"?q.question.trim():"",optionA:typeof options[0]==="string"?options[0].trim():"",optionB:typeof options[1]==="string"?options[1].trim():"",optionC:typeof options[2]==="string"?options[2].trim():"",optionD:typeof options[3]==="string"?options[3].trim():"",optionE:typeof options[4]==="string"?options[4].trim():"",answer:typeof q?.answer==="string"?q.answer.trim():"",explanation:typeof q?.explanation==="string"?q.explanation.trim():"",imageDataUrl,chapter:q.chapter||null};
     });
-    const invalid=normalizedQuestions.find(q=>!q.question||!q.optionA||!q.optionB||!q.optionC||!q.optionD);
+    const invalid=normalizedQuestions.find(q=>!Number.isInteger(q.number)||q.number<1||q.number>2000||!q.question||!q.optionA||!q.optionB||!q.optionC||!q.optionD);
     if(invalid)return NextResponse.json({error:`第 ${invalid.number} 題資料不完整，請先檢查題目與至少四個選項。`},{status:400});
 
     if(fileHash){

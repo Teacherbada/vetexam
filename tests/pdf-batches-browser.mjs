@@ -32,10 +32,11 @@ try {
     await page.getByLabel("選擇國考 PDF 檔案").setInputFiles({ name: "exam.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-fixture") });
     await page.getByRole("button", { name: "開始解析 PDF", exact: true }).click();
     await page.getByRole("heading", { name: "檢查解析結果" }).waitFor();
+    await page.getByRole('button', { name: '題目確認完成，下一步：章節分類 →', exact: true }).click();
     await page.getByLabel('分類方式').selectOption('later');
   };
   await parse();
-  await page.getByRole("button", { name: "儲存至公開國考題庫", exact: true }).click();
+  await page.getByRole("button", { name: "確認匯入公開國考題庫", exact: true }).click();
   assert.equal(normalCalls, 0, "oversized normal save is blocked before network");
   assert(await page.getByRole("checkbox", { name: "分批匯入", exact: true }).isChecked());
   for (const width of [320, 375, 768]) {
@@ -49,7 +50,7 @@ try {
   await page.getByRole("button", { name: "開始分批匯入", exact: true }).click();
   await page.getByRole("button", { name: "開始分批匯入", exact: true }).waitFor();
   assert.equal(batches.length, 2);
-  assert.equal(await page.getByRole("textbox", { name: "第 4 題題目", exact: true }).inputValue(), "題目 4");
+  assert.equal(batches[1].questions[1].question, "題目 4");
   assert((await page.locator("main").innerText()).includes("模擬暫時失敗"));
   await page.getByRole("button", { name: "開始分批匯入", exact: true }).click();
   await page.getByText("✅ 已確認匯入 4 題，全部題目已存入同一份題庫。", { exact: true }).waitFor();
@@ -61,9 +62,11 @@ try {
   console.log("PASS one PDF upload, capacity preflight, mobile ranges, overlap blocked, sequential batches, retry keeps same import ID");
   large = false;
   await parse();
-  await page.getByRole("button", { name: "儲存至公開國考題庫", exact: true }).click();
+  await page.getByRole("button", { name: "確認匯入公開國考題庫", exact: true }).click();
   await page.getByText(/儲存資料超過伺服器容量限制（HTTP 413）/).waitFor();
   assert(!(await page.locator("main").innerText()).includes("Unexpected token"));
+  await page.getByRole("button", {name:"← 返回檢查題目",exact:true}).click();
+  await page.getByRole("button", {name:"全部展開",exact:true}).click();
   assert.equal(await page.getByRole("textbox", { name: "第 1 題題目", exact: true }).inputValue(), "題目 1");
   console.log("PASS plain-text 413 stays actionable and parsed questions remain available");
 } finally { await browser.close(); }

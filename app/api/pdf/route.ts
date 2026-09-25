@@ -1,20 +1,15 @@
 import { NextResponse } from "next/server";
 import { createHash } from "crypto";
 import { auth } from "@/lib/auth";
+import { parsePdfLayout, type PdfPage } from "@/lib/pdf-layout";
+import { textLines, imageRegions } from "@/lib/pdf-geometry";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const MAX_PAGES = 200;
-const MIN_DETECTED_IMAGE_WIDTH = 28;
-const MIN_DETECTED_IMAGE_HEIGHT = 28;
-const MIN_DETECTED_IMAGE_AREA = 900;
-
-type ParsedQuestion = { id:number; subject:string; question:string; options:string[]; answer:string; explanation:string; pageNumber?:number; hasImage?:boolean };
-type Visibility = "public"|"private";
-type PageQuestionAnchor = { number:number; y:number; topY:number };
-type ImagePosition = { y:number; width:number; height:number; isMask:boolean };
+type Visibility = "public" | "private";
 
 export async function POST(request: Request) {
   try {
@@ -50,113 +45,38 @@ export async function POST(request: Request) {
     const pdfBytes = new Uint8Array(await file.arrayBuffer());
     const fileHash = createHash("sha256").update(pdfBytes).digest("hex");
     const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
-    const pdf = await pdfjsLib.getDocument({ data: pdfBytes }).promise;
-    if (pdf.numPages > MAX_PAGES) return NextResponse.json({ error: "PDF 頁數太多", detail: `目前單一 PDF 最大限制為 ${MAX_PAGES} 頁。` }, { status: 413 });
+    const pdf = await pdfjsLib.getDocument({ data: pdfBytes, standardFontDataUrl: `${process.cwd()}/node_modules/pdfjs-dist/standard_fonts/`, useSystemFonts: false }).promise;
+    if (pdf.numPages > MAX_PAGES) { await pdf.destroy(); return NextResponse.json({ error: "PDF 頁數太多", detail: `目前單一 PDF 最大限制為 ${MAX_PAGES} 頁。` }, { status: 413 }); }
 
-    let fullText = "";
-    const imagePages = new Set<number>();
-    const pageAnchors = new Map<number, PageQuestionAnchor[]>();
-    const pageImages = new Map<number, ImagePosition[]>();
-
-    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
-      const page = await pdf.getPage(pageNumber);
-      const viewport = page.getViewport({ scale: 1 });
-      const operatorList = await page.getOperatorList();
-      const imagePositions = getImagePositions(pdfjsLib, operatorList, viewport);
-      if (imagePositions.length > 0) { imagePages.add(pageNumber); pageImages.set(pageNumber, imagePositions); }
-      const textContent = await page.getTextContent();
-      const rawItems = textContent.items.filter((item:any)=>typeof item.str === "string" && item.str.trim() !== "").map((item:any)=>({ text:item.str.trim(), x:Number(item.transform?.[4]??0), y:Number(item.transform?.[5]??0), width:Number(item.width??0) }));
-      const items = rawItems.sort((a,b)=>Math.abs(a.y-b.y)<=3?a.x-b.x:b.y-a.y);
-      const lines:Array<{y:number;items:Array<{text:string;x:number;width:number}>}> = [];
-      for (const item of items) {
-        const line = lines.find(candidate=>Math.abs(candidate.y-item.y)<=3);
-        if (line) { line.items.push(item); line.items.sort((a,b)=>a.x-b.x); }
-        else lines.push({y:item.y,items:[{text:item.text,x:item.x,width:item.width}]});
+    const pages: PdfPage[] = [];
+    try {
+      for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
+        try {
+        const page = await pdf.getPage(pageNumber);
+        const viewport = page.getViewport({ scale: 1 });
+        const info: PdfPage = { page: pageNumber, width: viewport.width, height: viewport.height, lines: [], images: [] };
+        try { info.lines = textLines((await page.getTextContent()).items.filter(item => "str" in item), viewport); }
+        catch { info.warning = '文字擷取失敗'; }
+        try { info.images = imageRegions(pdfjsLib.OPS, await page.getOperatorList(), viewport, pageNumber); }
+        catch { info.warning = '圖片偵測失敗'; }
+        pages.push(info);
+        page.cleanup();
+        } catch {
+          pages.push({ page: pageNumber, width: 0, height: 0, lines: [], images: [], warning: '頁面無法讀取，請對照原 PDF 手動補題' });
+        }
       }
-      lines.sort((a,b)=>b.y-a.y);
-      const anchorItems = lines.map(line=>({text:line.items.reduce((result,item,index)=>{const previous=line.items[index-1];const previousEnd=previous?previous.x+previous.width:-Infinity;const separator=result&&item.x-previousEnd>2?" ":"";return result+separator+item.text;},""),x:line.items[0]?.x??0,y:line.y}));
-      pageAnchors.set(pageNumber, getQuestionAnchors(anchorItems, viewport.height));
-      const pageText = lines.map(line=>{ let result=""; let previousEnd=-Infinity; for(const item of line.items){const separator=result&&item.x-previousEnd>2?" ":"";result+=separator+item.text;previousEnd=item.x+item.width;} return result.trim(); }).filter(Boolean).join("\n");
-      fullText += `\n===== PDF PAGE ${pageNumber} =====\n${pageText}\n`;
-    }
-
-    const text = fullText.trim();
-    if (!text) return NextResponse.json({ error: "PDF 有成功讀取，但沒有偵測到文字。目前尚未支援純掃描圖片型 PDF OCR。" }, { status: 400 });
-    const questions = parseQuestions(text, imagePages, pageAnchors, pageImages);
-    if (questions.length === 0) return NextResponse.json({ error: "沒有辨識到選擇題。請確認 PDF 題目格式。", detail: "目前已支援常見的 1.、1、(1)、1) 與 A.、A、(A)、A)、E.、E、(E)、E) 格式。", textPreview:text.substring(0,5000) }, { status:400 });
+    } finally { await pdf.destroy(); }
+    const text = pages.flatMap(p => p.lines.map(l => l.text)).join('\n');
+    const questions = parsePdfLayout(pages);
+    if (!questions.length) return NextResponse.json({ error: '沒有辨識到題號。純掃描 PDF 尚未支援 OCR，請使用手動輸入。', textPreview: text.slice(0, 5000), warnings: pages.filter(p=>p.warning).map(p=>({page:p.page,warning:p.warning})) }, { status: 400 });
+    const imagePages = new Set(pages.filter(p=>p.images.length).map(p=>p.page));
     const imageQuestionCount=questions.filter(q=>q.hasImage).length;
     const detectedOptionCounts=questions.map(q=>q.options.length);
     const optionCountFrequency=new Map<number,number>();
     for(const count of detectedOptionCounts) optionCountFrequency.set(count,(optionCountFrequency.get(count)??0)+1);
     const detectedOptionCount=[...optionCountFrequency.entries()].sort((a,b)=>b[1]-a[1]||b[0]-a[0])[0]?.[0]??4;
-    return NextResponse.json({success:true,pendingConfirmation:true,message:`成功辨識 ${questions.length} 題${imageQuestionCount?`，其中 ${imageQuestionCount} 題偵測到圖片`:""}`,fileHash,filename:file.name,visibility,examYear,examSubject,total:questions.length,questions,imagePages:[...imagePages],imageQuestionCount,imageQuestionNumbers:questions.filter(q=>q.hasImage).map(q=>q.id),detectedOptionCount,textLength:text.length,totalPages:pdf.numPages});
+    return NextResponse.json({success:true,pendingConfirmation:true,message:`成功辨識 ${questions.length} 題${imageQuestionCount?`，其中 ${imageQuestionCount} 題偵測到圖片`:""}`,fileHash,filename:file.name,visibility,examYear,examSubject,total:questions.length,questions,imagePages:[...imagePages],imageQuestionCount,imageQuestionNumbers:questions.filter(q=>q.hasImage).map(q=>q.id),detectedOptionCount,textLength:text.length,totalPages:pages.length,parserVersion:2,pageWarnings:pages.filter(p=>p.warning).map(p=>({page:p.page,warning:p.warning}))});
   } catch(error) { console.error("PDF parsing error:",error); return NextResponse.json({error:"PDF 解析失敗",detail:error instanceof Error?error.message:"未知錯誤"},{status:500}); }
 }
 
 function normalizeExamYear(value:number){if(!Number.isInteger(value))return null;const year=value>=80&&value<=200?value+1911:value;return year>=1990&&year<=2100?year:null;}
-
-function getImagePositions(pdfjsLib:any,operatorList:any,viewport:any):ImagePosition[]{
-  const imageOps=new Set<number>([pdfjsLib.OPS.paintImageMaskXObject,pdfjsLib.OPS.paintImageXObject,pdfjsLib.OPS.paintInlineImageXObject,pdfjsLib.OPS.paintImageMaskXObjectRepeat,pdfjsLib.OPS.paintImageXObjectRepeat,pdfjsLib.OPS.paintJpegXObject].filter((value):value is number=>typeof value==="number"));
-  const positions:ImagePosition[]=[]; let ctm=[1,0,0,1,0,0]; const stack:number[][]=[];
-  for(let i=0;i<operatorList.fnArray.length;i++){
-    const fn=operatorList.fnArray[i],args=operatorList.argsArray[i]??[];
-    if(fn===pdfjsLib.OPS.save){stack.push([...ctm]);continue;}
-    if(fn===pdfjsLib.OPS.restore){ctm=stack.pop()??ctm;continue;}
-    if(fn===pdfjsLib.OPS.paintFormXObjectBegin){stack.push([...ctm]);const matrix=args[0];if(Array.isArray(matrix)&&matrix.length>=6){ctm=pdfjsLib.Util.transform(ctm,matrix.slice(0,6));}continue;}
-    if(fn===pdfjsLib.OPS.paintFormXObjectEnd){ctm=stack.pop()??ctm;continue;}
-    if(fn===pdfjsLib.OPS.transform&&args.length>=6){ctm=pdfjsLib.Util.transform(ctm,args.slice(0,6));continue;}
-    if(!imageOps.has(fn))continue;
-    try{const transform=pdfjsLib.Util.transform(viewport.transform,ctm);const points=[[0,0],[1,0],[0,1],[1,1]].map(point=>pdfjsLib.Util.applyTransform(point,transform));const xs=points.map((point:number[])=>point[0]),ys=points.map((point:number[])=>point[1]);const x=Math.min(...xs),y=Math.min(...ys),width=Math.max(...xs)-x,height=Math.max(...ys)-y;const isMask=fn===pdfjsLib.OPS.paintImageMaskXObject||fn===pdfjsLib.OPS.paintImageMaskXObjectRepeat;if(isMask&&(width<MIN_DETECTED_IMAGE_WIDTH||height<MIN_DETECTED_IMAGE_HEIGHT||width*height<MIN_DETECTED_IMAGE_AREA))continue;if(width<6||height<6)continue;positions.push({y:y+height/2,width,height,isMask});}catch{}
-  }
-  return positions.filter(position=>Number.isFinite(position.y));
-}
-
-function getQuestionAnchors(items:Array<{text:string;x:number;y:number}>,pageHeight:number):PageQuestionAnchor[]{const anchors:PageQuestionAnchor[]=[];const regex=/^\s*(?:[（(]\s*)?(\d{1,3})(?:\s*[）)])?\s*(?:[.、．:：]|(?=\S))/;for(const item of items){const match=item.text.match(regex);if(!match)continue;const number=Number(match[1]);if(number>=1&&number<=999)anchors.push({number,y:item.y,topY:pageHeight-item.y});}return anchors;}
-
-function parseQuestions(text:string,imagePages:Set<number>,pageAnchors:Map<number,PageQuestionAnchor[]>,pageImages:Map<number,ImagePosition[]>):ParsedQuestion[]{const normalized=text.replace(/\r\n/g,"\n").replace(/\r/g,"\n").replace(/\u00a0/g," ").replace(/[ \t]+/g," ").replace(/\n{3,}/g,"\n\n").trim();const questionStartRegex=/^\s*(?:[（(]\s*)?(\d{1,3})(?:\s*[）)])?\s*(?:[.、．:：]|(?=\S))\s*/gm;const matches=[...normalized.matchAll(questionStartRegex)].filter(match=>{const prefix=normalized.slice(Math.max(0,(match.index??0)-2),match.index??0);return (match.index??0)===0||/\n/.test(prefix);});const questions:Array<ParsedQuestion&{pageNumber?:number}>=[];for(let index=0;index<matches.length;index++){const match=matches[index],number=Number(match[1]);if(number<1||number>999)continue;const start=(match.index??0)+match[0].length,end=matches[index+1]?.index??normalized.length;const parsed=parseQuestionContent(number,normalized.substring(start,end).trim());if(!parsed)continue;const before=normalized.slice(0,match.index??0),pageMatches=[...before.matchAll(/===== PDF PAGE (\d+) =====/g)];const pageNumber=pageMatches.length?Number(pageMatches[pageMatches.length-1][1]):undefined;parsed.pageNumber=pageNumber;questions.push(parsed);}for(let index=0;index<questions.length;index++){const question=questions[index],nextQuestion=questions[index+1];question.hasImage=!!(question.pageNumber&&hasImageForQuestion(question.id,question.question,question.pageNumber,nextQuestion?.pageNumber,pageAnchors,pageImages));}const seen=new Set<string>();return questions.filter(q=>{const key=`${q.id}|${q.question}`;if(seen.has(key))return false;seen.add(key);return true;}).sort((a,b)=>a.id-b.id);}
-
-function hasImageCue(question:string){return /圖|圖片|照片|影像|病灶|顯示|呈現|如下|觀察|依圖|見圖|figure|fig\.?/i.test(question);}
-function hasImageForQuestion(questionNumber:number,questionText:string,questionPage:number,nextQuestionPage:number|undefined,pageAnchors:Map<number,PageQuestionAnchor[]>,pageImages:Map<number,ImagePosition[]>):boolean{
-  if(isImageNearQuestion(questionNumber,pageAnchors.get(questionPage)??[],pageImages.get(questionPage)??[]))return true;
-  if(!hasImageCue(questionText))return false;
-  const lastCandidatePage=Math.min(nextQuestionPage??questionPage+2,questionPage+2);
-  for(let page=questionPage+1;page<=lastCandidatePage;page++){
-    const images=pageImages.get(page)??[];
-    if(!images.length)continue;
-    const anchors=pageAnchors.get(page)??[];
-    const nextBoundary=anchors.filter(anchor=>anchor.number!==questionNumber).sort((a,b)=>a.topY-b.topY)[0];
-    if(nextBoundary){if(images.some(image=>image.y<nextBoundary.topY-8))return true;}
-    else return true;
-  }
-  return false;
-}
-
-function isImageNearQuestion(questionNumber:number,anchors:PageQuestionAnchor[],images:ImagePosition[]):boolean{if(!anchors.length||!images.length)return false;const sameQuestion=anchors.filter(anchor=>anchor.number===questionNumber);if(!sameQuestion.length)return false;const target=sameQuestion[0];const ordered=[...anchors].sort((a,b)=>a.topY-b.topY);const targetIndex=ordered.findIndex(anchor=>anchor.number===questionNumber&&Math.abs(anchor.topY-target.topY)<0.5);const previous=targetIndex>0?ordered[targetIndex-1]:undefined;const next=targetIndex>=0&&targetIndex<ordered.length-1?ordered[targetIndex+1]:undefined;const upper=previous?.topY??Math.max(0,target.topY-120);const nextBoundary=next?.topY??target.topY+5000;return images.some(image=>image.y>=upper-20&&image.y<=nextBoundary+20);}
-
-function parseQuestionContent(questionNumber:number,content:string):ParsedQuestion|null{
-  if(!content)return null;
-  const optionRegex=/^\s*(?:[（(]\s*)?([A-EＡ-Ｅ]|[1-5])\s*(?:[）)])?\s*(?:[.、．:：]|(?=\S))\s*/gim;
-  const optionMatches=[...content.matchAll(optionRegex)].filter(match=>{
-    const index=match.index??0;
-    const remainder=content.slice(index);
-    if(/^[AＡ]\s*[、.．:：]\s*[BＢ]\s*圖/.test(remainder))return false;
-    if(/^[A-EＡ-Ｅ]\s*[、.．:：]\s*[A-EＡ-Ｅ]\s*圖/.test(remainder))return false;
-    return true;
-  });
-  if(optionMatches.length<2)return null;
-  const firstIndex=optionMatches[0].index;
-  if(firstIndex==null)return null;
-  const questionText=clean(content.substring(0,firstIndex));
-  if(!questionText||questionText.length<2)return null;
-  const options:string[]=[];
-  for(let i=0;i<optionMatches.length;i++){
-    const start=(optionMatches[i].index??0)+optionMatches[i][0].length;
-    const end=optionMatches[i+1]?.index??content.length;
-    const value=clean(content.substring(start,end));
-    if(value) options.push(value);
-  }
-  if(options.length<2)return null;
-  return{id:questionNumber,subject:"PDF 題庫",question:questionText,options:options.slice(0,5),answer:"",explanation:""};
-}
-
-function clean(value:string){return value.replace(/===== PDF PAGE \d+ =====/g,"").replace(/\s+/g," ").trim();}

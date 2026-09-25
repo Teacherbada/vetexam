@@ -9,14 +9,14 @@ type ImageAsset = { x: number; y: number; width: number; height: number; isMask:
 type TextItem = { text: string; x: number; y: number; width: number; height: number };
 type Anchor = { number: number; topY: number };
 type PageIndex = { page: any; pageNumber: number; viewport: any; anchors: Anchor[]; images: ImageAsset[] };
-type ImageContext = { page: any; pageNumber: number; viewport: any; images: ImageAsset[] };
+type ImageContext = { exact?: boolean; page: any; pageNumber: number; viewport: any; images: ImageAsset[] };
 type PdfCacheEntry = { pdf: any; createdAt: number; hits: number };
 type CanvasCacheEntry = { canvas: any; createdAt: number };
 type ImageDebugAsset = ImageAsset & { centerY: number; intersectsRegion: boolean; centerInsideRegion: boolean };
 type ImageDebugPage = { page: number; anchorCount: number; hasTargetAnchor: boolean; imageAssetCount: number; selectedImageCount: number; targetTopY?: number; upperBound?: number; imageAssets?: ImageDebugAsset[] };
 
 const RENDER_PADDING = 12;
-const RENDER_SCALE = 1.5;
+const RENDER_SCALE = 2;
 const MIN_REAL_IMAGE_WIDTH = 40;
 const MIN_REAL_IMAGE_HEIGHT = 40;
 const MAX_LOOKAHEAD_PAGES = 3;
@@ -33,6 +33,7 @@ const MAX_HORIZONTAL_FRAGMENT_WIDTH_RATIO = 0.40;
 const pdfCache = new Map<string, PdfCacheEntry>();
 const pendingPdfLoads = new Map<string, Promise<any>>();
 const pageIndexCache = new Map<string, PageIndex>();
+const pendingRenders = new Map<string, Promise<any>>();
 const renderedPageCache = new Map<string, CanvasCacheEntry>();
 const imageCache = new Map<string, { dataUrls: string[]; createdAt: number }>();
 
@@ -48,16 +49,21 @@ export async function POST(request: Request) {
     if (!Number.isInteger(pageNumber) || pageNumber < 1) return NextResponse.json({ error: "無效的 PDF 頁碼。" }, { status: 400 });
     if (!Number.isInteger(questionNumber) || questionNumber < 1) return NextResponse.json({ error: "無效的題號。" }, { status: 400 });
 
+    if (file.size > 10 * 1024 * 1024) return NextResponse.json({ error: "PDF 最大 10 MB。" }, { status: 413 });
+    const regionValue = formData.get("regions");
+    const regions = regionValue === null ? null : JSON.parse(String(regionValue));
+    if (regions !== null && (!Array.isArray(regions) || regions.length > 200 || regions.some((r: any) => !r || !Number.isInteger(r.page) || r.page < 1 || ![r.x,r.y,r.width,r.height].every(Number.isFinite) || r.width <= 0 || r.height <= 0))) return NextResponse.json({error:"圖片區域無效"},{status:400});
     const bytes = new Uint8Array(await file.arrayBuffer());
     const pdfHash = createHash("sha256").update(bytes).digest("hex");
-    const cacheKey = `${pdfHash}:${pageNumber}:${questionNumber}`;
+    const cacheKey = `${pdfHash}:${pageNumber}:${questionNumber}:${createHash("sha256").update(JSON.stringify(regions)).digest("hex")}`;
     const cachedImages = getCachedImage(cacheKey);
     if (cachedImages !== undefined) return NextResponse.json({ success: true, pageNumber, questionNumber, imageDataUrl: cachedImages[0] ?? null, imageDataUrls: cachedImages, imageCount: cachedImages.length, extractionMode: "pdf-region-render-v10", debug: { stage: "image-cache-hit" } });
 
     const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
     const pdf = await getCachedPdf(pdfjsLib, pdfHash, bytes);
     if (pageNumber > pdf.numPages) return NextResponse.json({ error: "PDF 頁碼超出範圍。" }, { status: 400 });
-    const result = await findImageContexts(pdf, pdfHash, pageNumber, questionNumber);
+    if (pdf.numPages > 200) return NextResponse.json({error:"PDF 最大 200 頁。"},{status:413});
+    const result = regions === null ? await findImageContexts(pdf, pdfHash, pageNumber, questionNumber) : await contextsFromRegions(pdf, regions);
     const contexts = result.contexts;
     if (!contexts.length) {
       console.warn("PDF image pipeline: no image context", JSON.stringify({ pageNumber, questionNumber, debug: result.debug }, null, 2));
@@ -102,7 +108,7 @@ async function getCachedPdf(pdfjsLib: any, hash: string, bytes: Uint8Array): Pro
   const pending = pendingPdfLoads.get(hash);
   if (pending) return pending;
   const load = (async () => {
-    const pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
+    const pdf = await pdfjsLib.getDocument({ data: bytes, standardFontDataUrl: `${process.cwd()}/node_modules/pdfjs-dist/standard_fonts/`, useSystemFonts: false }).promise;
     pdfCache.set(hash, { pdf, createdAt: Date.now(), hits: 0 });
     while (pdfCache.size > MAX_CACHED_PDFS) {
       const oldest = pdfCache.keys().next().value;
@@ -293,7 +299,7 @@ async function renderImageContexts(contexts: ImageContext[], pdfHash: string): P
   const rendered: string[] = [];
   for (const context of contexts) {
     const pageCanvas = await getRenderedPageCanvas(context, pdfHash, canvasModule);
-    const groups = groupImageAssets(context.images, context.viewport.width);
+    const groups = context.exact ? context.images.map(image=>[image]) : groupImageAssets(context.images, context.viewport.width);
     for (const group of groups) {
       const left = Math.max(0, Math.min(...group.map((image) => image.x)) - RENDER_PADDING);
       const top = Math.max(0, Math.min(...group.map((image) => image.y)) - RENDER_PADDING);
@@ -318,13 +324,19 @@ async function getRenderedPageCanvas(context: ImageContext, pdfHash: string, can
   const key = `${pdfHash}:${context.pageNumber}`;
   const cached = renderedPageCache.get(key);
   if (cached && Date.now() - cached.createdAt <= PDF_CACHE_TTL_MS) { renderedPageCache.delete(key); renderedPageCache.set(key, cached); return cached.canvas; }
+  const pending = pendingRenders.get(key); if (pending) return pending;
+  const render = (async () => {
   const viewport = context.page.getViewport({ scale: RENDER_SCALE });
+  if (viewport.width * viewport.height > 24_000_000) throw new Error("頁面尺寸過大，請手動補圖。");
   const pageCanvas = canvasModule.createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
   const pageContext = pageCanvas.getContext("2d");
   await context.page.render({ canvasContext: pageContext, viewport }).promise;
   renderedPageCache.set(key, { canvas: pageCanvas, createdAt: Date.now() });
   while (renderedPageCache.size > MAX_CACHED_RENDERED_PAGES) { const oldest = renderedPageCache.keys().next().value; if (!oldest) break; renderedPageCache.delete(oldest); }
   return pageCanvas;
+  })();
+  pendingRenders.set(key, render);
+  try { return await render; } finally { pendingRenders.delete(key); }
 }
 
 async function getImageAssets(pdfjsLib: any, page: any, operatorList: any, viewport: any): Promise<ImageAsset[]> {
@@ -391,4 +403,21 @@ function getQuestionAnchors(items: TextItem[], pageHeight: number): Anchor[] {
     if (number >= 1 && number <= 999) anchors.push({ number, topY: pageHeight - line.y });
   }
   return anchors;
+}
+
+// V2 uses the same validated geometry as text parsing; legacy callers keep their route.
+async function contextsFromRegions(pdf: any, regions: {page:number;x:number;y:number;width:number;height:number}[]) {
+  const contexts: ImageContext[] = [];
+  for (const region of regions) {
+    if (region.page > pdf.numPages) throw new Error('圖片頁碼超出範圍');
+    let context = contexts.find(c=>c.pageNumber===region.page);
+    if (!context) {
+      const page = await pdf.getPage(region.page);
+      context = {page,pageNumber:region.page,viewport:page.getViewport({scale:1}),images:[],exact:true};
+      contexts.push(context);
+    }
+    if (region.x >= context.viewport.width || region.y >= context.viewport.height || region.x + region.width <= 0 || region.y + region.height <= 0) throw new Error('圖片區域超出頁面');
+    context.images.push({...region,isMask:false});
+  }
+  return {contexts,debug:{stage:'v2-spatial-regions',pages:[],foundTargetAnchor:true,contextCount:contexts.length}};
 }
