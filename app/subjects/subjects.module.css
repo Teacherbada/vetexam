@@ -57,6 +57,32 @@
 }
 
 .card:focus-visible { outline: 3px solid #3F725F; outline-offset: 4px; }
+.grid { gap: var(--ui-grid-gap); }
+.card { padding: var(--ui-card-padding); border-radius: var(--ui-radius-card); border-color: var(--ui-border); box-shadow: var(--ui-shadow); transition: none; }
+.card:hover { transform: none; box-shadow: var(--ui-shadow); border-color: var(--subject-main); }
+.icon { border-radius: var(--ui-radius-input); margin-bottom: 20px; }
+.title { font-size: var(--ui-card-title); }
+.description,.action { font-size: var(--ui-secondary); }
+.description { margin-top: 8px; }
+.action { padding-top: 24px; }
+.dialog { position: fixed; inset: 0; margin: auto; width: calc(100% - 2 * var(--ui-page-padding)); max-width: 768px; max-height: 90dvh; overflow-y: auto; overscroll-behavior: contain; padding: var(--ui-card-padding); border: 1px solid var(--ui-border); border-radius: var(--ui-radius-modal); background: white; color: var(--text-primary); box-shadow: var(--ui-shadow); }
+.dialog::backdrop { background: rgb(25 40 32 / 35%); }
+.dialog h2 { font-size: var(--ui-section-title); line-height: 1.4; }
+.dialog h3 { font-size: var(--ui-card-title); }
+.dialog p { font-size: var(--ui-secondary); line-height: 1.7; }
+.dialog button,.dialog a { min-height: 44px; border-radius: var(--ui-radius-button); }
+.dialog button { cursor: pointer; }
+.dialog button:disabled { cursor: not-allowed; opacity: .55; }
+.dialog :is(select,input) { border-color: var(--ui-border); }
+.dialog :is([class*="rounded-2xl"],[class*="rounded-xl"]) { border-radius: var(--ui-radius-card); }
+.dialog :is(button,input,select,a)[class*="rounded"] { border-radius: var(--ui-radius-button); }
+.dialog :is([class*="text-gray-500"],[class*="text-gray-600"]) { color: var(--text-secondary); }
+.dialog [aria-pressed="true"] { border-color: var(--ui-success); background: var(--ui-success-bg); color: var(--ui-success); }
+.dialog :global(.study-button-primary) { background: #3f725f; color: white; }
+.dialog a[class*="text-white"] { background: #3f725f; }
+.dialog a[class*="bg-gray-300"] { background: var(--ui-neutral-bg); color: var(--ui-neutral); }
+.dialog summary { font-weight: 600; }
+@media(max-width:429px) { .dialog { padding: 20px 16px; } .dialog section > div[class*="grid-cols-2"] { grid-template-columns: minmax(0,1fr); } }
 @media (max-width: 1000px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 700px) { .grid { grid-template-columns: 1fr; gap: 14px; } }
 @media (prefers-reduced-motion: reduce) {

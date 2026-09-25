@@ -9,6 +9,9 @@ import { dailyGoal } from "@/data/tasks";
 import { authClient } from "@/lib/auth-client";
 import { ProgressBar, StudyCompanions, StudyIcon, type StudyIconName } from "@/components/dashboard/StudyUI";
 import "./home.css";
+import foundation from "@/components/ui/foundation.module.css";
+import styles from "./home-foundation.module.css";
+import { LoadingState } from "@/components/ui/ContentState";
 import PolicyLinks from "@/components/policies/PolicyLinks";
 import { useHomeAvailability } from "@/components/dashboard/useHomeAvailability";
 import HomeChapterStats from "@/components/dashboard/HomeChapterStats";
@@ -164,7 +167,7 @@ export default function Home() {
   }
 
   return (
-    <div className="study-home" lang="zh-Hant">
+    <div className={`study-home ${foundation.foundation} ${styles.home}`} lang="zh-Hant">
       <a className="study-skip" href="#main-content">跳至主要內容</a>
       <header className="study-header">
         <div className="study-header-inner">
@@ -200,16 +203,16 @@ export default function Home() {
             { href: "/most-missed", icon: "target", title: "本週熱門錯題", description: "看看其他考生最常答錯的題目" },
           ] satisfies { href: string; icon: StudyIconName; title: string; description: string }[]).map(({ href, icon, title, description }, index) => <Link href={href} key={href} className={"study-feature study-feature-" + index}><span className="study-feature-icon"><StudyIcon name={icon} /></span><h3>{title}</h3><p>{description}</p></Link>)}</div>
         </section>),
-            "weekly-most-missed": (<WeeklyMostMissed variant="homepage" />),
+            "weekly-most-missed": (<WeeklyMostMissed variant="homepage" loading={<LoadingState label="正在整理本週錯題…" />} />),
             "progress": (<section className="study-card study-records" aria-labelledby="records-title">
             {syncStatus === 'error' && <LearningStatus />}
             <div className="study-section-heading"><h2 id="records-title"><StudyIcon name="chart" />我的學習進度</h2><Link href="/analysis" className="study-text-link">查看詳情<StudyIcon name="arrow" /></Link></div>
-            {isLoadingProgress ? <p className="study-empty">讀取學習進度中…</p> : completed ? <div className="study-progress-summary">
+            {isLoadingProgress ? <LoadingState label="讀取學習進度中…" /> : completed ? <div className="study-progress-summary">
               <div className="study-accuracy" style={{ "--accuracy": Math.max(0, Math.min(accuracy, 100)) + "%" } as CSSProperties} role="img" aria-label={"整體正確率 " + accuracy + "%"}><span><strong>{accuracy}%</strong><small>整體正確率</small></span></div>
               <dl><div><dt>已答題數</dt><dd>{completed.toLocaleString()} 題</dd></div><div><dt>正確題數</dt><dd>{correct.toLocaleString()} 題</dd></div><div><dt>錯誤題數</dt><dd>{wrong.toLocaleString()} 題</dd></div><div><dt>整體正確率</dt><dd>{accuracy}%</dd></div></dl>
             </div> : <div className="study-empty"><StudyIcon name="book" /><h3>你的第一步，從這裡開始</h3><p>完成練習後，就能看見累積成果。</p></div>}
             <p className="study-progress-note"><StudyIcon name="leaf" />持續練習，讓每一次作答都更有把握。</p>
-            <details className="study-record-details"><summary>各科累積紀錄<span>{learningOwner() ? '帳號紀錄' : '本裝置紀錄'}</span></summary>              {isLoadingProgress ? <p className="study-empty">讀取紀錄中…</p> : studied.length ? studied.map((subject) => { const record = progress[subject]; const accuracy = Math.round(record.correct / record.answered.length * 100); return <div className="study-record" key={subject}><div className="study-section-heading"><h3>{subject}</h3><span>已完成 {record.answered.length} 題</span></div><ProgressBar value={accuracy} label={`${subject}正確率`} /><div className="study-record-stats"><span>正確 {record.correct} 題 · 錯題 {record.wrong} 題</span><strong>正確率 {accuracy}%</strong></div></div>; }) : <div className="study-empty"><span className="study-empty-icon"><StudyIcon name="book" /></span><h3>你的第一步，從這裡開始</h3><p>完成練習後，就能在這裡看見各科累積成果。</p><Link href="/subjects" className="study-text-link">選擇第一個科目 <StudyIcon name="arrow" /></Link></div>}</details>
+            <details className="study-record-details"><summary>各科累積紀錄<span>{learningOwner() ? '帳號紀錄' : '本裝置紀錄'}</span></summary>              {isLoadingProgress ? <LoadingState label="讀取紀錄中…" /> : studied.length ? studied.map((subject) => { const record = progress[subject]; const accuracy = Math.round(record.correct / record.answered.length * 100); return <div className="study-record" key={subject}><div className="study-section-heading"><h3>{subject}</h3><span>已完成 {record.answered.length} 題</span></div><ProgressBar value={accuracy} label={`${subject}正確率`} /><div className="study-record-stats"><span>正確 {record.correct} 題 · 錯題 {record.wrong} 題</span><strong>正確率 {accuracy}%</strong></div></div>; }) : <div className="study-empty"><span className="study-empty-icon"><StudyIcon name="book" /></span><h3>你的第一步，從這裡開始</h3><p>完成練習後，就能在這裡看見各科累積成果。</p><Link href="/subjects" className="study-text-link">選擇第一個科目 <StudyIcon name="arrow" /></Link></div>}</details>
           </section>),
             "subjects": (<section className="study-card study-banks" aria-labelledby="banks-title">
           <div className="study-section-heading"><h2 id="banks-title"><StudyIcon name="book" />選擇題庫開始練習</h2><Link href="/subjects" className="study-text-link">查看全部題庫<StudyIcon name="arrow" /></Link></div>

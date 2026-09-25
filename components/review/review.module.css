@@ -31,3 +31,31 @@
 .empty p { margin: 12px 0 24px; color: var(--text-secondary); font-size: 14px; }
 @media (max-width: 700px) { .card { padding: 20px; } .toolbar { gap: 12px; } .empty { padding: 40px 20px; } .footer .secondary { width: 100%; } }
 @media (prefers-reduced-motion: reduce) { .card, .primary, .secondary { transition: none; } .card:hover { transform: none; } }
+
+/* Phase 3: same reading-card family for favorites and wrong questions. */
+.container { max-width: 820px; }
+.toolbar { margin-bottom: 24px; font-size: var(--ui-secondary); }
+.list { gap: var(--ui-grid-gap); }
+.card { padding: var(--ui-card-padding); border-color: var(--ui-border); border-radius: var(--ui-radius-card); box-shadow: var(--ui-shadow); min-width: 0; transition: none; }
+.card:hover { transform: none; border-color: var(--ui-border); box-shadow: var(--ui-shadow); }
+.badge { border-radius: var(--ui-radius-badge); font-size: var(--ui-caption); }
+.favoriteStatus,.wrongStatus { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: var(--ui-radius-badge); }
+.favoriteStatus { color: var(--ui-info); background: var(--ui-info-bg); }
+.wrongStatus { color: var(--ui-warning); background: var(--ui-warning-bg); }
+.meta svg { width: 16px; height: 16px; }
+.card h2.question { margin: 20px 0; font-size: var(--ui-card-title); line-height: 1.85; font-weight: 600; }
+.options { gap: 12px; margin: 16px 0; font-size: var(--ui-body); }
+.option span { flex-shrink: 0; }
+.answers { font-size: var(--ui-secondary); margin-top: 16px; }
+.incorrect,.correct { border-radius: var(--ui-radius-badge); padding: 2px 8px; }
+.incorrect { color: var(--ui-danger); background: var(--ui-danger-bg); }
+.correct { color: var(--ui-success); background: var(--ui-success-bg); }
+.explanation { margin-top: 20px; padding: 20px 0 0; border-top: 1px solid var(--ui-border); border-radius: 0; background: transparent; font-size: var(--ui-body); line-height: 1.85; }
+.explanation p + p { margin-top: 8px; }
+.note { margin-top: 24px; font-size: var(--ui-secondary); font-weight: 600; }
+.note textarea { min-height: 96px; padding: 12px; border-color: var(--ui-border); border-radius: var(--ui-radius-input); font-size: var(--ui-body); }
+.card :is(button,textarea):focus-visible,.toolbar a:focus-visible { outline: 3px solid #3f725f; outline-offset: 3px; }
+.footer { margin-top: 16px; }
+.primary,.secondary { border-radius: var(--ui-radius-button); font-size: var(--ui-secondary); font-weight: 600; text-align: center; transition: none; }
+.primary { background: #3f725f; }
+.primary:hover { background: #345e4f; }

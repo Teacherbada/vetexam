@@ -2,6 +2,10 @@
 
 import { FormEvent, useState } from "react";
 import { authClient } from "@/lib/auth-client";
+import foundation from "@/components/ui/foundation.module.css";
+import layout from "@/components/ui/page-layout.module.css";
+import PageHeader from "@/components/ui/PageHeader";
+
 
 export default function RegisterPage() {
   const [name, setName] = useState("");
@@ -58,27 +62,22 @@ export default function RegisterPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-50 px-4 py-10">
-      <div className="mx-auto max-w-md">
-        <div className="rounded-2xl bg-white p-8 shadow">
-          <h1 className="text-3xl font-bold text-blue-900">
-            建立 VetExam 帳號
-          </h1>
-
-          <p className="mt-2 text-gray-600">
-            建立帳號後即可擁有自己的私人題庫。
-          </p>
+    <main className={`${foundation.foundation} ${layout.page}`}>
+      <div className={layout.auth}>
+        <div className={layout.authCard}>
+          <PageHeader title="建立 VetExam 帳號" description="建立帳號後即可擁有自己的私人題庫。" />
 
           <form
             onSubmit={handleRegister}
-            className="mt-8 space-y-5"
+            className={layout.form}
           >
             <div>
-              <label className="text-sm font-semibold text-gray-700">
+              <label htmlFor="register-name" className={layout.label}>
                 姓名
               </label>
 
               <input
+                id="register-name"
                 type="text"
                 value={name}
                 onChange={(event) =>
@@ -86,17 +85,18 @@ export default function RegisterPage() {
                 }
                 required
                 autoComplete="name"
-                className="mt-2 w-full rounded-lg border border-gray-300 p-3 text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                className={layout.input}
                 placeholder="你的名稱"
               />
             </div>
 
             <div>
-              <label className="text-sm font-semibold text-gray-700">
+              <label htmlFor="register-email" className={layout.label}>
                 Email
               </label>
 
               <input
+                id="register-email"
                 type="email"
                 value={email}
                 onChange={(event) =>
@@ -104,17 +104,18 @@ export default function RegisterPage() {
                 }
                 required
                 autoComplete="email"
-                className="mt-2 w-full rounded-lg border border-gray-300 p-3 text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                className={layout.input}
                 placeholder="you@example.com"
               />
             </div>
 
             <div>
-              <label className="text-sm font-semibold text-gray-700">
+              <label htmlFor="register-password" className={layout.label}>
                 密碼
               </label>
 
               <input
+                id="register-password"
                 type="password"
                 value={password}
                 onChange={(event) =>
@@ -123,17 +124,18 @@ export default function RegisterPage() {
                 required
                 minLength={8}
                 autoComplete="new-password"
-                className="mt-2 w-full rounded-lg border border-gray-300 p-3 text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                className={layout.input}
                 placeholder="至少 8 個字元"
               />
             </div>
 
             <div>
-              <label className="text-sm font-semibold text-gray-700">
+              <label htmlFor="register-confirmPassword" className={layout.label}>
                 確認密碼
               </label>
 
               <input
+                id="register-confirmPassword"
                 type="password"
                 value={confirmPassword}
                 onChange={(event) =>
@@ -142,13 +144,13 @@ export default function RegisterPage() {
                 required
                 minLength={8}
                 autoComplete="new-password"
-                className="mt-2 w-full rounded-lg border border-gray-300 p-3 text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                className={layout.input}
                 placeholder="再次輸入密碼"
               />
             </div>
 
             {message && (
-              <div className="rounded-lg bg-red-50 p-4 text-sm font-semibold text-red-700">
+              <div role="alert" className={layout.error}>
                 {message}
               </div>
             )}
@@ -156,20 +158,20 @@ export default function RegisterPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-lg bg-blue-600 px-6 py-3 font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-400"
+              className={layout.submit}
             >
               {loading ? "建立帳號中..." : "註冊"}
             </button>
           </form>
 
-          <div className="mt-6 text-center">
+          <div className={layout.secondaryNav}>
             <p className="text-sm text-gray-600">
               已經有帳號？
             </p>
 
             <a
               href="/login"
-              className="mt-1 inline-block font-semibold text-blue-600 hover:text-blue-800"
+              className={layout.secondaryLink}
             >
               返回登入
             </a>

@@ -2,6 +2,10 @@
 
 import { FormEvent, useState } from "react";
 import { authClient } from "@/lib/auth-client";
+import foundation from "@/components/ui/foundation.module.css";
+import layout from "@/components/ui/page-layout.module.css";
+import PageHeader from "@/components/ui/PageHeader";
+
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -40,27 +44,22 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-50 px-4 py-10">
-      <div className="mx-auto max-w-md">
-        <div className="rounded-2xl bg-white p-8 shadow">
-          <h1 className="text-3xl font-bold text-blue-900">
-            VetExam 登入
-          </h1>
-
-          <p className="mt-2 text-gray-600">
-            登入後即可管理自己的私人題庫。
-          </p>
+    <main className={`${foundation.foundation} ${layout.page}`}>
+      <div className={layout.auth}>
+        <div className={layout.authCard}>
+          <PageHeader title="VetExam 登入" description="登入後即可管理自己的私人題庫。" />
 
           <form
             onSubmit={handleLogin}
-            className="mt-8 space-y-5"
+            className={layout.form}
           >
             <div>
-              <label className="text-sm font-semibold text-gray-700">
+              <label htmlFor="login-email" className={layout.label}>
                 Email
               </label>
 
               <input
+                id="login-email"
                 type="email"
                 value={email}
                 onChange={(event) =>
@@ -68,17 +67,18 @@ export default function LoginPage() {
                 }
                 required
                 autoComplete="email"
-                className="mt-2 w-full rounded-lg border border-gray-300 p-3 text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                className={layout.input}
                 placeholder="you@example.com"
               />
             </div>
 
             <div>
-              <label className="text-sm font-semibold text-gray-700">
+              <label htmlFor="login-password" className={layout.label}>
                 密碼
               </label>
 
               <input
+                id="login-password"
                 type="password"
                 value={password}
                 onChange={(event) =>
@@ -87,13 +87,13 @@ export default function LoginPage() {
                 required
                 minLength={8}
                 autoComplete="current-password"
-                className="mt-2 w-full rounded-lg border border-gray-300 p-3 text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                className={layout.input}
                 placeholder="至少 8 個字元"
               />
             </div>
 
             {message && (
-              <div className="rounded-lg bg-red-50 p-4 text-sm font-semibold text-red-700">
+              <div role="alert" className={layout.error}>
                 {message}
               </div>
             )}
@@ -101,20 +101,20 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-lg bg-blue-600 px-6 py-3 font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-400"
+              className={layout.submit}
             >
               {loading ? "登入中..." : "登入"}
             </button>
           </form>
 
-          <div className="mt-6 text-center">
+          <div className={layout.secondaryNav}>
             <p className="text-sm text-gray-600">
               還沒有帳號？
             </p>
 
             <a
               href="/register"
-              className="mt-1 inline-block font-semibold text-blue-600 hover:text-blue-800"
+              className={layout.secondaryLink}
             >
               建立 VetExam 帳號
             </a>

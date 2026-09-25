@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { StudyIcon } from "./StudyUI";
 import WeeklyQuestionDialog from "./WeeklyQuestionDialog";
 
@@ -14,7 +14,7 @@ type Question = {
   total_attempts: number;
 };
 
-export default function WeeklyMostMissed({ variant }: { variant?: "homepage" } = {}) {
+export default function WeeklyMostMissed({ variant, loading }: { variant?: "homepage"; loading?: ReactNode } = {}) {
   const [result, setResult] = useState<{ question: Question | null; min_attempts: number } | null>(null);
   const [error, setError] = useState(false);
   const [retry, setRetry] = useState(0);
@@ -38,7 +38,7 @@ export default function WeeklyMostMissed({ variant }: { variant?: "homepage" } =
     <p className="study-muted study-weekly-period">本週一至今・台灣時間</p>
     <div aria-live="polite">
       {error ? <div className="study-weekly-state"><p>暫時無法載入本週錯題。</p><button className="study-text-link" onClick={() => { setError(false); setRetry((value) => value + 1); }}>重新載入 <StudyIcon name="arrow" /></button></div>
-        : !result ? <p className="study-weekly-state">正在整理本週錯題…</p>
+        : !result ? loading ?? <p className="study-weekly-state">正在整理本週錯題…</p>
         : question ? <>
           <div className={variant === "homepage" ? "study-weekly-entry" : undefined}>
           {variant === "homepage" && <span className="study-weekly-rank" aria-label="本週第一名">1</span>}

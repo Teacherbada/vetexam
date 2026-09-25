@@ -1,4 +1,8 @@
 "use client";
+import foundation from "@/components/ui/foundation.module.css";
+import styles from "@/app/questions/focus.module.css";
+import { EmptyState } from "@/components/ui/ContentState";
+import { StudyIcon } from "@/components/dashboard/StudyUI";
 import { reviewItems, subscribeLearning } from "@/lib/learning-client";
 
 import { useEffect, useState } from "react";
@@ -44,11 +48,11 @@ export default function WrongTestPage(){
 
     return (
 
-      <main className="min-h-screen bg-gray-100 p-10">
+      <main className={`${foundation.foundation} ${styles.page}`}>
 
-        <div className="mx-auto max-w-3xl rounded-xl bg-white p-8 shadow">
+        <div className={`${styles.container} ${styles.card}`}>
 
-          目前沒有錯題可以練習 🎉
+          <EmptyState title="目前沒有錯題可以練習" />
 
         </div>
 
@@ -128,15 +132,15 @@ export default function WrongTestPage(){
 
     return (
 
-      <main className="min-h-screen bg-gray-100 p-10">
+      <main className={`${foundation.foundation} ${styles.page}`}>
 
 
-        <div className="mx-auto max-w-3xl rounded-xl bg-white p-8 text-center shadow">
+        <div className={styles.state}>
 
 
-          <h1 className="text-4xl font-bold">
+          <h1 className={styles.question}>
 
-            🎯 錯題複習完成
+            <StudyIcon name="target" /> 錯題複習完成
 
           </h1>
 
@@ -197,13 +201,13 @@ export default function WrongTestPage(){
   return(
 
 
-    <main className="min-h-screen bg-gray-100 p-10">
+    <main className={`${foundation.foundation} ${styles.page}`}>
 
 
-      <div className="mx-auto max-w-3xl rounded-xl bg-white p-8 shadow">
+      <div className={`${styles.container} ${styles.card}`}>
 
 
-        <p className="font-bold text-blue-600">
+        <p className={styles.meta}>
 
           錯題複習
 
@@ -220,7 +224,7 @@ export default function WrongTestPage(){
 
 
 
-        <h1 className="mt-5 text-3xl font-bold">
+        <h1 className={styles.question}>
 
           {currentQuestion.question}
 
@@ -230,7 +234,7 @@ export default function WrongTestPage(){
 
 
 
-        <div className="mt-8 space-y-4">
+        <div className={styles.options} role="group" aria-label="答案選項">
 
 
         {
@@ -252,30 +256,14 @@ export default function WrongTestPage(){
               }}
 
 
-              className={`
-              
-              w-full rounded-lg border p-4 text-left
-
-              ${
-                selected === String.fromCharCode(65+index)
-
-                ?
-
-                "bg-blue-100 border-blue-500"
-
-                :
-
-                ""
-
-              }
-
-              `}
+              aria-pressed={selected === String.fromCharCode(65+index)}
+              className={`${styles.option} ${selected === String.fromCharCode(65+index) ? styles.selected : ""}`}
 
             >
 
-              {String.fromCharCode(65+index)}.
+              <span className={styles.letter}>{String.fromCharCode(65+index)}.</span>
 
-              {option}
+              <span className={styles.optionText}>{option}</span>
 
 
             </button>
@@ -298,7 +286,7 @@ export default function WrongTestPage(){
 
           onClick={checkAnswer}
 
-          className="mt-8 rounded-lg bg-blue-600 px-6 py-3 text-white"
+          className="study-button study-button-primary mt-6"
 
         >
 
@@ -315,7 +303,7 @@ export default function WrongTestPage(){
 
           showResult && (
 
-            <div className="mt-8 rounded-lg bg-gray-100 p-5">
+            <div className={styles.explanation} role="status">
 
 
               {
@@ -325,7 +313,7 @@ export default function WrongTestPage(){
 
                 ?
 
-                <p className="font-bold text-green-600">
+                <p className={styles.correctText}>
 
                   ✓ 答對了
 
@@ -334,7 +322,7 @@ export default function WrongTestPage(){
 
                 :
 
-                <p className="font-bold text-red-600">
+                <p className={styles.wrongText}>
 
                   ✗ 答錯了
 
@@ -349,7 +337,7 @@ export default function WrongTestPage(){
 
 
 
-              <p className="mt-3">
+              <p className={styles.explanationText}>
 
                 解析：
 
@@ -365,7 +353,7 @@ export default function WrongTestPage(){
 
                 onClick={nextQuestion}
 
-                className="mt-5 rounded-lg bg-green-600 px-6 py-3 text-white"
+                className="study-button study-button-primary mt-5"
 
               >
 

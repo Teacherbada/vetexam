@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { LoadingState } from "@/components/ui/ContentState";
 import { useState } from "react";
 import { chapterGroups, EXAM_SUBJECTS } from "@/data/exam-chapters";
 import { StudyIcon } from "./StudyUI";
@@ -21,7 +22,7 @@ export default function HomeChapterStats({ rows, error, retry }: { rows: Chapter
     <p className="study-muted">依目前已分類的歷屆公開題統計，幫助你安排讀書順序。</p>
     <div className="study-chapter-results" aria-live="polite" aria-busy={!rows && !error}>
       {error ? <div className="study-empty"><p>章節題量暫時無法載入</p><button type="button" className="study-text-link" onClick={retry}>重新載入<StudyIcon name="arrow" /></button></div>
-        : !rows ? <p className="study-empty">正在整理章節題量…</p>
+        : !rows ? <LoadingState label="正在整理章節題量…" />
         : top.length ? <ol>{top.map(([chapter, count], index) => <li key={chapter}><span className="study-chapter-rank">{index + 1}</span><span className="study-chapter-name">{chapter}</span><span className="study-chapter-bar" aria-hidden="true"><span style={{ width: `${count / top[0][1] * 100}%` }} /></span><strong>{count.toLocaleString()} 題</strong></li>)}</ol>
         : <p className="study-empty">章節題量整理中</p>}
     </div>

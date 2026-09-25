@@ -2,7 +2,7 @@ import Link from 'next/link';
 import type { NoteView } from '@/lib/notes';
 import styles from './notes.module.css';
 export function NoteBadge({ note }: { note: Pick<NoteView, 'type' | 'status' | 'visibility'> }) {
-  return <div className={styles.actions}><span className={`${styles.badge} ${note.type === 'community' ? styles.community : ''}`}>{note.type === 'official' ? 'VetExam 筆記' : '社群筆記'}</span>{note.visibility === 'private' && <span>私人</span>}{note.status === 'draft' && <span>草稿</span>}{note.status === 'hidden' && <span>已隱藏</span>}</div>;
+  return <div className={styles.actions}><span data-note-type={note.type} className={`${styles.badge} ${note.type === 'community' ? styles.community : ''}`}>{note.type === 'official' ? 'VetExam 筆記' : '社群筆記'}</span>{note.visibility === 'private' && <span>私人</span>}{note.status === 'draft' && <span>草稿</span>}{note.status === 'hidden' && <span>已隱藏</span>}</div>;
 }
 export function noteDate(value: string) { return new Intl.DateTimeFormat('zh-TW-u-ca-roc', { year: 'numeric', month: 'numeric', day: 'numeric', timeZone: 'Asia/Taipei' }).format(new Date(value)); }
 export default function NoteCard({ note }: { note: NoteView }) {

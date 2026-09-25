@@ -1,5 +1,6 @@
 "use client";
 import Link from 'next/link';
+import { EmptyState, LoadingState } from '@/components/ui/ContentState';
 import { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { chapterGroups, EXAM_SUBJECTS } from '@/data/exam-chapters';
@@ -25,8 +26,8 @@ export default function NotesList({ query }: { query: string }) {
       <label className={styles.field}>章節<select aria-label="章節" value={chapter} disabled={pending || !subject} onChange={event => startTransition(() => router.push(href({ chapter: event.target.value })))}><option value="">全部章節</option>{chapterGroups(subject).flatMap(group => group.chapters).map(value => <option key={value}>{value}</option>)}</select></label>
       <label className={styles.field}>社群排序<select aria-label="社群排序" disabled={pending} value={params.get('sort') ?? 'latest'} onChange={event => startTransition(() => router.push(href({ sort: event.target.value })))}><option value="latest">最新</option><option value="helpful">最有幫助</option></select></label>
     </section>
-    {error ? <section className={`study-card ${styles.stack}`}><p role="alert">{error}</p><button className="study-button" onClick={() => { setError(''); setReload(value => value + 1); }}>重新載入筆記</button></section> : !data ? <p role="status">載入筆記中…</p> : <>
-      {data.notes.length ? data.notes.map(note => <NoteCard key={note.id} note={note} />) : <section className={`study-card ${styles.stack}`}><p>{tab === 'favorites' ? '還沒有可閱讀的收藏筆記。' : tab === 'mine' ? '你還沒有筆記。' : '目前這個範圍還沒有可用的筆記。'}</p>{data.signedIn && <Link href={newHref} className="study-button">分享第一篇筆記</Link>}</section>}
+    {error ? <section className={`study-card ${styles.stack}`}><p role="alert">{error}</p><button className="study-button" onClick={() => { setError(''); setReload(value => value + 1); }}>重新載入筆記</button></section> : !data ? <LoadingState label="載入筆記中…" /> : <>
+      {data.notes.length ? data.notes.map(note => <NoteCard key={note.id} note={note} />) : <EmptyState title={tab === 'favorites' ? '還沒有可閱讀的收藏筆記。' : tab === 'mine' ? '你還沒有筆記。' : '目前這個範圍還沒有可用的筆記。'}>{data.signedIn && <Link href={newHref} className="study-button">分享第一篇筆記</Link>}</EmptyState>}
       <div className={styles.actions}>{data.page > 1 && <Link href={href({ page: String(data.page - 1) })} className="study-button">上一頁</Link>}<span>第 {data.page} 頁</span>{data.hasMore && <Link href={href({ page: String(data.page + 1) })} className="study-button">下一頁</Link>}</div>
     </>}
   </div>;
