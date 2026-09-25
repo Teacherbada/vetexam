@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { mostMistaken, type OptionDistributionData } from "@/lib/option-distribution";
 import { waitForAnswerStatistics } from "@/lib/answer-statistics-client";
 import styles from "./option-distribution.module.css";
+import QuestionDifficulty from './QuestionDifficulty';
 
 type Props = { questionId: number; selectedAnswer: string; correctAnswer: string; expanded?: boolean };
 
@@ -49,8 +50,8 @@ function Distribution({ questionId, selectedAnswer, correctAnswer }: Props) {
 // Parents only mount this component after an answer or after exam submission.
 export default function OptionDistribution(props: Props) {
   const [open, setOpen] = useState(props.expanded ?? false);
-  return <details className={styles.panel} open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>
+  return <><QuestionDifficulty key={props.questionId} questionId={props.questionId} /><details className={styles.panel} open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>
     <summary>大家都選了什麼？<span>有效作答選項分布</span></summary>
     {open && <Distribution key={props.questionId} {...props} />}
-  </details>;
+  </details></>;
 }
