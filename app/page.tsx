@@ -12,6 +12,7 @@ import "./home.css";
 import PolicyLinks from "@/components/policies/PolicyLinks";
 import { useHomeAvailability } from "@/components/dashboard/useHomeAvailability";
 import HomeChapterStats from "@/components/dashboard/HomeChapterStats";
+import HomeLayout from "@/components/dashboard/HomeLayout";
 import WeeklyMostMissed from "@/components/dashboard/WeeklyMostMissed";
 
 export default function Home() {
@@ -179,17 +180,15 @@ export default function Home() {
         </div>
       </header>
       <main id="main-content" className="study-content" tabIndex={-1}>
-        <div className="study-welcome">
-          <section className="study-hero">
+        <HomeLayout hero={<section className="study-hero">
             <p className="study-eyebrow">一起，向獸醫之路前進 <StudyIcon name="paw" /></p>
             <h1>今天也刷一點吧</h1>
             <p className="study-hero-description">每一題的累積，都是成為更好獸醫的力量。</p>
             <Link href="/subjects" className="study-button study-button-primary study-welcome-action">開始刷題<StudyIcon name="arrow" /></Link>
-          </section>
-          <div className="study-hero-visual"><p>Small progress.<br />A little closer, every day.</p><StudyCompanions /></div>
-          <section className="study-card study-countdown"><h2><StudyIcon name="calendar" />國考倒數</h2><p className="study-days">{daysLeft}<span>天</span></p><label htmlFor="exam-date">我的目標考試日期</label><input id="exam-date" type="date" value={examDate} onChange={(event) => { if (event.target.value) { setExamDate(event.target.value); localStorage.setItem("examDate", event.target.value); } }} /><p className="study-muted">照自己的步調，準備每一天。</p></section>
-        </div>
-        <section className="study-card study-features" aria-labelledby="features-title">
+          </section>} visual={<div className="study-hero-visual"><p>Small progress.<br />A little closer, every day.</p><StudyCompanions /></div>}>
+          {{
+            "countdown": (<section className="study-card study-countdown"><h2><StudyIcon name="calendar" />國考倒數</h2><p className="study-days">{daysLeft}<span>天</span></p><label htmlFor="exam-date">我的目標考試日期</label><input id="exam-date" type="date" value={examDate} onChange={(event) => { if (event.target.value) { setExamDate(event.target.value); localStorage.setItem("examDate", event.target.value); } }} /><p className="study-muted">照自己的步調，準備每一天。</p></section>),
+            "features": (<section className="study-card study-features" aria-labelledby="features-title">
           <h2 id="features-title"><StudyIcon name="paw" />VetExam 讓國考準備更有效率</h2>
           <p className="study-muted">從刷題、複習到分析，一站完成，陪你穩穩準備每一步。</p>
           <div className="study-feature-grid">{([
@@ -200,10 +199,9 @@ export default function Home() {
             { href: "/analysis", icon: "chart", title: "弱點分析", description: "了解各科表現，找出需要加強的部分" },
             { href: "/most-missed", icon: "target", title: "本週熱門錯題", description: "看看其他考生最常答錯的題目" },
           ] satisfies { href: string; icon: StudyIconName; title: string; description: string }[]).map(({ href, icon, title, description }, index) => <Link href={href} key={href} className={"study-feature study-feature-" + index}><span className="study-feature-icon"><StudyIcon name={icon} /></span><h3>{title}</h3><p>{description}</p></Link>)}</div>
-        </section>
-        <div className="study-insights-grid">
-          <WeeklyMostMissed variant="homepage" />
-          <section className="study-card study-records" aria-labelledby="records-title">
+        </section>),
+            "weekly-most-missed": (<WeeklyMostMissed variant="homepage" />),
+            "progress": (<section className="study-card study-records" aria-labelledby="records-title">
             {syncStatus === 'error' && <LearningStatus />}
             <div className="study-section-heading"><h2 id="records-title"><StudyIcon name="chart" />我的學習進度</h2><Link href="/analysis" className="study-text-link">查看詳情<StudyIcon name="arrow" /></Link></div>
             {isLoadingProgress ? <p className="study-empty">讀取學習進度中…</p> : completed ? <div className="study-progress-summary">
@@ -212,29 +210,25 @@ export default function Home() {
             </div> : <div className="study-empty"><StudyIcon name="book" /><h3>你的第一步，從這裡開始</h3><p>完成練習後，就能看見累積成果。</p></div>}
             <p className="study-progress-note"><StudyIcon name="leaf" />持續練習，讓每一次作答都更有把握。</p>
             <details className="study-record-details"><summary>各科累積紀錄<span>{learningOwner() ? '帳號紀錄' : '本裝置紀錄'}</span></summary>              {isLoadingProgress ? <p className="study-empty">讀取紀錄中…</p> : studied.length ? studied.map((subject) => { const record = progress[subject]; const accuracy = Math.round(record.correct / record.answered.length * 100); return <div className="study-record" key={subject}><div className="study-section-heading"><h3>{subject}</h3><span>已完成 {record.answered.length} 題</span></div><ProgressBar value={accuracy} label={`${subject}正確率`} /><div className="study-record-stats"><span>正確 {record.correct} 題 · 錯題 {record.wrong} 題</span><strong>正確率 {accuracy}%</strong></div></div>; }) : <div className="study-empty"><span className="study-empty-icon"><StudyIcon name="book" /></span><h3>你的第一步，從這裡開始</h3><p>完成練習後，就能在這裡看見各科累積成果。</p><Link href="/subjects" className="study-text-link">選擇第一個科目 <StudyIcon name="arrow" /></Link></div>}</details>
-          </section>
-        </div>
-        <section className="study-card study-banks" aria-labelledby="banks-title">
+          </section>),
+            "subjects": (<section className="study-card study-banks" aria-labelledby="banks-title">
           <div className="study-section-heading"><h2 id="banks-title"><StudyIcon name="book" />選擇題庫開始練習</h2><Link href="/subjects" className="study-text-link">查看全部題庫<StudyIcon name="arrow" /></Link></div>
           <div className="study-bank-tools"><p className="study-muted">依科目選擇題庫，或隨機 20 題立即開始練習。</p><details className="study-subject-filter"><summary><StudyIcon name="search" />篩選科目</summary><label><span>搜尋國考科目</span><input type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="搜尋國考科目…" /></label></details></div>
           <div className="study-bank-grid">{visibleSubjects.map(subject => <Link href={subjectHref(subject)} key={subject} className={"study-bank study-pastel-" + subjects.indexOf(subject)}><span className="study-subject-icon"><StudyIcon name={subjectIcons[subjects.indexOf(subject)]} /></span><h3>{subject}</h3><p>{availability.error ? "題數暫時無法載入" : !availability.data ? "讀取題數中…" : (subjectCounts.get(subject) ?? 0).toLocaleString() + " 題"}</p><span className="study-bank-action">開始練習<StudyIcon name="arrow" /></span></Link>)}</div>
           {visibleSubjects.length === 0 && <p className="study-empty" role="status">沒有符合的科目，試試「病理」或「藥理」。</p>}
           {availability.error && <button type="button" className="study-text-link" onClick={availability.retry}>重新載入題數<StudyIcon name="arrow" /></button>}
-        </section>
-        <div className="study-planning-grid">
-          <HomeChapterStats rows={availability.data?.chapterAvailability ?? null} error={availability.error} retry={availability.retry} />
-          <div className="study-side-cards">
-          <section className="study-card study-goal" aria-labelledby="goal-title">
+        </section>),
+            "chapter-stats": (<HomeChapterStats rows={availability.data?.chapterAvailability ?? null} error={availability.error} retry={availability.retry} />),
+            "daily-goal": (<section className="study-card study-goal" aria-labelledby="goal-title">
             <div className="study-goal-content"><div className="study-section-heading"><h2 id="goal-title"><StudyIcon name="target" />今日目標</h2><span className="study-tag">每天一小步</span></div>
               <p className="study-goal-count">{isLoadingProgress ? "—" : todayProgress}<span> / {dailyGoal.target} 題</span></p>
               <ProgressBar value={todayProgress / dailyGoal.target * 100} label="今日目標完成百分比" />
               <div className="study-goal-action"><p>{isLoadingProgress ? "讀取學習進度中…" : remaining ? <>再刷 <strong>{remaining}</strong> 題就完成今天目標！</> : "今日目標完成了，給努力的自己一點掌聲。"}</p><Link href="/subjects" className="study-button study-button-primary">{todayProgress > 0 ? "繼續刷題" : "開始刷題"}<StudyIcon name="arrow" /></Link></div>
             </div>
-          </section>
-
-            <section className="study-card study-achievement"><h2>學習小成就</h2><div><span className="study-subject-icon"><StudyIcon name="check" /></span><p>{isLoadingProgress ? "讀取中…" : `累積完成 ${completed} 題`}<small>一題一題，累積自己的實力。</small></p></div><Link href="/favorites" className="study-text-link"><StudyIcon name="heart" />重溫收藏的重點題目</Link></section>
-          </div>
-        </div>
+          </section>),
+            "achievement": (<section className="study-card study-achievement"><h2>學習小成就</h2><div><span className="study-subject-icon"><StudyIcon name="check" /></span><p>{isLoadingProgress ? "讀取中…" : `累積完成 ${completed} 題`}<small>一題一題，累積自己的實力。</small></p></div><Link href="/favorites" className="study-text-link"><StudyIcon name="heart" />重溫收藏的重點題目</Link></section>)
+          }}
+        </HomeLayout>
           <footer className="study-footer" aria-label="VetExam 客服資訊">
             <div className="study-footer-brand"><b>VetExam</b><p>陪未來的獸醫，走好每一步。</p></div>
             <address className="study-footer-contact">

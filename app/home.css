@@ -1,4 +1,29 @@
 .study-home { background: var(--study-background); color: var(--text-primary); font-family: var(--study-font); min-height: 100vh; font-size: 14px; line-height: 1.6; }
+.study-layout-toolbar { display: flex; justify-content: flex-end; margin-bottom: -20px; }
+.study-widget { position: relative; min-width: 0; }
+.study-widget > .study-card { height: 100%; }
+.study-widget-controls { position: absolute; z-index: 2; top: 0; right: 2px; display: flex; align-items: center; gap: 2px; }
+.study-widget-controls button { min-width: 32px; min-height: 32px; border-radius: 999px; color: #718276; font-size: 12px; }
+.study-widget-controls .study-widget-close { font-size: 20px; }
+.study-widget-controls button:hover { background: #edf2ea; }
+.study-widget-controls button:disabled { opacity: .35; cursor: default; }
+.study-widget-controls [draggable] { cursor: grab; }
+.study-widget-editing { padding-top: 40px; }
+.study-layout-settings > div { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 12px; }
+.study-layout-notice { position: sticky; top: 8px; z-index: 20; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 16px; background: #f0f4e9; border: 1px solid #dce5d8; border-radius: 14px; }
+.study-widget-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+.study-widget-row-single { grid-template-columns: minmax(0, 1fr); }
+.study-home .study-welcome-without-countdown { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1.2fr); }
+@media (min-width: 768px) and (max-width: 1199px) { .study-welcome > .study-countdown-slot { grid-column: 2; grid-row: 1 / 3; } }
+@media (max-width: 767px) {
+  .study-widget-row, .study-home .study-welcome-without-countdown { grid-template-columns: minmax(0, 1fr); gap: 18px; }
+  .study-welcome > .study-countdown-slot { grid-column: 1; grid-row: 2; }
+  .study-home .study-welcome-without-countdown > .study-hero-visual { grid-row: 2; }
+  .study-widget-controls button { min-width: 44px; min-height: 44px; }
+  .study-widget-controls { top: -5px; right: -5px; }
+  .study-widget-editing { padding-top: 44px; }
+  .study-widget > .study-card { padding-top: 32px; }
+}
 .study-home * { box-sizing: border-box; }
 .study-home svg { flex-shrink: 0; }
 .study-home :is(a, button, input, select, summary):focus-visible { outline: 3px solid #3F725F; outline-offset: 4px; }
