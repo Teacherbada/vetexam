@@ -9,6 +9,7 @@ const freq=(chapter,count)=>({subject:'s',chapter,count,papers:10,share:count/10
 test('frequent 55 percent chapter outranks rare 40 percent chapter',()=>{
   const result=learningPriorities([...answers('rare',20,8),...answers('frequent',20,11,100)],[freq('rare',2),freq('frequent',50)]);
   assert.equal(result[0].chapter,'frequent');assert.equal(result[0].high,true);
+  assert.equal(result[1].high,false);
 });
 test('small samples, unknown chapters and already mastered chapters are excluded',()=>{
   assert.deepEqual(learningPriorities([...answers('a',9,0),...answers(null,20,0,100),...answers('b',10,9,200)],[freq('a',20),freq('b',30)]),[]);

@@ -12,7 +12,7 @@ export function learningPriorities(history: History[], frequency: FrequencyRow[]
     const accuracy = answers.filter(answer => answer.is_correct).length / answers.length;
     if (accuracy >= .8) return [];
     const counts = frequency.filter(other => other.subject === row.subject && other.count > 0).map(other => other.count).sort((a,b) => a-b);
-    const high = row.count >= counts[Math.floor((counts.length - 1) * 2 / 3)];
+    const high = row.count >= counts[counts.length - Math.ceil(counts.length / 3)];
     return [{ ...row, accuracy, answered: answers.length, high, priority: (1 - accuracy) * row.share }];
   }).sort((a,b) => b.priority-a.priority || b.answered-a.answered || a.subject.localeCompare(b.subject) || a.chapter.localeCompare(b.chapter)).slice(0,6);
 }
