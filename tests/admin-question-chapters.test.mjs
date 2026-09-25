@@ -11,6 +11,8 @@ function load(path, mocks = {}) {
   new Function('require', 'exports', code)(name => {
     if (name === 'server-only') return {};
     if (Object.hasOwn(mocks, name)) return mocks[name];
+    if (name === '@/lib/question-state') return load('lib/question-state.ts');
+    if (name === '@/lib/question-transaction' || name === '@/lib/learning-service') return {};
     throw new Error('Unexpected import ' + name);
   }, exports);
   return exports;

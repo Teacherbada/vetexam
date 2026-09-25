@@ -1,6 +1,7 @@
 import 'server-only';
 import type { PoolClient } from 'pg';
 import { recordFirstAnswers } from './question-stats';
+import { legacyAnsweredIds } from './question-state';
 
 // All history queries are scoped before aggregation. Existing coach snapshots stay authoritative.
 export const HISTORY_SQL = `
@@ -47,4 +48,16 @@ export async function recordPractice(client: PoolClient, userId: string, answers
     AND NULLIF(BTRIM(CASE UPPER(BTRIM(q.answer)) WHEN 'A' THEN q.option_a WHEN 'B' THEN q.option_b WHEN 'C' THEN q.option_c WHEN 'D' THEN q.option_d WHEN 'E' THEN q.option_e END),'') IS NOT NULL
     AND NULLIF(BTRIM(CASE a.selected_answer WHEN 'A' THEN q.option_a WHEN 'B' THEN q.option_b WHEN 'C' THEN q.option_c WHEN 'D' THEN q.option_d WHEN 'E' THEN q.option_e END),'') IS NOT NULL
     ON CONFLICT(user_id,event_id) DO NOTHING`, [userId, JSON.stringify(answers), mode]);
+}
+
+export async function readQuestionState(client: PoolClient, userId: string) {
+  const { rows } = await client.query(`SELECT question_id,BOOL_OR(NOT is_correct) AS wrong FROM (
+    SELECT question_id,is_correct FROM question_answer_stats WHERE user_id=$1
+    UNION ALL SELECT question_id,is_correct FROM (${HISTORY_SQL}) h
+  ) answers GROUP BY question_id`, [userId]);
+  const { rows: favorites } = await client.query('SELECT question_id FROM question_review_state WHERE user_id=$1 AND favorite', [userId]);
+  const { rows: archives } = await client.query('SELECT payload FROM learning_imports WHERE user_id=$1', [userId]);
+  const oldWrong = archives.flatMap(row => Array.isArray(row.payload.wrongQuestions) ? row.payload.wrongQuestions.filter((q: { id: number }) => q && Number.isInteger(q.id) && q.id > 0 && q.id <= 2147483647).map((q: { id: number }) => q.id) : []);
+  return { answered: [...new Set([...rows.map(row => row.question_id), ...legacyAnsweredIds(archives.map(row => row.payload)), ...oldWrong])],
+    wrong: [...new Set([...rows.filter(row => row.wrong).map(row => row.question_id), ...oldWrong])], favorites: favorites.map(row => row.question_id) };
 }

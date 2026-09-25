@@ -9,6 +9,8 @@ import styles from "./subjects.module.css";
 import { formatExamYear } from "@/lib/exam-year";
 import { EXAM_SUBJECTS } from "@/data/exam-chapters";
 import ChapterPicker from "@/components/questions/ChapterPicker";
+import { authClient } from '@/lib/auth-client';
+import type { QuestionState } from '@/lib/question-state';
 
 type Row = { subject: string; years: number[]; count: string; chapter?: string };
 
@@ -23,6 +25,8 @@ const subjectIcons: Record<string, StudyIconName> = {
 };
 
 export default function SubjectsPage() {
+  const { data: session } = authClient.useSession();
+  const [questionState,setQuestionState] = useState<QuestionState>('all');
   const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
   const [rows, setRows] = useState<Row[]>([]);
   const [order, setOrder] = useState<"original" | "random">("random");
@@ -61,7 +65,7 @@ export default function SubjectsPage() {
   }
 
   function buildQuizUrl() {
-    return `/questions?${new URLSearchParams({ groups: JSON.stringify(rows), order, mode, started: "1" })}`;
+    return `/questions?${new URLSearchParams({ groups: JSON.stringify(rows), order, mode, state: session?.user.id ? questionState : 'all', started: "1" })}`;
   }
 
   const totalCount = rows.reduce((sum, row) => sum + Math.min(availableCount(row), row.count === "all" ? Infinity : Number(row.count) || 0), 0);
@@ -100,6 +104,7 @@ export default function SubjectsPage() {
         {rows.length > 1 && <button onClick={() => removeRow(index)} className="rounded-xl px-3 py-3 text-red-500 hover:bg-red-50">刪除</button>}
       </div><p className="mt-2 text-sm text-gray-500">{loadingAvailable ? "正在查詢可用題目…" : `符合條件共有 ${availableCount(row)} 題`}</p></div>)}</div>
       {rows.length < subjects.length && <button onClick={addRow} className="mt-4 w-full rounded-2xl border-2 border-dashed border-gray-200 p-4 font-bold text-[#3F725F] hover:bg-[#E9F2ED]">＋ 新增一組科目／年份／題數</button>}
+      <fieldset className="mt-7 min-w-0"><legend className="font-bold">題目狀態</legend><div className="mt-3 flex flex-wrap gap-2">{([['all','全部題目'],['unanswered','未做過'],['wrong','曾答錯'],['favorites','收藏題']] as const).map(([value,label]) => <button key={value} disabled={value !== 'all' && !session?.user.id} aria-pressed={(session?.user.id ? questionState : 'all') === value} className={`study-button ${questionState === value ? 'study-button-primary' : ''}`} onClick={() => setQuestionState(value)}>{label}</button>)}</div><p className="mt-2 text-sm text-gray-500">{session?.user.id ? '依帳號紀錄篩選；曾答錯包含已從錯題本移除的題目。上方題數為篩選前上限。' : <>全部題目可直接練習；<Link href="/login">登入</Link>後可依未做過、曾答錯或收藏篩選。</>}</p></fieldset>
       <section className="mt-7"><h3 className="font-bold">題目順序</h3><div className="mt-3 grid grid-cols-2 gap-3"><button onClick={() => setOrder("original")} className={`rounded-2xl border p-4 text-left transition ${order === "original" ? "border-[#5F8F7B] bg-[#E9F2ED] ring-1 ring-[#E9F2ED]" : "border-gray-200 hover:bg-gray-50"}`}><b>原始順序</b><div className="mt-1 text-sm text-gray-500">依年份、原題題號排列</div></button><button onClick={() => setOrder("random")} className={`rounded-2xl border p-4 text-left transition ${order === "random" ? "border-[#5F8F7B] bg-[#E9F2ED] ring-1 ring-[#E9F2ED]" : "border-gray-200 hover:bg-gray-50"}`}><b>隨機順序</b><div className="mt-1 text-sm text-gray-500">每次測驗重新打亂</div></button></div></section>
       <section className="mt-7"><h3 className="font-bold">答題模式</h3><div className="mt-3 grid grid-cols-2 gap-3">{[["practice", "練習模式", "選答案後立即顯示解析"], ["exam", "模擬考模式", "交卷後才顯示答案與成績"]].map(([value, label, description]) => <button key={value} aria-pressed={mode === value} onClick={() => setMode(value)} className={"rounded-2xl border p-4 text-left " + (mode === value ? "border-[#5F8F7B] bg-[#E9F2ED]" : "border-gray-200 hover:bg-gray-50")}><b>{label}</b><p className="mt-1 text-sm text-gray-500">{description}</p></button>)}</div></section>
       {error && <p role="alert" className="mt-4 text-red-600">{error}，請關閉設定後再試一次。</p>}

@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { neon } from "@neondatabase/serverless";
 import { auth } from "@/lib/auth";
 import { validChapter } from "@/data/exam-chapters";
+import { QUESTION_STATES, stateSelection, type QuestionState } from '@/lib/question-state';
+import { questionTransaction } from '@/lib/question-transaction';
+import { readQuestionState } from '@/lib/learning-service';
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -56,6 +59,15 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: "請確認科目、章節、年份與題數設定" }, { status: 400 });
       }
       const random = searchParams.get("order") === "random";
+      const state = searchParams.get('state') ?? 'all';
+      if (!QUESTION_STATES.includes(state as QuestionState)) return NextResponse.json({ error: '題目狀態無效' }, { status: 400 });
+      let selection: ReturnType<typeof stateSelection> = null;
+      if (state !== 'all') {
+        const session = await auth.api.getSession({ headers: request.headers });
+        if (!session?.user.id) return NextResponse.json({ error: '請登入使用帳號題目篩選，或選擇全部題目。' }, { status: 401 });
+        selection = stateSelection(state as QuestionState, await questionTransaction(client => readQuestionState(client, session.user.id)));
+      }
+      const stateFilter = !selection ? sql`TRUE` : selection.exclude ? sql`NOT (q.id = ANY(${selection.ids}::integer[]))` : sql`q.id = ANY(${selection.ids}::integer[])`;
       const batches = await Promise.all(groups.map(async (group) => {
         const yearFilter = group.years.length ? sql`qs.exam_year = ANY(${group.years})` : sql`TRUE`;
         const subjectFilter = questionId === null ? sql`q.subject = ${group.subject}` : sql`q.id = ${questionId}`;
@@ -64,7 +76,7 @@ export async function GET(request: Request) {
         return sql`
           SELECT q.*, qs.exam_year, qs.name AS question_set_name
           FROM questions q JOIN question_sets qs ON qs.id = q.question_set_id
-          WHERE qs.visibility = 'public' AND ${subjectFilter} AND ${yearFilter} AND ${chapterFilter}
+          WHERE qs.visibility = 'public' AND ${subjectFilter} AND ${yearFilter} AND ${chapterFilter} AND ${stateFilter}
           ORDER BY ${ordering} LIMIT ${group.count === "all" ? null : Number(group.count)}
         `;
       }));

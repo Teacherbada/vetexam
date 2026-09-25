@@ -14,7 +14,7 @@ function load(path, mocks = {}) {
   return exports;
 }
 const stats = load('lib/question-stats.ts');
-const service = load('lib/learning-service.ts', { './question-stats': stats });
+const service = load('lib/learning-service.ts', { './question-stats': stats, './question-state': load('lib/question-state.ts') });
 test('API rejects guests, cross-account queues, cross-origin writes and invalid answers', async () => {
   let owner = null, writes = 0;
   const api = load('app/api/learning/route.ts', {
