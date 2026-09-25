@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import ImagePreview from './ImagePreview';
+import ImageViewer from '@/components/ui/ImageViewer';
 import type { PdfRegion } from '@/lib/pdf-layout';
 
 export type ReviewImage = { src: string; region?: PdfRegion };
@@ -40,7 +41,7 @@ export default function ReviewImages({question:q,questions,file,onImages,onCombi
   if(q.images===undefined && q.hasImage && !q.imageDataUrl) return <ImagePreview file={file} pageNumber={q.pageNumber} questionNumber={q.questionNumber ?? q.id} regions={q.regions} onImageLoaded={(_,urls)=>onImages(q.id,urls.map((src,i)=>({src,region:q.regions?.[i]})))}/>;
   const images=q.images ?? (q.imageDataUrl?[{src:q.imageDataUrl}]:[]);
   return <div className="mt-3 space-y-4">{error&&<p role="alert" className="text-red-700">{error}</p>}{images.map((image,i)=><div key={i} className="min-w-0 rounded-xl border border-[#E8EBE8] p-3">
-    <img src={image.src} alt={`第 ${q.questionNumber ?? q.id} 題圖片 ${i+1}`} className="mx-auto h-auto max-w-full"/>
+    <ImageViewer src={image.src} alt={`第 ${q.questionNumber ?? q.id} 題圖片 ${i+1}`} />
     <p className="my-2 text-xs text-[#6F7873]">圖片 {i+1}{image.region?` · 第 ${image.region.page} 頁 · ${image.region.source} · ${Math.round(image.region.width)} × ${Math.round(image.region.height)}`:''}</p>
     <div className="flex flex-wrap items-center gap-2 text-sm">
       <button type="button" className="rounded-lg border p-2" onClick={()=>onImages(q.id,images.filter((_,j)=>j!==i))}>移除圖片 {i+1}</button>

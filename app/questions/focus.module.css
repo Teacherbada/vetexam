@@ -1,0 +1,82 @@
+.page { min-height: 100vh; background: var(--study-background); color: var(--text-primary); font-family: var(--study-font); padding: 24px 24px 100px; line-height: 1.7; }
+.container { max-width: 840px; margin: auto; }
+.page :is(button, a):focus-visible { outline: 3px solid #3F725F; outline-offset: 4px; }
+.page button { cursor: pointer; }
+.topbar, .meta, .progressLabel, .questionHeader, .actions { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.topbar { margin-bottom: 24px; }
+.topbar > span { display: flex; align-items: center; gap: 10px; font-size: 20px; font-weight: 600; }
+.topbar svg { color: var(--primary); }
+.topbar small { font-size: 12px; font-weight: 400; color: var(--text-secondary); margin-left: 10px; }
+.card, .state { background: white; border: 1px solid var(--border); border-radius: 18px; padding: 32px; box-shadow: var(--shadow-card); }
+.meta { color: #3F725F; font-size: 15px; font-weight: 600; flex-wrap: wrap; }
+.tag { color: var(--text-secondary); background: #F1F3ED; border-radius: 20px; padding: 4px 12px; font-size: 12px; font-weight: 400; }
+.progressLabel { font-size: 13px; color: var(--text-secondary); margin-top: 22px; flex-wrap: wrap; }
+.progressLabel strong { color: var(--text-primary); font-size: 18px; }
+.progress { height: 6px; background: #EEF0EE; border-radius: 10px; overflow: hidden; margin-top: 10px; }
+.progress > span { display: block; height: 100%; background: var(--primary); border-radius: inherit; transition: width 150ms; }
+.questionHeader { margin-top: 28px; font-size: 12px; color: var(--text-secondary); }
+.favorite { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; border-radius: 10px; padding: 8px 12px; border: 1px solid var(--border); font-size: 13px; }
+.favorite[aria-pressed="true"] { color: #3F725F; background: var(--primary-light); }
+.favorite:hover { background: var(--primary-light); }
+.favorite svg { width: 18px; }
+.question { font-size: 23px; font-weight: 600; line-height: 1.85; margin: 14px 0 28px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.questionImage { display: block; max-width: 100%; height: auto; margin: 0 auto 28px; object-fit: contain; }
+.options { display: grid; gap: 12px; }
+.option { display: flex; align-items: center; gap: 14px; width: 100%; padding: 18px; background: white; color: var(--text-primary); border: 1px solid var(--border); border-radius: 14px; text-align: left; transition: background 150ms, border-color 150ms; }
+.option:not(:disabled):hover { background: #F7F9F7; border-color: #A8C1B4; }
+.option:disabled { cursor: default; opacity: 1; }
+.letter { display: grid; place-items: center; width: 32px; height: 32px; flex-shrink: 0; border: 1px solid currentColor; border-radius: 9px; color: #68756D; font-size: 13px; }
+.optionText { flex: 1; white-space: pre-wrap; overflow-wrap: anywhere; min-width: 0; font-size: 16px; }
+.selected { border-color: var(--primary); background: var(--primary-light); }
+.correct { border-color: #63A47C; background: #EAF5EE; }
+.wrong { border-color: #D96C6C; background: #FBECEC; }
+.answerStatus { font-size: 12px; font-weight: 600; }
+.correct .answerStatus, .correctText { color: #356748; }
+.wrong .answerStatus, .wrongText { color: #A44343; }
+.explanation { margin-top: 24px; padding: 22px; background: #F7F9F7; border: 1px solid var(--border); border-radius: 14px; }
+.explanation > p:first-child { font-size: 15px; font-weight: 600; }
+.explanation h2 { font-size: 16px; font-weight: 600; margin: 16px 0 8px; }
+.explanationText { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 15px; line-height: 1.9; }
+.actions { flex-wrap: wrap; margin-top: 28px; }
+.actions p { color: var(--text-secondary); font-size: 12px; }
+.state { max-width: 680px; text-align: center; margin: 40px auto; }
+.state h1 { font-size: 28px; font-weight: 600; }
+.state > p { color: var(--text-secondary); margin-top: 12px; }
+.badge { display: inline-flex; padding: 18px; border-radius: 50%; color: #3F725F; background: var(--primary-light); margin-bottom: 20px; }
+.resultScore { font-size: clamp(28px, 7vw, 64px); font-weight: 600; color: #3F725F; margin-top: 24px; overflow-wrap: anywhere; }
+.resultScore small { font-size: 24px; }
+.state .actions { justify-content: center; }
+@media (max-width: 600px) { .page { padding: 16px 14px 100px; } .card, .state { padding: 22px 18px; } .topbar small { display: none; } .question { font-size: 20px; } .option { flex-wrap: wrap; padding: 16px 12px; gap: 10px; } .answerStatus { width: 100%; padding-left: 42px; } .actions > button { width: 100%; } .progressLabel { gap: 6px; } .explanation { padding: 18px; } }
+@media (prefers-reduced-motion: reduce) { .option, .progress > span { transition: none; } }
+
+/* Opt-in Focus First, inheriting Phase 1 tokens. */
+.page ~ :global(a[href="/feedback"]), .page ~ :global(a[href="/admin"]) { position: static; align-self: flex-end; margin: 0 20px 20px; }
+.page { padding: var(--ui-page-padding) var(--ui-page-padding) 100px; }
+.container { max-width: 820px; }
+.card, .state { border-radius: var(--ui-radius-card); padding: var(--ui-card-padding); box-shadow: var(--ui-shadow); }
+.progressLabel { margin: 0 0 12px; flex-wrap: wrap; gap: 8px; font-size: var(--ui-secondary); color: var(--text-secondary); }
+.progressLabel strong { color: var(--text-primary); font-size: 22px; font-variant-numeric: tabular-nums; }
+.meta { margin: 16px 0 20px; font-size: var(--ui-caption); flex-wrap: wrap; gap: 8px; }
+.tag { border-radius: var(--ui-radius-badge); background: var(--ui-neutral-bg); color: var(--ui-neutral); }
+.question { font-size: clamp(20px,2.4vw,24px); line-height: 1.85; margin: 0 0 24px; font-weight: 600; }
+.options { gap: 12px; }
+.option { display: grid; grid-template-columns: 32px minmax(0,1fr) auto; align-items: start; padding: 16px; min-height: 56px; border-radius: var(--ui-radius-input); line-height: 1.7; transition: none; }
+.option:disabled { opacity: 1; cursor: default; }
+.option:not(:disabled):hover { background: var(--ui-neutral-bg); border-color: var(--ui-neutral); transform: none; }
+.selected { border: 2px solid var(--ui-info); background: var(--ui-info-bg); }
+.correct { border: 2px solid var(--ui-success); background: white; }
+.correct[aria-pressed="true"] { background: var(--ui-success-bg); }
+.wrong { border: 2px solid var(--ui-danger); background: var(--ui-danger-bg); }
+.correct .answerStatus,.correctText { color: var(--ui-success); }
+.wrong .answerStatus,.wrongText { color: var(--ui-danger); }
+.answerStatus { white-space: normal; font-size: var(--ui-caption); }
+.letter { background: var(--ui-neutral-bg); color: var(--ui-neutral); }
+.explanation { margin-top: 24px; padding: 20px 0 0; border: 0; border-top: 1px solid var(--ui-border); border-radius: 0; background: transparent; }
+.explanation h2 { font-size: var(--ui-card-title); margin: 16px 0 8px; }
+.explanationText { line-height: 1.85; font-size: var(--ui-body); }
+.questionHeader { justify-content: flex-end; margin: 20px 0 0; border-top: 1px solid var(--ui-border); padding-top: 12px; }
+.favorite { min-height: 44px; padding: 8px 12px; border-radius: var(--ui-radius-button); }
+.actions { flex-wrap: wrap; gap: 12px; margin-top: 24px; }
+.topbar { flex-wrap: wrap; }
+.topbar small { display: block; }
+@media(max-width:600px) { .option { gap: 10px; padding: 14px 12px; grid-template-columns: 28px minmax(0,1fr); } .answerStatus { grid-column: 2; width: auto; padding: 0; } .question { margin-bottom: 20px; } .card { padding: 20px 16px; } .topbar { gap: 12px; } }

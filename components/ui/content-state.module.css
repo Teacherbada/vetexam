@@ -1,0 +1,10 @@
+.loading, .empty { padding: var(--ui-card-padding); border: 1px solid var(--ui-border); border-radius: var(--ui-radius-card); background: #fff; }
+.loading { min-height: 210px; color: var(--text-secondary); }
+.skeleton { display: grid; gap: 16px; margin-top: 24px; }
+.skeleton span { display: block; height: 20px; border-radius: var(--ui-radius-input); background: var(--ui-neutral-bg); }
+.skeleton span:last-child { width: 65%; }
+.empty { text-align: center; }
+.empty > span { display: inline-flex; padding: 12px; border-radius: var(--ui-radius-badge); background: var(--ui-neutral-bg); color: var(--ui-neutral); }
+.empty h2 { font-size: var(--ui-card-title); margin: 12px 0 8px; }
+.empty p { color: var(--text-secondary); font-size: var(--ui-secondary); }
+.actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 20px; }

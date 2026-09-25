@@ -1,6 +1,7 @@
 "use client";
+import AdminShell from "@/components/ui/AdminShell";
+import { LoadingState, EmptyState } from "@/components/ui/ContentState";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 
 type Report = { id: string; user_id: string; user_email: string | null; category: "bug" | "suggestion"; message: string; context: string | null; status: "open" | "resolved"; created_at: string; updated_at: string };
@@ -31,23 +32,22 @@ export default function Reports() {
     } catch (error) { setError(error instanceof Error ? error.message : "更新失敗。"); }
     finally { setPending(null); }
   }
-  return <main className="min-h-screen bg-slate-50 p-6"><section className="mx-auto max-w-4xl space-y-6">
-    <Link href="/admin" className="text-blue-700">← 管理首頁</Link><h1 className="text-3xl font-bold">Reports 使用者回報</h1>
+  return <AdminShell title="Reports 使用者回報" current="/admin/reports">
     <div className="flex flex-wrap gap-3">
-      <select disabled={pending !== null} aria-label="回報狀態" value={filters.status} onChange={event => change({ ...filters, status: event.target.value, page: 1 })} className="rounded border bg-white p-2"><option value="all">全部狀態</option><option value="open">待處理</option><option value="resolved">已處理</option></select>
-      <select disabled={pending !== null} aria-label="回報類別" value={filters.category} onChange={event => change({ ...filters, category: event.target.value, page: 1 })} className="rounded border bg-white p-2"><option value="all">全部類別</option><option value="bug">錯誤回報</option><option value="suggestion">功能建議</option></select>
+      <label className="grid gap-1 text-sm">回報狀態<select disabled={pending !== null} aria-label="回報狀態" value={filters.status} onChange={event => change({ ...filters, status: event.target.value, page: 1 })} className="rounded border bg-white p-2"><option value="all">全部狀態</option><option value="open">待處理</option><option value="resolved">已處理</option></select></label>
+      <label className="grid gap-1 text-sm">回報類別<select disabled={pending !== null} aria-label="回報類別" value={filters.category} onChange={event => change({ ...filters, category: event.target.value, page: 1 })} className="rounded border bg-white p-2"><option value="all">全部類別</option><option value="bug">錯誤回報</option><option value="suggestion">功能建議</option></select></label>
     </div>
-    {error && <p role="alert" className="text-red-700">{error}</p>}
-    {!data ? !error && <p role="status">載入中…</p> : <>
+    {error && <div role="alert">{error}<button disabled={pending !== null} className="study-button ml-3" onClick={() => change({ ...filters })}>重試</button></div>}
+    {!data ? !error && <LoadingState /> : <>
       <p>共 {data.total} 筆回報</p>
-      {data.reports.length === 0 && <p>沒有符合條件的回報。</p>}
+      {data.reports.length === 0 && <EmptyState title="沒有符合條件的回報。" description="試著調整狀態或回報類別。" />}
       {data.reports.map(report => <article key={report.id} className="space-y-3 rounded-xl border bg-white p-5">
-        <div className="flex flex-wrap items-center justify-between gap-3"><p className="font-semibold">{report.category === "bug" ? "錯誤回報" : "功能建議"} · {report.status === "open" ? "待處理" : "已處理"}</p><button disabled={pending !== null} onClick={() => updateStatus(report)} className="rounded border px-3 py-2 disabled:opacity-40">{pending === report.id ? "更新中…" : `標記為${report.status === "open" ? "已處理" : "待處理"}`}</button></div>
+        <div className="flex flex-wrap items-center justify-between gap-3"><p className="font-semibold">{report.category === "bug" ? "錯誤回報" : "功能建議"} · <span className="admin-status">{report.status === "open" ? "待處理" : "已處理"}</span></p><button disabled={pending !== null} onClick={() => updateStatus(report)} className="rounded border px-3 py-2 disabled:opacity-40">{pending === report.id ? "更新中…" : `標記為${report.status === "open" ? "已處理" : "待處理"}`}</button></div>
         <p className="whitespace-pre-wrap break-words">{report.message}</p>
         <p className="break-all text-sm text-slate-600">{report.user_email || "未提供 email"} · {new Date(report.created_at).toLocaleString("zh-TW")}</p>
         <details><summary className="cursor-pointer text-blue-700">回報詳情</summary><dl className="mt-3 space-y-2 text-sm"><dt>回報 ID／會員 ID</dt><dd className="break-all">{report.id}／{report.user_id}</dd><dt>相關情境</dt><dd className="whitespace-pre-wrap break-words">{report.context || "未提供"}</dd><dt>最後更新</dt><dd>{new Date(report.updated_at).toLocaleString("zh-TW")}</dd></dl></details>
       </article>)}
       <div className="flex items-center gap-4"><button disabled={pending !== null || filters.page <= 1} className="rounded border p-2 disabled:opacity-40" onClick={() => change({ ...filters, page: filters.page - 1 })}>上一頁</button><span>第 {filters.page} 頁／共 {Math.max(1, Math.ceil(data.total / data.pageSize))} 頁</span><button disabled={pending !== null || filters.page * data.pageSize >= data.total} className="rounded border p-2 disabled:opacity-40" onClick={() => change({ ...filters, page: filters.page + 1 })}>下一頁</button></div>
     </>}
-  </section></main>;
+  </AdminShell>;
 }

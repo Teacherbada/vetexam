@@ -1,0 +1,41 @@
+.page { min-height: 100vh; padding: var(--ui-page-padding) var(--ui-page-padding) 96px; background: var(--study-background); }
+.container { max-width: var(--ui-page-width); margin: auto; min-width: 0; }
+.navigation { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: var(--ui-section-gap); border-bottom: 1px solid var(--ui-border); padding-bottom: 12px; }
+.navigation a { display: inline-flex; align-items: center; min-height: 44px; padding: 8px 14px; border-radius: var(--ui-radius-button); color: var(--ui-neutral); font-size: var(--ui-secondary); }
+.navigation a[aria-current], .navigation a:hover { background: var(--ui-success-bg); color: var(--ui-success); }
+.navigation a[aria-current] { font-weight: 700; text-decoration: underline; text-underline-offset: 6px; }
+.content { display: grid; gap: var(--ui-grid-gap); min-width: 0; }
+.content > *, .content fieldset { min-width: 0; }
+.content :is(section, article) { min-width: 0; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-card); background: #fff; box-shadow: var(--ui-shadow); padding: 20px; }
+.content :is(h2,h3) { font-size: var(--ui-card-title); line-height: 1.4; font-weight: 650; }
+.content h2 { margin-bottom: 16px; }
+.content :is(button,input,select,textarea) { border-radius: var(--ui-radius-input); }
+.content :is(button,select,input:not([type="checkbox"])) { min-height: 44px; }
+.content :is(input,select,textarea) { border-color: var(--ui-border); max-width: 100%; min-width: 0; font-size: var(--ui-body); }
+.content button { cursor: pointer; max-width: 100%; white-space: normal; }
+.content button:disabled { cursor: not-allowed; opacity: .55; }
+.content button[aria-pressed="true"] { background: var(--ui-success-bg); border-color: var(--ui-success); color: var(--ui-success); box-shadow: inset 0 0 0 1px var(--ui-success); }
+.content :is(form, [class~="flex"]) { flex-wrap: wrap; }
+.content form { align-items: end; }
+.content form label { display: grid; gap: 6px; font-size: var(--ui-secondary); color: var(--ui-neutral); }
+.content :is([role="alert"]) { border: 1px solid var(--ui-danger); background: var(--ui-danger-bg); padding: 12px 16px; border-radius: var(--ui-radius-input); }
+.content :is([class~="text-slate-500"],[class~="text-slate-600"]) { color: var(--text-secondary); }
+.content :is([class~="text-blue-700"]) { color: var(--ui-success); }
+.content :is([class~="bg-blue-700"]) { background: #3f725f; }
+.content textarea:focus-visible { outline: 3px solid #3f725f; outline-offset: 3px; }
+.table { overflow-x: auto; max-width: 100%; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-input); background: #fff; }
+.table:focus-visible, .content [tabindex]:focus-visible { outline: 3px solid #3f725f; outline-offset: 3px; }
+.content table { border-collapse: collapse; width: 100%; text-align: left; font-size: var(--ui-secondary); }
+.content th { background: var(--ui-neutral-bg); color: var(--ui-neutral); font-weight: 650; white-space: nowrap; }
+.content :is(th,td) { padding: 12px 14px; border-bottom: 1px solid var(--ui-border); vertical-align: top; }
+.content tbody tr:last-child td { border-bottom: 0; }
+.content tbody tr:hover { background: #f7f9f6; }
+.content [data-active="true"] { background: var(--ui-success-bg); border-color: var(--ui-success); }
+.content :global(.admin-stat) { padding: 16px 20px; background: #fff; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-card); color: var(--ui-neutral); font-size: var(--ui-secondary); font-weight: 500; }
+.content :global(.admin-stat) strong { display: block; margin-top: 6px; font-size: 28px; font-weight: 650; font-variant-numeric: tabular-nums; color: var(--text-primary); }
+.content :global(.admin-status) { display: inline-block; padding: 4px 10px; border-radius: var(--ui-radius-badge); background: var(--ui-neutral-bg); color: var(--ui-neutral); font-size: var(--ui-caption); }
+.content section[aria-label="全部題庫資料品質"] { border: 0; padding: 0; background: transparent; box-shadow: none; }
+.content section[aria-label="全部題庫資料品質"] > div { border-radius: var(--ui-radius-card); padding: 16px; }
+.content section[aria-label="全部題庫資料品質"] strong { color: var(--text-primary); font-size: 28px; font-variant-numeric: tabular-nums; }
+@media(max-width:600px) { .content :is(section,article) { padding: 16px; } .table table:has(th:nth-child(3)) { min-width: 600px; } .navigation { gap: 4px; } .navigation a { padding-inline: 10px; } }
+.page ~ :global(a[href="/feedback"]), .page ~ :global(a[href="/admin"]) { position: static; align-self: flex-end; margin: 0 20px 20px; }

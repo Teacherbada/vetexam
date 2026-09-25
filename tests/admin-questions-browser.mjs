@@ -5,11 +5,13 @@ import { mkdir, writeFile, readFile, unlink, rmdir } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE ? pathToFileURL(process.env.PLAYWRIGHT_MODULE).href : 'playwright');
-const base = 'http://localhost:3107';
+const external = process.env.ADMIN_UI_BASE_URL;
+const base = external || 'http://localhost:3107';
 const fixtureDirectory = new URL('../app/admin-questions-ui-fixture/', import.meta.url);
 const fixturePage = new URL('page.tsx', fixtureDirectory);
 let browser, server, created = false;
 try {
+  if (!external) {
   await mkdir(fixtureDirectory);
   created = true;
   await writeFile(fixturePage, "export { default } from '../admin/questions/QuestionsAdmin';\n");
@@ -30,6 +32,7 @@ try {
   for (const path of ['/api/admin/questions', '/api/admin/questions/bulk-answers']) {
     const response = await fetch(base + path, path.endsWith('bulk-answers') ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' } : undefined);
     assert.equal(response.status, 403);
+  }
   }
   browser = await chromium.launch({ channel: process.env.BROWSER_CHANNEL || 'msedge', headless: true });
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
@@ -55,7 +58,7 @@ try {
     lastPreview = { rows, summary, errors: mismatch ? ['答案數量與題目數量不一致'] : [], parsed: entries.length, expected: 4, can_apply: !mismatch, token: 'fixture-token', fingerprint: 'fixture' };
     return route.fulfill({ json: lastPreview });
   });
-  await page.goto(base + '/admin-questions-ui-fixture');
+  await page.goto(base + (external ? '/ui-phase2-fixture?screen=questions' : '/admin-questions-ui-fixture'));
   await page.getByLabel('選擇特定題庫').selectOption('1');
   await page.getByRole('button', { name: '開始鍵盤輸入', exact: true }).click();
   await page.keyboard.type('acbd');
@@ -111,7 +114,7 @@ try {
     assert.equal(await page.evaluate(() => localStorage.getItem('progress')), null);
   }
   assert.deepEqual(errors, []);
-  console.log('PASS real anonymous guards, keyboard/revisit, preview-only paste, explicit stats confirmation, sequence length guard, single ID, mobile widths, missing-answer practice/exam; no browser errors.');
+  console.log(`PASS ${external ? 'mock UI only (server guards not exercised)' : 'real anonymous guards'}, keyboard/revisit, preview-only paste, explicit stats confirmation, sequence length guard, single ID, mobile widths, missing-answer practice/exam; no browser errors.`);
 } finally {
   if (browser) await browser.close();
   if (server) server.kill();

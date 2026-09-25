@@ -1,6 +1,7 @@
 'use client';
+import AdminShell, { TableRegion } from "@/components/ui/AdminShell";
+import { LoadingState, EmptyState } from "@/components/ui/ContentState";
 
-import Link from 'next/link';
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { needsManualReview, normalizeAnswer, type AdminQuestion, type AnswerInput } from '@/lib/admin-question-input';
 import type { AnswerPreview } from '@/lib/admin-questions';
@@ -107,31 +108,12 @@ export default function QuestionsAdmin() {
   const selectedBank = data?.sets.find(bank => bank.id === Number(bankId));
   const statsCount = (preview?.summary.recalculate ?? 0) + (preview?.summary.remove ?? 0);
 
-  return <main className={styles.page}><div className={styles.container}>
-    <header className={styles.heading}><div><p>VetExam · 管理員工具</p><h1>題目維護中心</h1><p>檢查答案品質，預覽確認後再套用。</p></div><nav><Link href="/admin">管理後台</Link><Link href="/">首頁</Link></nav></header>
+  return <AdminShell title="題目維護中心" current="/admin/questions" description="檢查答案品質，預覽確認後再套用。">
     {error && <div className={styles.warning} role="alert">{error}<button className="study-button" onClick={() => { setError(''); setLoading(true); setRevision(value => value + 1); }}>重新讀取</button></div>}
     {notice && <p className={styles.success} role="status">{notice}</p>}
     {data && <><section className={styles.summary} aria-label="全部題庫資料品質">
       {([['全部題目', data.summary.total], ['缺少正確答案', data.summary.missing_answer], ['缺少官方詳解', data.summary.missing_explanation], ['答案與詳解皆缺少', data.summary.missing_both]] as const).map(([title, count]) => <div className={styles.card} key={title}><p>{title}</p><strong>{count}</strong></div>)}
     </section><p className={styles.muted}>所有公開與私人題庫：NULL {data.summary.answer_null} 題、空白 {data.summary.answer_blank} 題、非 A–D 答案 {data.summary.invalid} 題。</p></>}
-
-    <section className={styles.card} aria-labelledby="bulk-title"><h2 id="bulk-title">批次輸入答案</h2>
-      <fieldset disabled={busy}><label className={styles.field}>選擇特定題庫<select value={bankId} onChange={event => selectBank(event.target.value)}><option value="">請先選擇題庫</option>{data?.sets.map(bank => <option key={bank.id} value={bank.id}>{bank.name} · #{bank.id} · {bank.visibility === 'public' ? '公開' : '私人'}</option>)}</select></label>
-        {selectedBank && <p className={styles.bankInfo}>{formatExamYear(selectedBank.exam_year)}｜{selectedBank.exam_subject}｜共 {selectedBank.total} 題 · 已有答案 {selectedBank.total - selectedBank.missing_answer} · 缺少答案 {selectedBank.missing_answer} · 已有解析 {selectedBank.total - selectedBank.missing_explanation} · 缺少解析 {selectedBank.missing_explanation}</p>}
-        <div className={styles.actions} role="group" aria-label="答案輸入模式">{(['keyboard', 'table', 'sequence'] as const).map((value, index) => <button className="study-button" type="button" key={value} aria-pressed={mode === value} onClick={() => { setMode(value); invalidate(); }}>{['鍵盤快速輸入', '貼上答案表', '連續答案字串'][index]}</button>)}</div>
-        {bankLoading ? <p role="status">載入題庫中…</p> : bankId && bankQuestions.length > 0 && <>
-          {mode === 'keyboard' ? <>
-            <p className={styles.muted}>點選下方輸入區後，按 A/B/C/D 自動跳下一個可編輯題；↑/↓ 移動，也可點題號修正。只套用本次輸入的答案。</p>
-            <div className={styles.actions}><button className="study-button" onClick={() => { move(-1); keyboard.current?.focus(); }} disabled={active === 0}>上一題</button><span aria-live="polite">目前：第 {bankQuestions[active]?.question_number} 題</span><button className="study-button" onClick={() => { move(1); keyboard.current?.focus(); }} disabled={active === bankQuestions.length - 1}>下一題</button><button className="study-button" onClick={() => keyboard.current?.focus()}>開始鍵盤輸入</button></div>
-            <div ref={keyboard} className={styles.keyboard} tabIndex={0} onKeyDown={keyDown} role="group" aria-label="鍵盤快速輸入區">{bankQuestions.map((q, index) => <div key={q.id} data-active={index === active} className={styles.answerRow}>
-              <button onClick={() => { setActive(index); keyboard.current?.focus(); }} aria-label={`前往第 ${q.question_number} 題，ID ${q.id}`}>第 {q.question_number} 題</button><span className={styles.muted}>原：{normalizeAnswer(q.answer) || '尚未設定'}</span>
-              {editable(q) ? <div className={styles.choices}>{['A', 'B', 'C', 'D'].map(letter => <button key={letter} onClick={() => { setActive(index); choose(q, letter); }} aria-label={`第 ${q.question_number} 題 ${letter}`} aria-pressed={draft[q.question_number] === letter}>{letter}</button>)}<button aria-label={`清除第 ${q.question_number} 題草稿`} onClick={() => { invalidate(); setDraft(value => { const next = { ...value }; delete next[q.question_number]; return next; }); }}>清除</button></div> : <span className={styles.warningText}>{duplicate(q) ? '題號重複，請以單題 ID 編輯' : '此題答案格式需要人工確認'}</span>}
-            </div>)}</div>
-          </> : <label className={styles.field}>{mode === 'table' ? '每行一題，支援 1 A、1.A、1、A、1:A 與 Tab' : `依第 1–${bankQuestions.length} 題順序輸入，題號必須連續且不重複`}<textarea rows={7} value={text} onChange={event => { setText(event.target.value); invalidate(); }} placeholder={mode === 'table' ? '1 A\n2 C\n3 B' : 'ACBD…'} maxLength={20000} />{mode === 'sequence' && <span className={text.replace(/\s/g, '').length !== bankQuestions.length ? styles.warningText : styles.muted}>預期 {bankQuestions.length} 題 · 實際輸入 {text.replace(/\s/g, '').length} 個答案；數量不符禁止套用。</span>}</label>}
-          <button className="study-button study-button-primary" onClick={() => parse({ question_set_id: Number(bankId), mode, ...(mode === 'keyboard' ? { answers: Object.entries(draft).map(([number, answer]) => ({ question_number: Number(number), answer })) } : { text }) })}>解析預覽</button>
-        </>}
-      </fieldset>
-    </section>
 
     <section className={styles.card}><h2>搜尋與單題編輯</h2><form onSubmit={event => {
       event.preventDefault(); const form = new FormData(event.currentTarget); const params = new URLSearchParams();
@@ -145,9 +127,27 @@ export default function QuestionsAdmin() {
       <label className={styles.field}>資料品質<select name="quality"><option value="all">全部</option><option value="missing_answer">缺少答案</option><option value="has_answer">已有答案</option><option value="missing_explanation">缺少官方詳解</option><option value="has_explanation">已有官方詳解</option><option value="invalid">非 A–D 答案</option></select></label>
       <label className={styles.field}>題目關鍵字<input name="keyword" type="search" maxLength={200} /></label><button className="study-button" type="submit">搜尋題目</button>
     </fieldset></form>
-      {loading ? <p role="status">載入中…</p> : <><p className={styles.muted}>共 {data?.total ?? 0} 題 · 第 {page} 頁（每頁 100 題）</p><div className={styles.tableScroll}><table><thead><tr><th>ID／題號</th><th>年份／題庫</th><th>題目</th><th>正確答案</th><th>操作</th></tr></thead><tbody>{data?.questions.map(q => <tr key={q.id}><td>#{q.id}<br />第 {q.question_number} 題</td><td>{formatExamYear(q.exam_year ?? null)}<br />{q.subject}<br />{q.question_set_name}</td><td>{q.question.slice(0, 110)}</td><td className={!normalizeAnswer(q.answer) ? styles.warningText : undefined}>{normalizeAnswer(q.answer) || '尚未設定'}</td><td><button className="study-button" disabled={busy} onClick={() => { setSingle(q); setSingleAnswer(/^[A-D]$/.test(normalizeAnswer(q.answer)) ? normalizeAnswer(q.answer) : ''); invalidate(); }}>查看／編輯</button></td></tr>)}</tbody></table></div>
-        {!data?.questions.length && <p>沒有符合的題目。</p>}
+      {loading ? <LoadingState /> : <><p className={styles.muted}>共 {data?.total ?? 0} 題 · 第 {page} 頁（每頁 100 題）</p><TableRegion label="題目資料表"><table><thead><tr><th scope="col">ID／題號</th><th scope="col">年份／題庫</th><th scope="col">題目</th><th scope="col">正確答案</th><th scope="col">操作</th></tr></thead><tbody>{data?.questions.map(q => <tr key={q.id}><td>#{q.id}<br />第 {q.question_number} 題</td><td>{formatExamYear(q.exam_year ?? null)}<br />{q.subject}<br />{q.question_set_name}</td><td>{q.question.slice(0, 110)}</td><td className={!normalizeAnswer(q.answer) ? styles.warningText : undefined}>{normalizeAnswer(q.answer) || '尚未設定'}</td><td><button className="study-button" disabled={busy} onClick={() => { setSingle(q); setSingleAnswer(/^[A-D]$/.test(normalizeAnswer(q.answer)) ? normalizeAnswer(q.answer) : ''); invalidate(); }}>查看／編輯</button></td></tr>)}</tbody></table></TableRegion>
+        {!data?.questions.length && <EmptyState title="沒有符合的題目。" description="請調整搜尋條件。" />}
         <div className={styles.actions}><button className="study-button" disabled={page === 1 || busy} onClick={() => { setLoading(true); setPage(p => p - 1); }}>上一頁</button><button className="study-button" disabled={page * 100 >= (data?.total ?? 0) || busy} onClick={() => { setLoading(true); setPage(p => p + 1); }}>下一頁</button></div></>}
+    </section>
+
+    <section className={styles.card} aria-labelledby="bulk-title"><h2 id="bulk-title">批次輸入答案</h2>
+      <fieldset disabled={busy}><label className={styles.field}>選擇特定題庫<select value={bankId} onChange={event => selectBank(event.target.value)}><option value="">請先選擇題庫</option>{data?.sets.map(bank => <option key={bank.id} value={bank.id}>{bank.name} · #{bank.id} · {bank.visibility === 'public' ? '公開' : '私人'}</option>)}</select></label>
+        {selectedBank && <p className={styles.bankInfo}>{formatExamYear(selectedBank.exam_year)}｜{selectedBank.exam_subject}｜共 {selectedBank.total} 題 · 已有答案 {selectedBank.total - selectedBank.missing_answer} · 缺少答案 {selectedBank.missing_answer} · 已有解析 {selectedBank.total - selectedBank.missing_explanation} · 缺少解析 {selectedBank.missing_explanation}</p>}
+        <div className={styles.actions} role="group" aria-label="答案輸入模式">{(['keyboard', 'table', 'sequence'] as const).map((value, index) => <button className="study-button" type="button" key={value} aria-pressed={mode === value} onClick={() => { setMode(value); invalidate(); }}>{['鍵盤快速輸入', '貼上答案表', '連續答案字串'][index]}</button>)}</div>
+        {bankLoading ? <LoadingState label="載入題庫中…" /> : bankId && bankQuestions.length > 0 && <>
+          {mode === 'keyboard' ? <>
+            <p className={styles.muted}>點選下方輸入區後，按 A/B/C/D 自動跳下一個可編輯題；↑/↓ 移動，也可點題號修正。只套用本次輸入的答案。</p>
+            <div className={styles.actions}><button className="study-button" onClick={() => { move(-1); keyboard.current?.focus(); }} disabled={active === 0}>上一題</button><span aria-live="polite">目前：第 {bankQuestions[active]?.question_number} 題</span><button className="study-button" onClick={() => { move(1); keyboard.current?.focus(); }} disabled={active === bankQuestions.length - 1}>下一題</button><button className="study-button" onClick={() => keyboard.current?.focus()}>開始鍵盤輸入</button></div>
+            <div ref={keyboard} className={styles.keyboard} tabIndex={0} onKeyDown={keyDown} role="group" aria-label="鍵盤快速輸入區">{bankQuestions.map((q, index) => <div key={q.id} data-active={index === active} className={styles.answerRow}>
+              <button onClick={() => { setActive(index); keyboard.current?.focus(); }} aria-label={`前往第 ${q.question_number} 題，ID ${q.id}`}>第 {q.question_number} 題</button><span className={styles.muted}>原：{normalizeAnswer(q.answer) || '尚未設定'}</span>
+              {editable(q) ? <div className={styles.choices}>{['A', 'B', 'C', 'D'].map(letter => <button key={letter} onClick={() => { setActive(index); choose(q, letter); }} aria-label={`第 ${q.question_number} 題 ${letter}`} aria-pressed={draft[q.question_number] === letter}>{letter}</button>)}<button aria-label={`清除第 ${q.question_number} 題草稿`} onClick={() => { invalidate(); setDraft(value => { const next = { ...value }; delete next[q.question_number]; return next; }); }}>清除</button></div> : <span className={styles.warningText}>{duplicate(q) ? '題號重複，請以單題 ID 編輯' : '此題答案格式需要人工確認'}</span>}
+            </div>)}</div>
+          </> : <label className={styles.field}>{mode === 'table' ? '每行一題，支援 1 A、1.A、1、A、1:A 與 Tab' : `依第 1–${bankQuestions.length} 題順序輸入，題號必須連續且不重複`}<textarea rows={7} value={text} onChange={event => { setText(event.target.value); invalidate(); }} placeholder={mode === 'table' ? '1 A\n2 C\n3 B' : 'ACBD…'} maxLength={20000} />{mode === 'sequence' && <span className={text.replace(/\s/g, '').length !== bankQuestions.length ? styles.warningText : styles.muted}>預期 {bankQuestions.length} 題 · 實際輸入 {text.replace(/\s/g, '').length} 個答案；數量不符禁止套用。</span>}</label>}
+          <button className="study-button study-button-primary" onClick={() => parse({ question_set_id: Number(bankId), mode, ...(mode === 'keyboard' ? { answers: Object.entries(draft).map(([number, answer]) => ({ question_number: Number(number), answer })) } : { text }) })}>解析預覽</button>
+        </>}
+      </fieldset>
     </section>
 
     {single && <section className={styles.card} aria-label="單題編輯"><h2>單題編輯 · ID {single.id} · 第 {single.question_number} 題</h2><p>{formatExamYear(single.exam_year ?? null)}｜{single.subject}｜{single.question_set_name}</p><p className={styles.question}>{single.question}</p>
@@ -161,11 +161,11 @@ export default function QuestionsAdmin() {
       <p>成功解析：{preview.parsed} 題 · 無法解析：{preview.errors.length} · 無法匹配：{preview.summary.unmatched}</p>
       <p>新增答案：{preview.summary.added} · 修改答案：{preview.summary.changed} · 答案相同：{preview.summary.same} · 略過：{preview.summary.skipped}</p>
       {preview.errors.length > 0 && <ul className={styles.warning} role="alert">{preview.errors.map((message, i) => <li key={i}>{message}</li>)}</ul>}
-      <div className={styles.tableScroll}><table><thead><tr><th>題號／ID</th><th>原答案</th><th>新答案</th><th>狀態</th><th>統計影響</th></tr></thead><tbody>{preview.rows.map((row, i) => <tr key={i} className={row.status === 'changed' ? styles.conflict : undefined}><td>{row.question_number}／{row.question_id ?? '—'}</td><td>{row.old_answer?.trim() || '尚未設定'}</td><td>{row.new_answer}</td><td><strong>{labels[row.status]}</strong>{row.reason && <p>{row.reason}</p>}{row.status === 'changed' && <p>原答案與新答案不同</p>}</td><td>重算 {row.recalculate} 筆<br />清除 {row.remove} 筆</td></tr>)}</tbody></table></div>
+      <TableRegion label="題目資料表"><table><thead><tr><th scope="col">題號／ID</th><th scope="col">原答案</th><th scope="col">新答案</th><th scope="col">狀態</th><th scope="col">統計影響</th></tr></thead><tbody>{preview.rows.map((row, i) => <tr key={i} className={row.status === 'changed' ? styles.conflict : undefined}><td>{row.question_number}／{row.question_id ?? '—'}</td><td>{row.old_answer?.trim() || '尚未設定'}</td><td>{row.new_answer}</td><td><strong>{labels[row.status]}</strong>{row.reason && <p>{row.reason}</p>}{row.status === 'changed' && <p>原答案與新答案不同</p>}</td><td>重算 {row.recalculate} 筆<br />清除 {row.remove} 筆</td></tr>)}</tbody></table></TableRegion>
       {statsCount > 0 && <div className={styles.warning}><p>受影響題目已有 {statsCount} 筆作答紀錄。修改答案會同步更新正確率與答錯排行榜。</p><p>可重新計算：{preview.summary.recalculate} 筆；無法重新計算：{preview.summary.remove} 筆。</p><label><input type="checkbox" checked={confirmStats} disabled={busy} onChange={event => setConfirmStats(event.target.checked)} /> 我確認套用答案並重新計算歷史統計。</label>{preview.summary.remove > 0 && <label><input type="checkbox" checked={confirmRemoval} disabled={busy} onChange={event => setConfirmRemoval(event.target.checked)} /> 我確認清除 {preview.summary.remove} 筆缺少或無效選項的舊紀錄，之後從新作答重新累積；此清除無法復原。</label>}</div>}
       <p className={styles.muted}>相同答案不更新；特殊題目會略過。預覽有效 15 分鐘，題目或統計變動時需重新預覽。</p>
       <div className={styles.actions}><button className="study-button study-button-primary" disabled={busy || !preview.can_apply || (statsCount > 0 && !confirmStats) || (preview.summary.remove > 0 && !confirmRemoval)} onClick={apply}>確認套用答案</button><button className="study-button" disabled={busy} onClick={invalidate}>取消預覽</button></div>
     </section>}
     {busy && <p role="status">處理中，請稍候…</p>}
-  </div></main>;
+  </AdminShell>;
 }

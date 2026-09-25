@@ -44,7 +44,7 @@ try {
     await page.getByRole('button',{name:'已收藏',exact:true}).waitFor();
     fail=true;
     await page.getByRole('button',{name:'A 甲',exact:true}).click();
-    await page.getByRole('alert').waitFor();assert.equal(attempts,0);assert.equal(due,true);
+    await page.locator('main').getByRole('alert').waitFor();assert.equal(attempts,0);assert.equal(due,true);
     assert.equal(await page.getByText('這是既有解析。',{exact:true}).count(),0);
     fail=false;
     await page.getByRole('button',{name:'重試',exact:true}).click();
