@@ -30,7 +30,11 @@
 - localStorage 原始資料不刪除。成功才標記完成；失敗可繼續刷題並重試。離線佇列按帳號分開，伺服器再核對 session 與 owner。
 - 同一瀏覽器的無帳號舊資料只由首次遷移的帳號接收，切換帳號不會再次匯入另一個帳號。
 
-已唯讀確認現有資料庫欄位。尚未對正式資料庫套用 migration，也未合併、推送或部署。部署須先執行 migration，再部署程式；回滾程式時保留新增表及原始 localStorage，不刪除學習資料。
+2026-09-25 依使用者「直接用到正式網站」指示完成發布。先用 scripts/migrate-account-learning.mjs 執行交易內 dry run 並回滾，再以 --apply 套用；兩次均驗證重複執行安全，既有資料數量不變（users 2、questions 800、question_answer_stats 1、diagnostic_items 0、custom_plans 1）。
+
+功能版本 9c58e21 已推送 GitHub main，Vercel Production 部署 dpl_G8qC5uTsS3Zt2FkezmRnzm3aGoge 為 Ready，正式網址 https://vetexam-tw.vercel.app 已指向新版本。後續提交僅補上發布報告及唯讀正式驗證腳本。回滾程式時保留新增表及原始 localStorage，不刪除學習資料。
+
+tests/account-learning-production.mjs 已於正式網域通過：learning guest 回應、章節頻率、難度、公開出題、三種帳號篩選的登入限制、首頁／分析／科目／收藏／錯題五頁，360／375／390／412／1280px 無橫向溢出及瀏覽器程式錯誤。正式測試只讀取資料；登入後寫入及遷移流程已由隔離 PostgreSQL 與瀏覽器 fixtures 驗證，未在正式帳號造測試作答。
 
 ## API
 
