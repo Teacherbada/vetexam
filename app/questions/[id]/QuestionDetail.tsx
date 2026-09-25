@@ -7,6 +7,7 @@ import OptionDistribution from '@/components/questions/OptionDistribution';
 import { saveProgress } from '@/data/progress';
 import { saveWrongQuestion } from '@/data/wrongAnswers';
 import { addDailyProgress } from '@/data/tasksProgress';
+import { recordLearning } from '@/lib/learning-client';
 import styles from '../quiz.module.css';
 import searchStyles from '../search/search.module.css';
 
@@ -28,6 +29,7 @@ export default function QuestionDetail({ question, shareUrl }: { question: Publi
       if (!response.ok) throw new Error(data.error || '作答暫時無法送出，請重試。');
       setResult(data);
       if (data.available) {
+        recordLearning([{ question_id: question.id, selected_answer: letter }]);
         // Preserve existing browser progress; its failure cannot hide the server result.
         try {
           addDailyProgress(); saveProgress(question.id, data.correct, question.subject);

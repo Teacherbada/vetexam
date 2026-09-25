@@ -1,7 +1,10 @@
 "use client";
+import { reviewItems, subscribeLearning } from "@/lib/learning-client";
 
 import { useEffect, useState } from "react";
 
+
+import { sendStatistics } from '@/lib/answer-statistics-client';
 
 export default function WrongTestPage(){
 
@@ -24,14 +27,13 @@ export default function WrongTestPage(){
 
 
     const data =
-      JSON.parse(
-        localStorage.getItem("wrongQuestions") || "[]"
-      );
+      reviewItems('wrongQuestions');
 
 
     setQuestions(data);
 
 
+    return subscribeLearning(() => setQuestions(reviewItems('wrongQuestions')));
   },[]);
 
 
@@ -71,6 +73,8 @@ export default function WrongTestPage(){
 
 
   function checkAnswer(){
+    if (showResult || !selected) return;
+    void sendStatistics([{ question_id: currentQuestion.id, selected_answer: selected }]);
 
 
     setShowResult(true);

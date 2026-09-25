@@ -2,6 +2,7 @@
 import "./globals.css";
 import FeedbackLink from "@/components/FeedbackLink";
 import AdminLink from "@/components/AdminLink";
+import LearningSync from '@/components/LearningSync';
 
 export const metadata: Metadata = {
   title: "VetExam｜獸醫國考學習平台",
@@ -11,7 +12,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="zh-Hant" className="h-full antialiased">
-      <body className="min-h-full flex flex-col">{children}<AdminLink /><FeedbackLink /></body>
+      <body className="min-h-full flex flex-col"><LearningSync />{children}<AdminLink /><FeedbackLink /></body>
     </html>
   );
 }

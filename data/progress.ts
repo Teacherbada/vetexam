@@ -1,8 +1,11 @@
+import { learningOwner } from '../lib/learning-client';
 export function saveProgress(
   questionId:number,
   correct:boolean,
   subject:string
 ) {
+  if (learningOwner()) return;
+
 
 
   const oldData =

@@ -1,8 +1,10 @@
 "use client";
+import LearningStatus from "@/components/LearningStatus";
 
 import { useEffect, useState } from "react";
 import { ReviewPage, ReviewEmptyState, SubjectBadge } from "@/components/review/ReviewUI";
 import styles from "@/components/review/review.module.css";
+import { subscribeLearning } from '@/lib/learning-client';
 import { getFavorites } from "@/data/favorites";
 
 
@@ -21,12 +23,14 @@ export default function FavoritesPage(){
     );
 
 
+    return subscribeLearning(() => setFavorites(getFavorites()));
   },[]);
 
 
 
 
   return <ReviewPage title="收藏題" subtitle="集中查看你想再次複習的重要題目。" count={favorites.length}>
+    <LearningStatus />
     {favorites.length === 0 ? <ReviewEmptyState favorite /> : <div className={styles.list}>
       {favorites.map((question, index) => <article key={question.id} className={styles.card}>
         <div className={styles.meta}><SubjectBadge subject={question.subject} /><span>已收藏</span></div>

@@ -1,3 +1,4 @@
+import { recordLearning } from './learning-client';
 type Answer = { question_id: number; selected_answer: string };
 const pending = new Map<number, Promise<void>>();
 
@@ -6,7 +7,8 @@ export function waitForAnswerStatistics(questionId: number) {
 }
 
 // Preserve the existing bounded retry policy; results and navigation never wait.
-export function sendStatistics(answers: Answer[]) {
+export function sendStatistics(answers: Answer[], mode: 'practice' | 'exam' = 'practice') {
+  recordLearning(answers, mode);
   const sending = (async () => {
     for (let index = 0; index < answers.length; index += 100) {
       const body = JSON.stringify({ answers: answers.slice(index, index + 100) });

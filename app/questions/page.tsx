@@ -1,4 +1,5 @@
 "use client";
+import LearningStatus from "@/components/LearningStatus";
 
 import { Suspense, useEffect, useRef, useState } from "react";
 import SubjectsPage from "@/app/subjects/page";
@@ -13,6 +14,7 @@ import styles from "./quiz.module.css";
 import { formatExamYear } from "@/lib/exam-year";
 import OptionDistribution from "@/components/questions/OptionDistribution";
 import { sendStatistics } from "@/lib/answer-statistics-client";
+import { subscribeLearning } from '@/lib/learning-client';
 import { usableAnswer } from "@/lib/question-answer";
 
 type Question = { id: number; questionSetId: number; questionNumber: number; subject: string; question: string; options: string[]; answer: string; explanation: string; imageDataUrl?: string | null; examYear: number | null; questionSetName: string };
@@ -34,14 +36,15 @@ function QuestionsContent() {
   const [selected, setSelected] = useState("");
   const [showResult, setShowResult] = useState(false);
   const [score, setScore] = useState(0);
-  const [favorites, setFavorites] = useState<Question[]>([]);
+  const [favorites, setFavorites] = useState<ReturnType<typeof getFavorites>>([]);
   const [answered, setAnswered] = useState(false);
   const [finished, setFinished] = useState(false);
 
   useEffect(() => {
     // Hydrate the existing browser-only favorites after the initial render.
     const timer = window.setTimeout(() => setFavorites(getFavorites()), 0);
-    return () => window.clearTimeout(timer);
+    const unsubscribe = subscribeLearning(() => setFavorites(getFavorites()));
+    return () => { window.clearTimeout(timer); unsubscribe(); };
   }, []);
 
   useEffect(() => {
@@ -93,7 +96,7 @@ function QuestionsContent() {
     setScore(correct); setFinished(true);
     void sendStatistics(questions.filter((question) => finalAnswers[question.id] && usableAnswer(question)).map((question) => ({
       question_id: question.id, selected_answer: finalAnswers[question.id],
-    })));
+    })), "exam");
   }
   function chooseAnswer(letter: string) {
     if (submitted.current || (mode === "practice" && locked.current.has(currentQuestion.id))) return;
@@ -129,7 +132,7 @@ function QuestionsContent() {
   const isFavorite = favorites.some((item) => item.id === currentQuestion.id);
   const completedCount = Object.keys(answers).length;
   return <main className={styles.page}><div className={styles.container}>
-    <header className={styles.topbar}><span><StudyIcon name="paw" />VetExam <small>專心練習，一題一步</small></span><button onClick={exitQuiz} className="study-button">退出測驗</button></header>
+    <LearningStatus /><header className={styles.topbar}><span><StudyIcon name="paw" />VetExam <small>專心練習，一題一步</small></span><button onClick={exitQuiz} className="study-button">退出測驗</button></header>
     <section key={currentQuestion.id} className={styles.card} aria-label="本次練習">
       <div className={styles.meta}><span>{currentQuestion.subject}{currentQuestion.examYear ? ` · ${formatExamYear(currentQuestion.examYear)}` : ""}</span><span className={styles.tag}>{mode === "exam" ? "模擬考" : "練習"} · {order === "random" ? "隨機順序" : "原始順序"}</span></div>
       <div className={styles.progressLabel}><span>第 <strong>{currentIndex + 1}</strong> / {questions.length} 題</span><span>已完成 {completedCount} 題{mode === "practice" && " · 答對 " + score + " 題"}</span></div>

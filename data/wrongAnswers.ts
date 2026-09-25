@@ -1,7 +1,10 @@
+import { learningOwner } from '../lib/learning-client';
 export function saveWrongQuestion(
   question:any,
   userAnswer:string
 ) {
+  if (learningOwner()) return;
+
 
 
   const oldWrong =

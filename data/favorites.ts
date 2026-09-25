@@ -1,59 +1,10 @@
-export function getFavorites() {
-
-  return JSON.parse(
-    localStorage.getItem("favorites") || "[]"
-  );
-
-}
-
-
-
-export function toggleFavorite(question:any) {
-
-
+import { learningOwner, reviewItems, updateReview, optimisticFavorites } from '../lib/learning-client';
+export function getFavorites() { return reviewItems('favorites'); }
+export function toggleFavorite(question: { id: number; subject: string; question: string; options: string[]; answer: string; explanation: string }) {
   const favorites = getFavorites();
-
-
-  const exist =
-    favorites.find(
-      (item:any)=>item.id === question.id
-    );
-
-
-
-  let updated;
-
-
-
-  if(exist){
-
-
-    updated =
-      favorites.filter(
-        (item:any)=>item.id !== question.id
-      );
-
-
-  }else{
-
-
-    updated = [
-      ...favorites,
-      question
-    ];
-
-
-  }
-
-
-
-  localStorage.setItem(
-    "favorites",
-    JSON.stringify(updated)
-  );
-
-
-
+  const exists = favorites.some(item => item.id === question.id);
+  const updated = exists ? favorites.filter(item => item.id !== question.id) : [...favorites, question];
+  if (learningOwner()) { optimisticFavorites(updated); updateReview(question.id, 'favorite', !exists); }
+  else { try { localStorage.setItem('favorites', JSON.stringify(updated)); } catch { /* Browsing remains available. */ } }
   return updated;
-
 }

@@ -7,7 +7,7 @@ import nextEnv from '@next/env';
 import pg from 'pg';
 import { diagnosticTestConnectionString } from './diagnostic-database.mjs';
 function load(path,mocks={}) {
-  const exports={};new Function('require','exports',ts.transpileModule(readFileSync(new URL('../'+path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText)(name=>{if(name==='server-only')return{};if(Object.hasOwn(mocks,name))return mocks[name];throw new Error('Unexpected import '+name)},exports);return exports;
+  const exports={};new Function('require','exports',ts.transpileModule(readFileSync(new URL('../'+path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText)(name=>{if(name==='server-only')return{};if(name==='../lib/learning-client')return{learningOwner:()=>null};if(Object.hasOwn(mocks,name))return mocks[name];throw new Error('Unexpected import '+name)},exports);return exports;
 }
 const chapters=load('data/exam-chapters.ts'),followConfig=load('lib/follow-up-config.ts');
 const config=load('lib/daily-task-config.ts',{'../data/tasks':load('data/tasks.ts')});

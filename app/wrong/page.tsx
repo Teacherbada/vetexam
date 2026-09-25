@@ -1,4 +1,6 @@
 "use client";
+import LearningStatus from "@/components/LearningStatus";
+import { reviewItems, subscribeLearning, learningOwner, updateReview } from "@/lib/learning-client";
 
 import { ReviewPage, ReviewEmptyState, SubjectBadge } from "@/components/review/ReviewUI";
 import styles from "@/components/review/review.module.css";
@@ -17,14 +19,13 @@ export default function WrongPage(){
 
 
     const data =
-      JSON.parse(
-        localStorage.getItem("wrongQuestions") || "[]"
-      );
+      reviewItems('wrongQuestions');
 
 
     setWrongQuestions(data);
 
 
+    return subscribeLearning(() => setWrongQuestions(reviewItems('wrongQuestions')));
   },[]);
 
 
@@ -62,10 +63,8 @@ export default function WrongPage(){
 
 
 
-    localStorage.setItem(
-      "wrongQuestions",
-      JSON.stringify(updated)
-    );
+    if (learningOwner()) updateReview(id, 'note', note);
+    else localStorage.setItem('wrongQuestions', JSON.stringify(updated));
 
 
   }
@@ -88,10 +87,8 @@ export default function WrongPage(){
 
 
 
-    localStorage.setItem(
-      "wrongQuestions",
-      JSON.stringify(updated)
-    );
+    if (learningOwner()) updateReview(id, 'wrong', false);
+    else localStorage.setItem('wrongQuestions', JSON.stringify(updated));
 
 
   }
@@ -102,6 +99,7 @@ export default function WrongPage(){
 
 
   return <ReviewPage title="錯題本" subtitle="整理曾經答錯的題目，重新練習容易出錯的地方。" count={wrongQuestions.length} action={<a href="/wrong-test" className={styles.primary}>開始錯題複習 →</a>}>
+    <LearningStatus />
     {wrongQuestions.length === 0 ? <ReviewEmptyState /> : <div className={styles.list}>
       {wrongQuestions.map((question, index) => <article key={question.id} className={styles.card}>
         <div className={styles.meta}><SubjectBadge subject={question.subject} /></div>
