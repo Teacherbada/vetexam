@@ -85,12 +85,13 @@ export async function flushLearning(forOwner = owner) {
   try { await task; } finally { if (flushing?.task === task) flushing = null; }
 }
 export function enqueueLearning(command: Record<string, unknown>) {
-  if (!identityKnown) { earlyCommands.push(command); return; }
-  if (!owner) return;
+  if (!identityKnown) { earlyCommands.push(command); return false; }
+  if (!owner) return false;
   const key = `learningOutbox:${owner}`;
   try { localStorage.setItem(key, JSON.stringify([...localValue<Command[]>(key, []), { ...command, owner, commandId: crypto.randomUUID() }])); }
-  catch { status = 'error'; notify(); return; }
+  catch { status = 'error'; notify(); return false; }
   void flushLearning().then(() => refreshLearning());
+  return true;
 }
 export function recordLearning(answers: { question_id: number; selected_answer: string }[], mode: 'practice' | 'exam' = 'practice') {
   for (let offset = 0; offset < answers.length; offset += 100) enqueueLearning({ action: 'answers', mode, answers: answers.slice(offset, offset + 100).map(answer => ({ ...answer, event_id: crypto.randomUUID(), answered_at: new Date().toISOString() })) });

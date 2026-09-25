@@ -109,7 +109,7 @@ node scripts/migrate-question-memory.mjs --apply
 --apply 也先完成同樣 dry-run，再開新 transaction 套用及檢查後 commit；失敗 rollback，設定 lock／statement timeout。
 先 migration，再部署新版作答服務；只退回程式時可以保留 additive table。
 
-2026-09-25 已在目前 DATABASE_URL 所連接資料庫完成 dry-run rollback 及正式 apply commit。兩次皆確認：users=2、questions=800、practice_attempts=0、first_answers=1、study_plans=1、diagnostic_items=0、custom_plans=1；新 memory 表 0 筆，沒有 backfill。程式僅本機提交，未推送或部署。
+2026-09-25 已在目前 DATABASE_URL 所連接資料庫完成 dry-run rollback 及正式 apply commit。兩次皆確認：users=2、questions=800、practice_attempts=0、first_answers=1、study_plans=1、diagnostic_items=0、custom_plans=1；新 memory 表 0 筆，沒有 backfill。Phase 2 開始時重新查核：`c4f367bed28e2d6cc9879ba8e30abe3e25600a34` 已在 GitHub main；GitHub Production deployment `6659246827` 於 2026-09-25 11:02:08 UTC 回報 success，Vercel commit status 亦成功。現有 DATABASE_URL 唯讀確認 memory 表與 `(user_id,due)` 索引存在、memory／practice_attempts 均 0；未比對 Vercel Production secrets。
 
 ## Phase 2 可另行評估
 

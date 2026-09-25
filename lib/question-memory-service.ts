@@ -8,6 +8,10 @@ export type MemoryRow = Card & { question_id: number; updated_at: Date };
 export type MemorySignal = { due: string; last_review: string | null };
 type Attempt = { question_id: number; is_correct: boolean; answered_at: Date; event_id: string };
 
+export function memoryRetrievability(card: Card, now: Date) {
+  return scheduler.get_retrievability(card, new Date(Math.max(now.getTime(), card.last_review?.getTime() ?? 0)), false);
+}
+
 export function reviewMemory(previous: Card | undefined, correct: boolean, answeredAt: Date): Card {
   // Offline queues can arrive out of order. Never move the card clock backwards
   // or replay history; still count each newly accepted event exactly once.
@@ -42,7 +46,7 @@ export async function readMemory(client: PoolClient, userId: string, questionIds
     WHERE m.user_id=$1 AND m.question_id=ANY($2::integer[]) AND qs.visibility='public'`, [userId,questionIds]);
   return rows.map(card => ({ question_id:card.question_id, due:card.due.toISOString(),
     last_review:card.last_review?.toISOString() ?? null, stability:card.stability, difficulty:card.difficulty,
-    retrievability:scheduler.get_retrievability(card, new Date(Math.max(now.getTime(),card.last_review?.getTime() ?? 0)), false) }));
+    retrievability:memoryRetrievability(card, now) }));
 }
 
 // A failed SQL statement aborts PostgreSQL transactions unless rolled back to a savepoint.

@@ -15,6 +15,7 @@ export default function StudyPlanPage() {
         <p>選擇適合你的準備方式，一步一步靠近目標。</p>
       </header>
       <ModeSelector />
+      <div className="mt-6"><Link href="/review" className="study-button">到期複習 <StudyIcon name="arrow" /></Link></div>
     </main>
   </div>;
 }
