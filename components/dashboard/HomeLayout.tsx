@@ -11,7 +11,8 @@ type Id = keyof typeof widgets;
 const ids = Object.keys(widgets) as Id[];
 const storageKey = "vetexam.home.layout.v1";
 type Layout = { order: Id[]; hidden: Id[] };
-const defaults: Layout = { order: ids, hidden: [] };
+const defaultOrder: Id[] = ['countdown', 'daily-goal', 'features', 'progress', 'achievement', 'subjects', 'chapter-stats', 'weekly-most-missed'];
+const defaults: Layout = { order: defaultOrder, hidden: [] };
 function readLayout(): Layout {
   try {
     const value = JSON.parse(localStorage.getItem(storageKey) || "null");
@@ -21,8 +22,8 @@ function readLayout(): Layout {
   } catch { return defaults; }
 }
 
-export default function HomeLayout({ hero, visual, children }: {
-  hero: ReactNode; visual: ReactNode; children: Record<Id, ReactNode>;
+export default function HomeLayout({ hero, visual, introduction, children }: {
+  hero: ReactNode; visual: ReactNode; introduction: ReactNode; children: Record<Id, ReactNode>;
 }) {
   const [layout, setLayout] = useState(defaults);
   const [editing, setEditing] = useState(false);
@@ -60,7 +61,7 @@ export default function HomeLayout({ hero, visual, children }: {
   function widget(id: Id) {
     if (layout.hidden.includes(id)) return null;
     const index = visible.indexOf(id);
-    return <div key={id} data-widget={id} className={`study-widget ${editing ? "study-widget-editing" : ""} ${id === "countdown" ? "study-countdown-slot" : ""}`}
+    return <div key={id} data-home-reveal data-widget={id} className={`study-widget ${editing ? "study-widget-editing" : ""} ${id === "countdown" ? "study-countdown-slot" : ""}`}
       onDragOver={event => { if (editing && dragging) event.preventDefault(); }}
       onDrop={event => { event.preventDefault(); if (dragging && dragging !== id) move(dragging, id); setDragging(null); }}>
       <div className="study-widget-controls">
@@ -75,7 +76,7 @@ export default function HomeLayout({ hero, visual, children }: {
       {children[id]}
     </div>;
   }
-  const original = layout.order.every((id, i) => id === ids[i]) && !layout.hidden.length;
+  const original = layout.order.every((id, i) => id === defaultOrder[i]) && !layout.hidden.length;
   const anchoredCountdown = visible[0] === "countdown";
   const rest = visible.filter(id => !(anchoredCountdown && id === "countdown"));
   // Pack consecutive cards into rows; full-width sections always retain their own row.
@@ -94,12 +95,15 @@ export default function HomeLayout({ hero, visual, children }: {
       <button className="study-text-link" type="button" onClick={() => { save(defaults); setNotice(null); }}>恢復預設版面</button>
     </section>}
     {notice && <div className="study-layout-notice" role="status">已隱藏「{widgets[notice]}」<button className="study-text-link" type="button" onClick={() => restore(notice)}>復原</button></div>}
-    <div className={`study-welcome ${anchoredCountdown ? "" : "study-welcome-without-countdown"}`}>{hero}{visual}{anchoredCountdown && widget("countdown")}</div>
+    <div className={`study-welcome ${anchoredCountdown ? "" : "study-welcome-without-countdown"}`}>{hero}<div className="study-hero-status-group">{visual}{anchoredCountdown && widget("countdown")}</div></div>
+    {introduction}
     {original ? <>
+      {widget("daily-goal")}
       {widget("features")}
-      <div className="study-insights-grid">{widget("weekly-most-missed")}{widget("progress")}</div>
+      <div className="study-insights-grid">{widget("progress")}{widget("achievement")}</div>
       {widget("subjects")}
-      <div className="study-planning-grid">{widget("chapter-stats")}<div className="study-side-cards">{widget("daily-goal")}{widget("achievement")}</div></div>
+      {widget("chapter-stats")}
+      {widget("weekly-most-missed")}
     </> : rows.map(row => <div className={`study-widget-row ${row.length === 1 ? "study-widget-row-single" : ""}`} key={row.join(":")}>{row.map(widget)}</div>)}
   </>;
 }

@@ -16,6 +16,8 @@ import PolicyLinks from "@/components/policies/PolicyLinks";
 import { useHomeAvailability } from "@/components/dashboard/useHomeAvailability";
 import HomeChapterStats from "@/components/dashboard/HomeChapterStats";
 import HomeLayout from "@/components/dashboard/HomeLayout";
+import HomeJourney from "@/components/dashboard/HomeJourney";
+import useHomeMotion from "@/components/dashboard/useHomeMotion";
 import WeeklyMostMissed from "@/components/dashboard/WeeklyMostMissed";
 
 export default function Home() {
@@ -29,6 +31,7 @@ export default function Home() {
   const progress = learningOwner() ? account?.progress ?? {} : localProgress;
   const todayProgress = learningOwner() ? getTodayProgress().completed : localTodayProgress;
   const isLoadingProgress = isLoadingLocalProgress || syncStatus === 'loading';
+  const motionRoot = useHomeMotion(!isLoadingProgress);
   const [examDate, setExamDate] = useState("2027-07-31");
 
   const [user, setUser] = useState<{ name?: string; email: string } | null>(null);
@@ -182,13 +185,20 @@ export default function Home() {
           </div>
         </div>
       </header>
-      <main id="main-content" className="study-content" tabIndex={-1}>
-        <HomeLayout hero={<section className="study-hero">
+      <main ref={motionRoot} id="main-content" className="study-content" tabIndex={-1}>
+        <HomeLayout introduction={<HomeJourney />} hero={<section className="study-hero">
             <p className="study-eyebrow">一起，向獸醫之路前進 <StudyIcon name="paw" /></p>
             <h1>今天也刷一點吧</h1>
             <p className="study-hero-description">每一題的累積，都是成為更好獸醫的力量。</p>
             <Link href="/subjects" className="study-button study-button-primary study-welcome-action">開始刷題<StudyIcon name="arrow" /></Link>
-          </section>} visual={<div className="study-hero-visual"><p>Small progress.<br />A little closer, every day.</p><StudyCompanions /></div>}>
+          </section>} visual={<section className={styles.heroStatus} aria-labelledby="home-status-title">
+            <div className={styles.statusHeading}><div><p className={styles.kicker}>{learningOwner() ? '帳號紀錄' : '本裝置紀錄'}</p><h2 id="home-status-title">今日學習狀態</h2></div><div className={styles.companions}><StudyCompanions /></div></div>
+            {isLoadingProgress ? <p role="status" className={styles.statusMessage}>讀取學習進度中…</p> : syncStatus === 'error' ? <p className={styles.statusMessage}>學習紀錄暫時無法更新。</p> : completed ? <>
+              <p className={styles.todayCount}><strong>{todayProgress}</strong><span> / {dailyGoal.target} 題</span></p>
+              <ProgressBar value={todayProgress / dailyGoal.target * 100} label="今日學習完成百分比" />
+              <div className={styles.statusFooter}><span>今天已完成</span><Link href="/analysis" className="study-text-link">查看學習紀錄<StudyIcon name="arrow" /></Link></div>
+            </> : <div className={styles.statusMessage}><h3>你的第一步，從這裡開始</h3><p>完成練習後，就能看見累積成果。</p><p className={styles.firstGoal}>今日目標 {dailyGoal.target} 題，照自己的步調開始。</p></div>}
+          </section>}>
           {{
             "countdown": (<section className="study-card study-countdown"><h2><StudyIcon name="calendar" />國考倒數</h2><p className="study-days">{daysLeft}<span>天</span></p><label htmlFor="exam-date">我的目標考試日期</label><input id="exam-date" type="date" value={examDate} onChange={(event) => { if (event.target.value) { setExamDate(event.target.value); localStorage.setItem("examDate", event.target.value); } }} /><p className="study-muted">照自己的步調，準備每一天。</p></section>),
             "features": (<section className="study-card study-features" aria-labelledby="features-title">
@@ -201,7 +211,7 @@ export default function Home() {
             { href: "/favorites", icon: "heart", title: "收藏題", description: "把重要題目留下來反覆複習" },
             { href: "/analysis", icon: "chart", title: "弱點分析", description: "了解各科表現，找出需要加強的部分" },
             { href: "/most-missed", icon: "target", title: "本週熱門錯題", description: "看看其他考生最常答錯的題目" },
-          ] satisfies { href: string; icon: StudyIconName; title: string; description: string }[]).map(({ href, icon, title, description }, index) => <Link href={href} key={href} className={"study-feature study-feature-" + index}><span className="study-feature-icon"><StudyIcon name={icon} /></span><h3>{title}</h3><p>{description}</p></Link>)}</div>
+          ] satisfies { href: string; icon: StudyIconName; title: string; description: string }[]).map(({ href, icon, title, description }, index) => <Link href={href} key={href} className={"study-feature study-feature-" + index}><span className="study-feature-icon"><StudyIcon name={icon} /></span><h3>{title}</h3><p>{description}</p><span className={styles.featureArrow} aria-hidden="true"><StudyIcon name="arrow" /></span></Link>)}</div>
         </section>),
             "weekly-most-missed": (<WeeklyMostMissed variant="homepage" loading={<LoadingState label="正在整理本週錯題…" />} />),
             "progress": (<section className="study-card study-records" aria-labelledby="records-title">
