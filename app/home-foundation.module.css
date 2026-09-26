@@ -12,7 +12,6 @@
 .home.home :global(.study-section-heading) h2 { min-width: 0; }
 .home.home :global(.study-widget-row) { gap: var(--ui-grid-gap); }
 .home.home :global(.study-widget-controls) button { min-width: 44px; min-height: 44px; border-radius: var(--ui-radius-button); }
-.home.home :global(.study-widget-editing) { padding-top: 48px; }
 .home.home :global(.study-layout-toolbar) { margin-bottom: 0; }
 .home.home :global(.study-layout-notice) { position: static; flex-wrap: wrap; border-radius: var(--ui-radius-card); }
 .home.home :global(.study-eyebrow) { font: 600 var(--ui-secondary)/1.6 var(--study-font); letter-spacing: .03em; }
@@ -91,13 +90,6 @@
 .todayCount strong { font-size: 36px; line-height: 1.2; font-weight: 650; }
 .todayCount span,.statusFooter { font-size: var(--ui-secondary); color: var(--text-secondary); }
 .statusFooter { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: 8px 16px; margin-top: 8px; }
-.home.home :global(.study-hero-status-group) :global(.study-countdown) { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 8px 16px; padding: 20px 0 0; margin-top: 16px; border: 0; border-top: 1px solid var(--ui-border); border-radius: 0; background: transparent; box-shadow: none; }
-.home.home :global(.study-hero-status-group) :global(.study-countdown) h2 { font-size: var(--ui-card-title); }
-.home.home :global(.study-hero-status-group) :global(.study-days) { font-size: 32px; margin: 0 28px 0 0; line-height: 1.25; }
-.home.home :global(.study-hero-status-group) :global(.study-days) span { font-size: var(--ui-secondary); }
-.home.home :global(.study-hero-status-group) :global(.study-countdown) :is(label,input,p:last-child) { grid-column: 1 / -1; margin: 0; }
-.home.home :global(.study-hero-status-group) :global(.study-widget-controls) { top: 8px; right: -12px; }
-.home.home :global(.study-hero-status-group) :global(.study-widget-editing) :global(.study-widget-controls) { top: 0; }
 .journey { padding-block: var(--ui-section-gap); border-block: 1px solid var(--ui-border); }
 .steps { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 32px; list-style: none; margin: 28px 0; padding: 0; }
 .steps li { position: relative; min-width: 0; }
@@ -138,7 +130,7 @@
   .home.home :global(.study-goal-content) { display: flex; flex-direction: column; align-items: stretch; gap: 12px; }
   .home.home :global(.study-goal-action) { flex-wrap: wrap; gap: 12px; }
 }
-@media(max-width:429px) { .home.home .featureArrow { grid-column: 2; margin: 0; } .home.home :global(.study-hero-status-group) :global(.study-countdown) { gap: 12px 8px; } .home.home :global(.study-hero-status-group) :global(.study-days) { font-size: 28px; } }
+@media(max-width:429px) { .home.home .featureArrow { grid-column: 2; margin: 0; } }
 /* Visible without JavaScript, unsupported observers, or reduced motion. */
 @media(prefers-reduced-motion:no-preference) {
   .home [data-home-reveal][data-home-motion="pending"] { opacity: 0; transform: translateY(12px); }
@@ -157,3 +149,17 @@
 }
 @keyframes homeReveal { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes homeProgress { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+/* Layout-only sizing for the independent countdown and compatible summary pair. */
+.home.home :global(.study-widget-content) > :global(.study-countdown) { display: grid; grid-template-columns: minmax(0,1fr) minmax(220px,1fr); column-gap: 32px; align-items: center; }
+.home.home :global(.study-countdown) h2 { grid-column: 1; grid-row: 1; }
+.home.home :global(.study-countdown) :global(.study-days) { grid-column: 1; grid-row: 2 / 4; font-size: 44px; margin-block: 8px 0; }
+.home.home :global(.study-countdown) label { grid-column: 2; grid-row: 1; }
+.home.home :global(.study-countdown) input { grid-column: 2; grid-row: 2; border-radius: var(--ui-radius-input); }
+.home.home :global(.study-countdown) > p:last-child { grid-column: 2; grid-row: 3; }
+.home.home :global([data-span="half"]) :global(.study-goal-content) { display: flex; flex-direction: column; align-items: stretch; gap: 16px; }
+.home.home :global([data-span="half"]) :global(.study-goal-action) { flex-wrap: wrap; }
+@media(max-width:767px) {
+ .home.home :global(.study-widget-content) > :global(.study-countdown) { display: block; }
+ .home.home :global(.study-countdown) :global(.study-days) { margin-block: 12px; }
+}

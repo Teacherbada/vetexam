@@ -7,7 +7,7 @@ const out=`.tmp/home-experience/${phase}`;mkdirSync(out,{recursive:true});
 const widths=[320,375,430,768,1024,1280,1440,1920];
 const subjects=['獸醫病理學','獸醫藥理學','獸醫實驗診斷學','獸醫普通疾病學','獸醫傳染病學','獸醫公共衛生學'];
 const oldOrder=['countdown','features','weekly-most-missed','progress','subjects','chapter-stats','daily-goal','achievement'];
-const newOrder=['countdown','daily-goal','features','progress','achievement','subjects','chapter-stats','weekly-most-missed'];
+const newOrder=['countdown','daily-goal','progress','features','subjects','chapter-stats','weekly-most-missed','achievement'];
 const progress={[subjects[0]]:{answered:[1,2,3,4,5,6,7,8,9,10],correct:8,wrong:2}};
 const question={id:901,questionSetId:1,questionNumber:1,subject:subjects[0],question:'有關獸醫病理學的敘述，何者正確？',options:['甲','乙','丙','丁'],answer:'A',explanation:'這是介面測試用解析。',examYear:2026,questionSetName:'UI fixture'};
 const browser=await chromium.launch({channel:'msedge',headless:true});const errors=[],requests={};
@@ -29,6 +29,7 @@ async function setup({role='guest',existing=false,saved=null,reduced=false,noObs
  await page.route('**/api/**',r=>{const url=new URL(r.request().url()),path=url.pathname;requests[path]=(requests[path]||0)+1;
   let json={};
   if(path==='/api/auth/get-session')json=role==='guest'?null:{user:{id:role,name:'測試帳號',email:'fixture@example.test'},session:{id:'fixture',userId:role}};
+  else if(path==='/api/learning/summary'){if(fail)return r.fulfill({status:503,json:{error:'fixture'}});json={owner:role,progress:existing?{[subjects[0]]:{completed:10,correct:8,wrong:2}}:{},todayCompleted:existing?7:0,todayDate:new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei'}).format(new Date())};}
   else if(path==='/api/learning'){if(fail)return r.fulfill({status:503,json:{error:'fixture'}});json={owner:role,progress:existing?progress:{},history:existing?Array.from({length:7},(_,i)=>({question_id:i+1,subject:subjects[0],chapter:'腫瘤',is_correct:i<5,answered_at:new Date().toISOString(),mode:'practice'})):[],favorites:[],wrongQuestions:[],legacy:[]};}
   else if(path==='/api/admin/status')json={isAdmin:role==='admin'};
   else if(path==='/api/quiz')json=url.searchParams.has('settings')?{availability:subjects.map(subject=>({subject,year:2026,count:40})),chapterAvailability:[{subject:subjects[0],year:2026,chapter:'腫瘤',count:20}]}:{questions:[question]};
