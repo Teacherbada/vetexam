@@ -45,6 +45,10 @@ function quiz(execute) {
     '@neondatabase/serverless': { neon: () => sql },
     '@/lib/auth': { auth: { api: { getSession: async () => null } } },
     '@/data/exam-chapters': chapters,
+    '@/lib/home-public-data': load('lib/home-public-data.ts', {
+      'server-only': {}, 'next/cache': { unstable_cache: fn => fn },
+      '@neondatabase/serverless': { neon: () => sql }, './question-stats': {},
+    }),
   });
 }
 function request(groups, extra = {}) {
@@ -102,8 +106,8 @@ test('quiz rejects invalid chapters; old groups and single-question links stay v
     assert(queries.at(-1).text.includes("qs.visibility = 'public'"));
     assert.equal((await route.GET(request([], { questionId: '1' }))).status, 200);
     assert(!queries.at(-1).text.includes('q.chapter'));
-    await route.GET(request([], { settings: '1' }));
-    assert(!queries.at(-1).text.includes('q.chapter'));
+    const settings = await route.GET(request([], { settings: '1' }));
+    assert.equal((await settings.json()).chapterAvailability, undefined);
   } finally { if (old === undefined) delete process.env.DATABASE_URL; else process.env.DATABASE_URL = old; }
 });
 

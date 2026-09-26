@@ -124,3 +124,21 @@ export async function weeklyMostMissed(query: Query) {
     LIMIT 1
   `, [MIN_ATTEMPTS]);
 }
+
+export const RANDOM_PUBLIC_CHALLENGE_SQL = `
+  SELECT q.id AS question_id, q.question_number, qs.exam_year,
+    q.subject AS exam_subject, q.question
+  FROM questions q JOIN question_sets qs ON qs.id=q.question_set_id
+  WHERE qs.visibility='public' AND qs.exam_year IS NOT NULL
+    AND NULLIF(BTRIM(q.question),'') IS NOT NULL
+    AND UPPER(BTRIM(q.answer)) ~ '^[A-E]$'
+    AND NULLIF(BTRIM(CASE UPPER(BTRIM(q.answer))
+      WHEN 'A' THEN q.option_a WHEN 'B' THEN q.option_b WHEN 'C' THEN q.option_c
+      WHEN 'D' THEN q.option_d WHEN 'E' THEN q.option_e END),'') IS NOT NULL
+    AND (SELECT COUNT(*) FROM (VALUES(q.option_a),(q.option_b),(q.option_c),(q.option_d),(q.option_e)) AS options(content)
+      WHERE NULLIF(BTRIM(content),'') IS NOT NULL) >= 2
+  ORDER BY RANDOM() LIMIT 1
+`;
+export async function randomPublicChallenge(query: Query) {
+  return query(RANDOM_PUBLIC_CHALLENGE_SQL, []);
+}

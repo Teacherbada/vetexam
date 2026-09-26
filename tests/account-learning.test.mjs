@@ -154,6 +154,7 @@ test('PostgreSQL: additive migration, retries, repeated attempts, shared first a
       '@/lib/auth':{auth:{api:{getSession:async()=>quizOwner?{user:{id:quizOwner}}:null}}},
       '@/data/exam-chapters':load('data/exam-chapters.ts'),'@/lib/question-state':load('lib/question-state.ts'),
       '@/lib/question-transaction':{questionTransaction:async fn=>fn(db)},'@/lib/learning-service':service,
+      '@/lib/home-public-data': {},
     });
     const quizRequest=state=>new Request('https://test.local/api/quiz?'+new URLSearchParams({scope:'public',groups:JSON.stringify([{subject:'subject',years:[],count:'all'}]),state}));
     for(const [state,total] of [['all',1],['unanswered',0],['wrong',1],['favorites',1]]){

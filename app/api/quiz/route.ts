@@ -5,6 +5,7 @@ import { validChapter } from "@/data/exam-chapters";
 import { QUESTION_STATES, stateSelection, type QuestionState } from '@/lib/question-state';
 import { questionTransaction } from '@/lib/question-transaction';
 import { readQuestionState } from '@/lib/learning-service';
+import { readPublicAvailability } from '@/lib/home-public-data';
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,19 +24,8 @@ export async function GET(request: Request) {
     if (searchParams.get("scope") === "public") {
       const sql = neon(databaseUrl);
       if (searchParams.get("settings") === "1") {
-        const availability = await sql`
-          SELECT q.subject, qs.exam_year AS year, COUNT(*)::int AS count
-          FROM questions q JOIN question_sets qs ON qs.id = q.question_set_id
-          WHERE qs.visibility = 'public'
-          GROUP BY q.subject, qs.exam_year ORDER BY qs.exam_year DESC NULLS LAST
-        `;
+        const { availability, chapterAvailability } = await readPublicAvailability();
         if (searchParams.get("chapters") === "1") {
-          const chapterAvailability = await sql`
-            SELECT q.subject, qs.exam_year AS year, q.chapter, COUNT(*)::int AS count
-            FROM questions q JOIN question_sets qs ON qs.id = q.question_set_id
-            WHERE qs.visibility = 'public' AND q.chapter IS NOT NULL
-            GROUP BY q.subject, qs.exam_year, q.chapter
-          `;
           return NextResponse.json({ availability, chapterAvailability });
         }
         return NextResponse.json({ availability });
@@ -90,7 +80,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ questions: unique.map((q) => ({
         id: Number(q.id), questionSetId: Number(q.question_set_id), questionNumber: Number(q.question_number),
         subject: q.subject ?? "", question: q.question ?? "",
-        options: [q.option_a ?? "", q.option_b ?? "", q.option_c ?? "", q.option_d ?? ""],
+        options: [q.option_a ?? "", q.option_b ?? "", q.option_c ?? "", q.option_d ?? "", ...(questionId !== null && q.option_e?.trim() ? [q.option_e] : [])],
         answer: q.answer ?? "", explanation: q.explanation ?? "",
         imageDataUrl: q.image_data_url ?? null,
         examYear: q.exam_year == null ? null : Number(q.exam_year), questionSetName: q.question_set_name ?? "",

@@ -103,7 +103,8 @@ test('PostgreSQL: only chapter changes; all/NULL/classified queues and existing 
       return Response.json({ fields: result.fields.map(f => ({ name: f.name, dataTypeID: f.dataTypeID })), rows: result.rows.map(row => row.map(v => v === null ? null : String(v))), command: result.command, rowCount: result.rowCount });
     };
     const sql = neon('postgresql://fixture:fixture@fixture.invalid/fixture');
-    const quiz = load('app/api/quiz/route.ts', { 'next/server': { NextResponse: { json: (body, init) => Response.json(body, init) } }, '@neondatabase/serverless': { neon: () => sql }, '@/lib/auth': { auth: { api: { getSession: async () => null } } }, '@/data/exam-chapters': taxonomy });
+    const publicData = load('lib/home-public-data.ts', { 'next/cache': { unstable_cache: fn => fn }, '@neondatabase/serverless': { neon: () => sql }, './question-stats': {} });
+    const quiz = load('app/api/quiz/route.ts', { 'next/server': { NextResponse: { json: (body, init) => Response.json(body, init) } }, '@neondatabase/serverless': { neon: () => sql }, '@/lib/auth': { auth: { api: { getSession: async () => null } } }, '@/data/exam-chapters': taxonomy, '@/lib/home-public-data': publicData });
     const runQuiz = async params => { const response = await quiz.GET(new Request('https://test.local/api/quiz?' + new URLSearchParams({ scope: 'public', ...params }))); assert.equal(response.status, 200); return response.json(); };
     const groups = chapter => JSON.stringify([{ subject: '獸醫病理學', years: [], count: 'all', ...(chapter ? { chapter } : {}) }]);
     try {

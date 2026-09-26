@@ -1,6 +1,33 @@
 export type Review = { id: number; subject: string; question: string; options: string[]; answer: string; explanation: string; note?: string; userAnswer?: string };
 export type History = { question_id: number; subject: string; chapter: string | null; is_correct: boolean; answered_at: string; mode: string };
 export type Learning = { owner: string | null; progress: Record<string, { answered: number[]; correct: number; wrong: number }>; favorites: Review[]; wrongQuestions: Review[]; history: History[]; legacy: Record<string, unknown>[] };
+export type LearningSummary = { owner: string; progress: Record<string, { completed: number; correct: number; wrong: number }>; todayCompleted: number; todayDate: string };
+let summary: LearningSummary | null = null;
+let summaryStatus = 'loading';
+let summaryVersion = 0;
+export const getLearningSummary = () => summary;
+export const getSummaryStatus = () => summaryStatus;
+const taiwanDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei' });
+const todayKey = () => taiwanDate.format(new Date());
+function validSummary(value: LearningSummary | null, id: string): value is LearningSummary {
+  return !!value && value.owner === id && value.todayDate === todayKey() && Number.isSafeInteger(value.todayCompleted) && value.todayCompleted >= 0 && !!value.progress && typeof value.progress === 'object' && !Array.isArray(value.progress) && Object.values(value.progress).every(row => row && [row.completed,row.correct,row.wrong].every(n => Number.isSafeInteger(n) && n >= 0) && row.completed === row.correct + row.wrong);
+}
+function saveSummary(value: LearningSummary) {
+  summary = value; summaryStatus = 'ready'; summaryVersion++;
+  try { localStorage.setItem(`learningSummary:v1:${value.owner}`, JSON.stringify(value)); } catch { /* Storage is optional; in-memory data remains usable. */ }
+}
+async function refreshSummary(token: number) {
+  const id = owner, version = summaryVersion;
+  if (!id) return;
+  try {
+    const res = await fetch('/api/learning/summary', { cache: 'no-store', signal: AbortSignal.timeout(10000) });
+    if (!res.ok) throw new Error('unavailable');
+    const value = await res.json();
+    if (token !== generation || owner !== id || version !== summaryVersion) return;
+    if (!validSummary(value, id)) throw new Error('invalid summary');
+    saveSummary(value); notify();
+  } catch { if (token === generation && version === summaryVersion) { summaryStatus = 'error'; notify(); } }
+}
 let owner: string | null = null;
 let snapshot: Learning | null = null;
 let status = 'loading';
@@ -22,9 +49,13 @@ async function post(body: Record<string, unknown>) {
 }
 let generation = 0;
 export async function setLearningOwner(next: string | null) {
-  owner = next; snapshot = null; status = 'loading'; identityKnown = true; migrationFailed = false; const token = ++generation; notify();
+  owner = next; snapshot = null; status = 'loading'; identityKnown = true; migrationFailed = false; const token = ++generation;
+  summaryVersion++; summary = null; summaryStatus = next ? 'loading' : 'guest';
+  if (next) { const cached = localValue<LearningSummary | null>(`learningSummary:v1:${next}`, null); if (validSummary(cached, next)) { summary = cached; summaryStatus = 'ready'; } }
+  notify();
   const early = earlyCommands; earlyCommands = [];
   if (!next) { status = 'guest'; notify(); return; }
+  void refreshSummary(token);
   for (const command of early) enqueueLearning(command);
   await migrateLearning(next);
   if (token !== generation) return;
@@ -57,7 +88,11 @@ export async function refreshLearning(token = generation) {
     if (!res.ok) throw new Error('unavailable');
     const data = await res.json();
     if (token !== generation || data.owner !== owner) return;
-    snapshot = data; status = migrationFailed || localValue<Command[]>(`learningOutbox:${owner}`, []).length ? 'error' : 'ready'; notify();
+    snapshot = data;
+    const date = todayKey();
+    saveSummary({ owner: owner!, progress: Object.fromEntries(Object.entries((data as Learning).progress).map(([subject,row]) => [subject, { completed: row.answered.length, correct: row.correct, wrong: row.wrong }])), todayDate: date,
+      todayCompleted: (data as Learning).history.filter(row => taiwanDate.format(new Date(row.answered_at)) === date).length });
+    status = migrationFailed || localValue<Command[]>(`learningOutbox:${owner}`, []).length ? 'error' : 'ready'; notify();
   } catch { if (token === generation) { status = 'error'; notify(); } }
 }
 type Command = Record<string, unknown> & { owner: string; commandId: string };

@@ -1,0 +1,3098 @@
+{
+  "baseline": "3f2c53398dd78ed4749a7ba308721f1ee3a77ee4",
+  "recordedAt": "2026-09-26T00:22:51.726Z",
+  "before-server": {
+    "phase": "before",
+    "endpoints": [
+      {
+        "path": "/api/auth/get-session",
+        "run": 0,
+        "status": 200,
+        "ms": 1484,
+        "bytes": 4
+      },
+      {
+        "path": "/api/auth/get-session",
+        "run": 1,
+        "status": 200,
+        "ms": 296,
+        "bytes": 4
+      },
+      {
+        "path": "/api/auth/get-session",
+        "run": 2,
+        "status": 200,
+        "ms": 289,
+        "bytes": 4
+      },
+      {
+        "path": "/api/learning",
+        "run": 0,
+        "status": 200,
+        "ms": 278,
+        "bytes": 14
+      },
+      {
+        "path": "/api/learning",
+        "run": 1,
+        "status": 200,
+        "ms": 256,
+        "bytes": 14
+      },
+      {
+        "path": "/api/learning",
+        "run": 2,
+        "status": 200,
+        "ms": 261,
+        "bytes": 14
+      },
+      {
+        "path": "/api/quiz?scope=public&settings=1&chapters=1",
+        "run": 0,
+        "status": 200,
+        "ms": 2834,
+        "bytes": 962
+      },
+      {
+        "path": "/api/quiz?scope=public&settings=1&chapters=1",
+        "run": 1,
+        "status": 200,
+        "ms": 746,
+        "bytes": 962
+      },
+      {
+        "path": "/api/quiz?scope=public&settings=1&chapters=1",
+        "run": 2,
+        "status": 200,
+        "ms": 727,
+        "bytes": 962
+      },
+      {
+        "path": "/api/stats/weekly-most-missed",
+        "run": 0,
+        "status": 200,
+        "ms": 527,
+        "bytes": 35
+      },
+      {
+        "path": "/api/stats/weekly-most-missed",
+        "run": 1,
+        "status": 200,
+        "ms": 505,
+        "bytes": 35
+      },
+      {
+        "path": "/api/stats/weekly-most-missed",
+        "run": 2,
+        "status": 200,
+        "ms": 492,
+        "bytes": 35
+      },
+      {
+        "path": "/api/admin/status",
+        "run": 0,
+        "status": 401,
+        "ms": 309,
+        "bytes": 39
+      },
+      {
+        "path": "/api/admin/status",
+        "run": 1,
+        "status": 401,
+        "ms": 354,
+        "bytes": 39
+      },
+      {
+        "path": "/api/admin/status",
+        "run": 2,
+        "status": 401,
+        "ms": 278,
+        "bytes": 39
+      }
+    ],
+    "queries": [
+      {
+        "ms": 107,
+        "rows": 24,
+        "sql": "SELECT s.question_id, q.subject, s.is_correct FROM question_answer_stats s\n    JOIN questions q ON q.id=s.question_id WHERE s.user_id=$1",
+        "plan": [
+          {
+            "QUERY PLAN": [
+              {
+                "Plan": {
+                  "Node Type": "Nested Loop",
+                  "Parallel Aware": false,
+                  "Async Capable": false,
+                  "Join Type": "Inner",
+                  "Startup Cost": 4.45,
+                  "Total Cost": 36.18,
+                  "Plan Rows": 3,
+                  "Plan Width": 23,
+                  "Disabled": false,
+                  "Inner Unique": true,
+                  "Plans": [
+                    {
+                      "Node Type": "Bitmap Heap Scan",
+                      "Parent Relationship": "Outer",
+                      "Parallel Aware": false,
+                      "Async Capable": false,
+                      "Relation Name": "question_answer_stats",
+                      "Alias": "s",
+                      "Startup Cost": 4.17,
+                      "Total Cost": 11.28,
+                      "Plan Rows": 3,
+                      "Plan Width": 5,
+                      "Disabled": false,
+                      "Recheck Cond": "(user_id = '[account]'::text)",
+                      "Plans": [
+                        {
+                          "Node Type": "Bitmap Index Scan",
+                          "Parent Relationship": "Outer",
+                          "Parallel Aware": false,
+                          "Async Capable": false,
+                          "Index Name": "question_answer_stats_user_question_key",
+                          "Startup Cost": 0,
+                          "Total Cost": 4.17,
+                          "Plan Rows": 3,
+                          "Plan Width": 0,
+                          "Disabled": false,
+                          "Index Cond": "(user_id = '[account]'::text)"
+                        }
+                      ]
+                    },
+                    {
+                      "Node Type": "Index Scan",
+                      "Parent Relationship": "Inner",
+                      "Parallel Aware": false,
+                      "Async Capable": false,
+                      "Scan Direction": "Forward",
+                      "Index Name": "questions_pkey",
+                      "Relation Name": "questions",
+                      "Alias": "q",
+                      "Startup Cost": 0.28,
+                      "Total Cost": 8.29,
+                      "Plan Rows": 1,
+                      "Plan Width": 22,
+                      "Disabled": false,
+                      "Index Cond": "(id = s.question_id)"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "ms": 125,
+        "rows": 23,
+        "sql": "SELECT * FROM (\n  SELECT p.question_id, q.subject, q.chapter, p.selected_answer, p.is_correct, p.answered_at, p.mode\n  FROM practice_attempts p JOIN questions q ON q.id=p.question_id WHERE p.user_id=$1\n  UNION ALL\n  SELECT i.source_question_id, i.subject, i.chapter, i.selected_answer, i.is_correct, i.answered_at, d.kind\n  FROM diagnostic_items i JOIN diagnostic_sessions d ON d.id=i.session_id\n  WHERE d.user_id=$1 AND i.answered_at IS NOT NULL) h ORDER BY answered_at, question_id",
+        "plan": [
+          {
+            "QUERY PLAN": [
+              {
+                "Plan": {
+                  "Node Type": "Sort",
+                  "Parallel Aware": false,
+                  "Async Capable": false,
+                  "Startup Cost": 59.31,
+                  "Total Cost": 59.32,
+                  "Plan Rows": 4,
+                  "Plan Width": 134,
+                  "Disabled": false,
+                  "Sort Key": [
+                    "p.answered_at",
+                    "p.question_id"
+                  ],
+                  "Plans": [
+                    {
+                      "Node Type": "Append",
+                      "Parent Relationship": "Outer",
+                      "Parallel Aware": false,
+                      "Async Capable": false,
+                      "Startup Cost": 4.45,
+                      "Total Cost": 59.27,
+                      "Plan Rows": 4,
+                      "Plan Width": 134,
+                      "Disabled": false,
+                      "Subplans Removed": 0,
+                      "Plans": [
+                        {
+                          "Node Type": "Nested Loop",
+                          "Parent Relationship": "Member",
+                          "Parallel Aware": false,
+                          "Async Capable": false,
+                          "Join Type": "Inner",
+                          "Startup Cost": 4.45,
+                          "Total Cost": 36.18,
+                          "Plan Rows": 3,
+                          "Plan Width": 132,
+                          "Disabled": false,
+                          "Inner Unique": true,
+                          "Plans": [
+                            {
+                              "Node Type": "Bitmap Heap Scan",
+                              "Parent Relationship": "Outer",
+                              "Parallel Aware": false,
+                              "Async Capable": false,
+                              "Relation Name": "practice_attempts",
+                              "Alias": "p",
+                              "Startup Cost": 4.17,
+                              "Total Cost": 11.28,
+                              "Plan Rows": 3,
+                              "Plan Width": 77,
+                              "Disabled": false,
+                              "Recheck Cond": "(user_id = '[account]'::text)",
+                              "Plans": [
+                                {
+                                  "Node Type": "Bitmap Index Scan",
+                                  "Parent Relationship": "Outer",
+                                  "Parallel Aware": false,
+                                  "Async Capable": false,
+                                  "Index Name": "practice_attempts_history_idx",
+                                  "Startup Cost": 0,
+                                  "Total Cost": 4.17,
+                                  "Plan Rows": 3,
+                                  "Plan Width": 0,
+                                  "Disabled": false,
+                                  "Index Cond": "(user_id = '[account]'::text)"
+                                }
+                              ]
+                            },
+                            {
+                              "Node Type": "Index Scan",
+                              "Parent Relationship": "Inner",
+                              "Parallel Aware": false,
+                              "Async Capable": false,
+                              "Scan Direction": "Forward",
+                              "Index Name": "questions_pkey",
+                              "Relation Name": "questions",
+                              "Alias": "q",
+                              "Startup Cost": 0.28,
+                              "Total Cost": 8.29,
+                              "Plan Rows": 1,
+                              "Plan Width": 59,
+                              "Disabled": false,
+                              "Index Cond": "(id = p.question_id)"
+                            }
+                          ]
+                        },
+                        {
+                          "Node Type": "Hash Join",
+                          "Parent Relationship": "Member",
+                          "Parallel Aware": false,
+                          "Async Capable": false,
+                          "Join Type": "Inner",
+                          "Startup Cost": 9.53,
+                          "Total Cost": 23.07,
+                          "Plan Rows": 1,
+                          "Plan Width": 141,
+                          "Disabled": false,
+                          "Inner Unique": true,
+                          "Hash Cond": "(i.session_id = d.id)",
+                          "Plans": [
+                            {
+                              "Node Type": "Seq Scan",
+                              "Parent Relationship": "Outer",
+                              "Parallel Aware": false,
+                              "Async Capable": false,
+                              "Relation Name": "diagnostic_items",
+                              "Alias": "i",
+                              "Startup Cost": 0,
+                              "Total Cost": 12.8,
+                              "Plan Rows": 279,
+                              "Plan Width": 125,
+                              "Disabled": false,
+                              "Filter": "(answered_at IS NOT NULL)"
+                            },
+                            {
+                              "Node Type": "Hash",
+                              "Parent Relationship": "Inner",
+                              "Parallel Aware": false,
+                              "Async Capable": false,
+                              "Startup Cost": 9.5,
+                              "Total Cost": 9.5,
+                              "Plan Rows": 2,
+                              "Plan Width": 48,
+                              "Disabled": false,
+                              "Plans": [
+                                {
+                                  "Node Type": "Bitmap Heap Scan",
+                                  "Parent Relationship": "Outer",
+                                  "Parallel Aware": false,
+                                  "Async Capable": false,
+                                  "Relation Name": "diagnostic_sessions",
+                                  "Alias": "d",
+                                  "Startup Cost": 4.16,
+                                  "Total Cost": 9.5,
+                                  "Plan Rows": 2,
+                                  "Plan Width": 48,
+                                  "Disabled": false,
+                                  "Recheck Cond": "(user_id = '[account]'::text)",
+                                  "Plans": [
+                                    {
+                                      "Node Type": "Bitmap Index Scan",
+                                      "Parent Relationship": "Outer",
+                                      "Parallel Aware": false,
+                                      "Async Capable": false,
+                                      "Index Name": "diagnostic_sessions_user_kind_idx",
+                                      "Startup Cost": 0,
+                                      "Total Cost": 4.16,
+                                      "Plan Rows": 2,
+                                      "Plan Width": 0,
+                                      "Disabled": false,
+                                      "Index Cond": "(user_id = '[account]'::text)"
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "ms": 238,
+        "rows": 46,
+        "sql": "WITH wrong AS (\n    SELECT question_id,MAX(answered_at) AS last_wrong,(ARRAY_AGG(selected_answer ORDER BY answered_at DESC))[1] AS user_answer FROM (\n      SELECT question_id,created_at AS answered_at,selected_answer FROM question_answer_stats WHERE user_id=$1 AND NOT is_correct\n      UNION ALL SELECT question_id,answered_at,selected_answer FROM (\n  SELECT p.question_id, q.subject, q.chapter, p.selected_answer, p.is_correct, p.answered_at, p.mode\n  FROM practice_attempts p JOIN questions q ON q.id=p.question_id WHERE p.user_id=$1\n  UNION ALL\n  SELECT i.source_question_id, i.subject, i.chapter, i.selected_answer, i.is_correct, i.answered_at, d.kind\n  FROM diagnostic_items i JOIN diagnostic_sessions d ON d.id=i.session_id\n  WHERE d.user_id=$1 AND i.answered_at IS NOT NULL) h WHERE NOT is_correct\n    ) answers GROUP BY question_id\n  ) SELECT q.id, q.subject, q.question, q.answer, q.explanation,\n    jsonb_build_array(q.option_a,q.option_b,q.option_c,q.option_d) AS options,\n    COALESCE(r.favorite,FALSE) AS favorite,\n    (r.wrong IS TRUE OR w.question_id IS NOT NULL AND (r.wrong IS DISTINCT FROM FALSE OR w.last_wrong > r.wrong_updated_at)) AS wrong,\n    w.user_answer AS \"userAnswer\",\n    COALESCE(r.note,'') AS note\n    FROM questions q JOIN question_sets qs ON qs.id=q.question_set_id\n    LEFT JOIN question_review_state r ON r.question_id=q.id AND r.user_id=$1\n    LEFT JOIN wrong w ON w.question_id=q.id\n    WHERE qs.visibility='public' AND (r.favorite OR r.wrong IS TRUE OR w.question_id IS NOT NULL AND (r.wrong IS DISTINCT FROM FALSE OR w.last_wrong > r.wrong_updated_at))",
+        "plan": [
+          {
+            "QUERY PLAN": [
+              {
+                "Plan": {
+                  "Node Type": "Hash Join",
+                  "Parallel Aware": false,
+                  "Async Capable": false,
+                  "Join Type": "Left",
+                  "Startup Cost": 71.26,
+                  "Total Cost": 114.8,
+                  "Plan Rows": 733,
+                  "Plan Width": 217,
+                  "Disabled": false,
+                  "Inner Unique": true,
+                  "Hash Cond": "(q.id = question_answer_stats.question_id)",
+                  "Filter": "(r.favorite OR (r.wrong IS TRUE) OR ((question_answer_stats.question_id IS NOT NULL) AND ((r.wrong IS DISTINCT FROM false) OR ((max(question_answer_stats.created_at)) > r.wrong_updated_at))))",
+                  "Plans": [
+                    {
+                      "Node Type": "Hash Join",
+                      "Parent Relationship": "Outer",
+                      "Parallel Aware": false,
+                      "Async Capable": false,
+                      "Join Type": "Left",
+                      "Startup Cost": 17.46,
+                      "Total Cost": 53.39,
+                      "Plan Rows": 800,
+                      "Plan Width": 280,
+                      "Disabled": false,
+                      "Inner Unique": true,
+                      "Hash Cond": "(q.id = r.question_id)",
+                      "Plans": [
+                        {
+                          "Node Type": "Nested Loop",
+                          "Parent Relationship": "Outer",
+                          "Parallel Aware": false,
+                          "Async Capable": false,
+                          "Join Type": "Inner",
+                          "Startup Cost": 4.77,
+                          "Total Cost": 38.58,
+                          "Plan Rows": 800,
+                          "Plan Width": 238,
+                          "Disabled": false,
+                          "Inner Unique": false,
+                          "Plans": [
+                            {
+                              "Node Type": "Seq Scan",
+                              "Parent Relationship": "Outer",
+                              "Parallel Aware": false,
+                              "Async Capable": false,
+                              "Relation Name": "question_sets",
+                              "Alias": "qs",
+                              "Startup Cost": 0,
+                              "Total Cost": 1.01,
+                              "Plan Rows": 1,
+                              "Plan Width": 4,
+                              "Disabled": false,
+                              "Filter": "(visibility = 'public'::text)"
+                            },
+                            {
+                              "Node Type": "Bitmap Heap Scan",
+                              "Parent Relationship": "Inner",
+                              "Parallel Aware": false,
+                              "Async Capable": false,
+                              "Relation Name": "questions",
+                              "Alias": "q",
+                              "Startup Cost": 4.77,
+                              "Total Cost": 36.77,
+                              "Plan Rows": 80,
+                              "Plan Width": 242,
+                              "Disabled": false,
+                              "Recheck Cond": "(question_set_id = qs.id)",
+                              "Plans": [
+                                {
+                                  "Node Type": "Bitmap Index Scan",
+                                  "Parent Relationship": "Outer",
+                                  "Parallel Aware": false,
+                                  "Async Capable": false,
+                                  "Index Name": "idx_questions_question_set_id",
+                                  "Startup Cost": 0,
+                                  "Total Cost": 4.75,
+                                  "Plan Rows": 80,
+                                  "Plan Width": 0,
+                                  "Disabled": false,
+                                  "Index Cond": "(question_set_id = qs.id)"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "Node Type": "Hash",
+                          "Parent Relationship": "Inner",
+                          "Parallel Aware": false,
+                          "Async Capable": false,
+                          "Startup Cost": 12.64,
+                          "Total Cost": 12.64,
+                          "Plan Rows": 4,
+                          "Plan Width": 46,
+                          "Disabled": false,
+                          "Plans": [
+                            {
+                              "Node Type": "Bitmap Heap Scan",
+                              "Parent Relationship": "Outer",
+                              "Parallel Aware": false,
+                              "Async Capable": false,
+                              "Relation Name": "question_review_state",
+                              "Alias": "r",
+                              "Startup Cost": 4.18,
+                              "Total Cost": 12.64,
+                              "Plan Rows": 4,
+                              "Plan Width": 46,
+                              "Disabled": false,
+                              "Recheck Cond": "(user_id = '[account]'::text)",
+                              "Plans": [
+                                {
+                                  "Node Type": "Bitmap Index Scan",
+                                  "Parent Relationship": "Outer",
+                                  "Parallel Aware": false,
+                                  "Async Capable": false,
+                                  "Index Name": "question_review_state_pkey",
+                                  "Startup Cost": 0,
+                                  "Total Cost": 4.18,
+                                  "Plan Rows": 4,
+                                  "Plan Width": 0,
+                                  "Disabled": false,
+                                  "Index Cond": "(user_id = '[account]'::text)"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "Node Type": "Hash",
+                      "Parent Relationship": "Inner",
+                      "Parallel Aware": false,
+                      "Async Capable": false,
+                      "Startup Cost": 53.75,
+                      "Total Cost": 53.75,
+                      "Plan Rows": 4,
+                      "Plan Width": 44,
+                      "Disabled": false,
+                      "Plans": [
+                        {
+                          "Node Type": "Aggregate",
+                          "Strategy": "Sorted",
+                          "Partial Mode": "Simple",
+                          "Parent Relationship": "Outer",
+                          "Parallel Aware": false,
+                          "Async Capable": false,
+                          "Startup Cost": 53.66,
+                          "Total Cost": 53.75,
+                          "Plan Rows": 4,
+                          "Plan Width": 44,
+                          "Disabled": false,
+                          "Group Key": [
+                            "question_answer_stats.question_id"
+                          ],
+                          "Plans": [
+                            {
+                              "Node Type": "Sort",
+                              "Parent Relationship": "Outer",
+                              "Parallel Aware": false,
+                              "Async Capable": false,
+                              "Startup Cost": 53.66,
+                              "Total Cost": 53.67,
+                              "Plan Rows": 4,
+                              "Plan Width": 44,
+                              "Disabled": false,
+                              "Sort Key": [
+                                "question_answer_stats.question_id",
+                                "question_answer_stats.created_at DESC"
+                              ],
+                              "Plans": [
+                                {
+                                  "Node Type": "Append",
+                                  "Parent Relationship": "Outer",
+                                  "Parallel Aware": false,
+                                  "Async Capable": false,
+                                  "Startup Cost": 4.17,
+                                  "Total Cost": 53.62,
+                                  "Plan Rows": 4,
+                                  "Plan Width": 44,
+                                  "Disabled": false,
+                                  "Subplans Removed": 0,
+                                  "Plans": [
+                                    {
+                                      "Node Type": "Bitmap Heap Scan",
+                                      "Parent Relationship": "Member",
+                                      "Parallel Aware": false,
+                                      "Async Capable": false,
+                                      "Relation Name": "question_answer_stats",
+                                      "Alias": "question_answer_stats",
+                                      "Startup Cost": 4.17,
+                                      "Total Cost": 11.28,
+                                      "Plan Rows": 2,
+                                      "Plan Width": 44,
+                                      "Disabled": false,
+                                      "Recheck Cond": "(user_id = '[account]'::text)",
+                                      "Filter": "(NOT is_correct)",
+                                      "Plans": [
+                                        {
+                                          "Node Type": "Bitmap Index Scan",
+                                          "Parent Relationship": "Outer",
+                                          "Parallel Aware": false,
+                                          "Async Capable": false,
+                                          "Index Name": "question_answer_stats_user_question_key",
+                                          "Startup Cost": 0,
+                                          "Total Cost": 4.17,
+                                          "Plan Rows": 3,
+                                          "Plan Width": 0,
+                                          "Disabled": false,
+                                          "Index Cond": "(user_id = '[account]'::text)"
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "Node Type": "Append",
+                                      "Parent Relationship": "Member",
+                                      "Parallel Aware": false,
+                                      "Async Capable": false,
+                                      "Startup Cost": 4.45,
+                                      "Total Cost": 42.32,
+                                      "Plan Rows": 2,
+                                      "Plan Width": 44,
+                                      "Disabled": false,
+                                      "Subplans Removed": 0,
+                                      "Plans": [
+                                        {
+                                          "Node Type": "Subquery Scan",
+                                          "Parent Relationship": "Member",
+                                          "Parallel Aware": false,
+                                          "Async Capable": false,
+                                          "Alias": "*SELECT* 1",
+                                          "Startup Cost": 4.45,
+                                          "Total Cost": 19.6,
+                                          "Plan Rows": 1,
+                                          "Plan Width": 44,
+                                          "Disabled": false,
+                                          "Plans": [
+                                            {
+                                              "Node Type": "Nested Loop",
+                                              "Parent Relationship": "Subquery",
+                                              "Parallel Aware": false,
+                                              "Async Capable": false,
+                                              "Join Type": "Inner",
+                                              "Startup Cost": 4.45,
+                                              "Total Cost": 19.59,
+                                              "Plan Rows": 1,
+                                              "Plan Width": 141,
+                                              "Disabled": false,
+                                              "Inner Unique": true,
+                                              "Plans": [
+                                                {
+                                                  "Node Type": "Bitmap Heap Scan",
+                                                  "Parent Relationship": "Outer",
+                                                  "Parallel Aware": false,
+                                                  "Async Capable": false,
+                                                  "Relation Name": "practice_attempts",
+                                                  "Alias": "p",
+                                                  "Startup Cost": 4.17,
+                                                  "Total Cost": 11.28,
+                                                  "Plan Rows": 1,
+                                                  "Plan Width": 44,
+                                                  "Disabled": false,
+                                                  "Recheck Cond": "(user_id = '[account]'::text)",
+                                                  "Filter": "(NOT is_correct)",
+                                                  "Plans": [
+                                                    {
+                                                      "Node Type": "Bitmap Index Scan",
+                                                      "Parent Relationship": "Outer",
+                                                      "Parallel Aware": false,
+                                                      "Async Capable": false,
+                                                      "Index Name": "practice_attempts_history_idx",
+                                                      "Startup Cost": 0,
+                                                      "Total Cost": 4.17,
+                                                      "Plan Rows": 3,
+                                                      "Plan Width": 0,
+                                                      "Disabled": false,
+                                                      "Index Cond": "(user_id = '[account]'::text)"
+                                                    }
+                                                  ]
+                                                },
+                                                {
+                                                  "Node Type": "Index Only Scan",
+                                                  "Parent Relationship": "Inner",
+                                                  "Parallel Aware": false,
+                                                  "Async Capable": false,
+                                                  "Scan Direction": "Forward",
+                                                  "Index Name": "questions_pkey",
+                                                  "Relation Name": "questions",
+                                                  "Alias": "q_1",
+                                                  "Startup Cost": 0.28,
+                                                  "Total Cost": 8.29,
+                                                  "Plan Rows": 1,
+                                                  "Plan Width": 4,
+                                                  "Disabled": false,
+                                                  "Index Cond": "(id = p.question_id)"
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "Node Type": "Subquery Scan",
+                                          "Parent Relationship": "Member",
+                                          "Parallel Aware": false,
+                                          "Async Capable": false,
+                                          "Alias": "*SELECT* 2",
+                                          "Startup Cost": 9.53,
+                                          "Total Cost": 22.7,
+                                          "Plan Rows": 1,
+                                          "Plan Width": 44,
+                                          "Disabled": false,
+                                          "Plans": [
+                                            {
+                                              "Node Type": "Hash Join",
+                                              "Parent Relationship": "Subquery",
+                                              "Parallel Aware": false,
+                                              "Async Capable": false,
+                                              "Join Type": "Inner",
+                                              "Startup Cost": 9.53,
+                                              "Total Cost": 22.69,
+                                              "Plan Rows": 1,
+                                              "Plan Width": 141,
+                                              "Disabled": false,
+                                              "Inner Unique": true,
+                                              "Hash Cond": "(i.session_id = d.id)",
+                                              "Plans": [
+                                                {
+                                                  "Node Type": "Seq Scan",
+                                                  "Parent Relationship": "Outer",
+                                                  "Parallel Aware": false,
+                                                  "Async Capable": false,
+                                                  "Relation Name": "diagnostic_items",
+                                                  "Alias": "i",
+                                                  "Startup Cost": 0,
+                                                  "Total Cost": 12.8,
+                                                  "Plan Rows": 139,
+                                                  "Plan Width": 60,
+                                                  "Disabled": false,
+                                                  "Filter": "((answered_at IS NOT NULL) AND (NOT is_correct))"
+                                                },
+                                                {
+                                                  "Node Type": "Hash",
+                                                  "Parent Relationship": "Inner",
+                                                  "Parallel Aware": false,
+                                                  "Async Capable": false,
+                                                  "Startup Cost": 9.5,
+                                                  "Total Cost": 9.5,
+                                                  "Plan Rows": 2,
+                                                  "Plan Width": 16,
+                                                  "Disabled": false,
+                                                  "Plans": [
+                                                    {
+                                                      "Node Type": "Bitmap Heap Scan",
+                                                      "Parent Relationship": "Outer",
+                                                      "Parallel Aware": false,
+                                                      "Async Capable": false,
+                                                      "Relation Name": "diagnostic_sessions",
+                                                      "Alias": "d",
+                                                      "Startup Cost": 4.16,
+                                                      "Total Cost": 9.5,
+                                                      "Plan Rows": 2,
+                                                      "Plan Width": 16,
+                                                      "Disabled": false,
+                                                      "Recheck Cond": "(user_id = '[account]'::text)",
+                                                      "Plans": [
+                                                        {
+                                                          "Node Type": "Bitmap Index Scan",
+                                                          "Parent Relationship": "Outer",
+                                                          "Parallel Aware": false,
+                                                          "Async Capable": false,
+                                                          "Index Name": "diagnostic_sessions_user_kind_idx",
+                                                          "Startup Cost": 0,
+                                                          "Total Cost": 4.16,
+                                                          "Plan Rows": 2,
+                                                          "Plan Width": 0,
+                                                          "Disabled": false,
+                                                          "Index Cond": "(user_id = '[account]'::text)"
+                                                        }
+                                                      ]
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "ms": 121,
+        "rows": 1,
+        "sql": "SELECT payload FROM learning_imports WHERE user_id=$1",
+        "plan": [
+          {
+            "QUERY PLAN": [
+              {
+                "Plan": {
+                  "Node Type": "Bitmap Heap Scan",
+                  "Parallel Aware": false,
+                  "Async Capable": false,
+                  "Relation Name": "learning_imports",
+                  "Alias": "learning_imports",
+                  "Startup Cost": 4.18,
+                  "Total Cost": 12.64,
+                  "Plan Rows": 4,
+                  "Plan Width": 32,
+                  "Disabled": false,
+                  "Recheck Cond": "(user_id = '[account]'::text)",
+                  "Plans": [
+                    {
+                      "Node Type": "Bitmap Index Scan",
+                      "Parent Relationship": "Outer",
+                      "Parallel Aware": false,
+                      "Async Capable": false,
+                      "Index Name": "learning_imports_pkey",
+                      "Startup Cost": 0,
+                      "Total Cost": 4.18,
+                      "Plan Rows": 4,
+                      "Plan Width": 0,
+                      "Disabled": false,
+                      "Index Cond": "(user_id = '[account]'::text)"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "indexes": [
+      {
+        "tablename": "question_answer_stats",
+        "indexdef": "CREATE UNIQUE INDEX question_answer_stats_pkey ON public.question_answer_stats USING btree (id)"
+      },
+      {
+        "tablename": "question_answer_stats",
+        "indexdef": "CREATE UNIQUE INDEX question_answer_stats_user_question_key ON public.question_answer_stats USING btree (user_id, question_id)"
+      },
+      {
+        "tablename": "question_answer_stats",
+        "indexdef": "CREATE INDEX question_answer_stats_question_idx ON public.question_answer_stats USING btree (question_id)"
+      },
+      {
+        "tablename": "question_answer_stats",
+        "indexdef": "CREATE INDEX question_answer_stats_created_idx ON public.question_answer_stats USING btree (created_at)"
+      },
+      {
+        "tablename": "diagnostic_sessions",
+        "indexdef": "CREATE UNIQUE INDEX verification_task_review_idx ON public.diagnostic_sessions USING btree (reinforcement_task_id, (((verification_metadata ->> 'review_attempt'::text))::integer)) WHERE (kind = 'verification'::text)"
+      },
+      {
+        "tablename": "diagnostic_sessions",
+        "indexdef": "CREATE UNIQUE INDEX diagnostic_sessions_pkey ON public.diagnostic_sessions USING btree (id)"
+      },
+      {
+        "tablename": "diagnostic_sessions",
+        "indexdef": "CREATE UNIQUE INDEX diagnostic_sessions_initial_user_idx ON public.diagnostic_sessions USING btree (user_id) WHERE (kind = 'initial'::text)"
+      },
+      {
+        "tablename": "diagnostic_sessions",
+        "indexdef": "CREATE UNIQUE INDEX diagnostic_sessions_id_user_idx ON public.diagnostic_sessions USING btree (id, user_id)"
+      },
+      {
+        "tablename": "diagnostic_sessions",
+        "indexdef": "CREATE UNIQUE INDEX diagnostic_sessions_active_confirmation_idx ON public.diagnostic_sessions USING btree (user_id) WHERE ((kind = 'confirmation'::text) AND (completed_at IS NULL))"
+      },
+      {
+        "tablename": "diagnostic_sessions",
+        "indexdef": "CREATE INDEX diagnostic_sessions_user_kind_idx ON public.diagnostic_sessions USING btree (user_id, kind, created_at DESC)"
+      },
+      {
+        "tablename": "diagnostic_items",
+        "indexdef": "CREATE UNIQUE INDEX diagnostic_items_pkey ON public.diagnostic_items USING btree (session_id, \"position\")"
+      },
+      {
+        "tablename": "diagnostic_items",
+        "indexdef": "CREATE UNIQUE INDEX diagnostic_items_session_id_source_question_id_key ON public.diagnostic_items USING btree (session_id, source_question_id)"
+      },
+      {
+        "tablename": "diagnostic_items",
+        "indexdef": "CREATE INDEX diagnostic_items_question_idx ON public.diagnostic_items USING btree (question_id)"
+      },
+      {
+        "tablename": "learning_imports",
+        "indexdef": "CREATE UNIQUE INDEX learning_imports_pkey ON public.learning_imports USING btree (user_id, device_id)"
+      },
+      {
+        "tablename": "practice_attempts",
+        "indexdef": "CREATE UNIQUE INDEX practice_attempts_pkey ON public.practice_attempts USING btree (user_id, event_id)"
+      },
+      {
+        "tablename": "practice_attempts",
+        "indexdef": "CREATE INDEX practice_attempts_history_idx ON public.practice_attempts USING btree (user_id, question_id, answered_at)"
+      },
+      {
+        "tablename": "question_review_state",
+        "indexdef": "CREATE UNIQUE INDEX question_review_state_pkey ON public.question_review_state USING btree (user_id, question_id)"
+      }
+    ],
+    "full": {
+      "ms": 591,
+      "bytes": 43846,
+      "historyRows": 23
+    }
+  },
+  "after-server": {
+    "phase": "after",
+    "endpoints": [
+      {
+        "path": "/api/auth/get-session",
+        "run": 0,
+        "status": 200,
+        "ms": 446,
+        "bytes": 4
+      },
+      {
+        "path": "/api/auth/get-session",
+        "run": 1,
+        "status": 200,
+        "ms": 291,
+        "bytes": 4
+      },
+      {
+        "path": "/api/auth/get-session",
+        "run": 2,
+        "status": 200,
+        "ms": 265,
+        "bytes": 4
+      },
+      {
+        "path": "/api/learning",
+        "run": 0,
+        "status": 200,
+        "ms": 273,
+        "bytes": 14
+      },
+      {
+        "path": "/api/learning",
+        "run": 1,
+        "status": 200,
+        "ms": 292,
+        "bytes": 14
+      },
+      {
+        "path": "/api/learning",
+        "run": 2,
+        "status": 200,
+        "ms": 295,
+        "bytes": 14
+      },
+      {
+        "path": "/api/quiz?scope=public&settings=1&chapters=1",
+        "run": 0,
+        "status": 200,
+        "ms": 1683,
+        "bytes": 962
+      },
+      {
+        "path": "/api/quiz?scope=public&settings=1&chapters=1",
+        "run": 1,
+        "status": 200,
+        "ms": 732,
+        "bytes": 962
+      },
+      {
+        "path": "/api/quiz?scope=public&settings=1&chapters=1",
+        "run": 2,
+        "status": 200,
+        "ms": 723,
+        "bytes": 962
+      },
+      {
+        "path": "/api/stats/weekly-most-missed",
+        "run": 0,
+        "status": 200,
+        "ms": 517,
+        "bytes": 35
+      },
+      {
+        "path": "/api/stats/weekly-most-missed",
+        "run": 1,
+        "status": 200,
+        "ms": 504,
+        "bytes": 35
+      },
+      {
+        "path": "/api/stats/weekly-most-missed",
+        "run": 2,
+        "status": 200,
+        "ms": 507,
+        "bytes": 35
+      },
+      {
+        "path": "/api/admin/status",
+        "run": 0,
+        "status": 401,
+        "ms": 263,
+        "bytes": 39
+      },
+      {
+        "path": "/api/admin/status",
+        "run": 1,
+        "status": 401,
+        "ms": 353,
+        "bytes": 39
+      },
+      {
+        "path": "/api/admin/status",
+        "run": 2,
+        "status": 401,
+        "ms": 277,
+        "bytes": 39
+      }
+    ],
+    "queries": [
+      {
+        "ms": 106,
+        "rows": 24,
+        "sql": "SELECT s.question_id, q.subject, s.is_correct FROM question_answer_stats s\n    JOIN questions q ON q.id=s.question_id WHERE s.user_id=$1",
+        "plan": [
+          {
+            "QUERY PLAN": [
+              {
+                "Plan": {
+                  "Node Type": "Nested Loop",
+                  "Parallel Aware": false,
+                  "Async Capable": false,
+                  "Join Type": "Inner",
+                  "Startup Cost": 4.45,
+                  "Total Cost": 36.18,
+                  "Plan Rows": 3,
+                  "Plan Width": 23,
+                  "Disabled": false,
+                  "Inner Unique": true,
+                  "Plans": [
+                    {
+                      "Node Type": "Bitmap Heap Scan",
+                      "Parent Relationship": "Outer",
+                      "Parallel Aware": false,
+                      "Async Capable": false,
+                      "Relation Name": "question_answer_stats",
+                      "Alias": "s",
+                      "Startup Cost": 4.17,
+                      "Total Cost": 11.28,
+                      "Plan Rows": 3,
+                      "Plan Width": 5,
+                      "Disabled": false,
+                      "Recheck Cond": "(user_id = '[account]'::text)",
+                      "Plans": [
+                        {
+                          "Node Type": "Bitmap Index Scan",
+                          "Parent Relationship": "Outer",
+                          "Parallel Aware": false,
+                          "Async Capable": false,
+                          "Index Name": "question_answer_stats_user_question_key",
+                          "Startup Cost": 0,
+                          "Total Cost": 4.17,
+                          "Plan Rows": 3,
+                          "Plan Width": 0,
+                          "Disabled": false,
+                          "Index Cond": "(user_id = '[account]'::text)"
+                        }
+                      ]
+                    },
+                    {
+                      "Node Type": "Index Scan",
+                      "Parent Relationship": "Inner",
+                      "Parallel Aware": false,
+                      "Async Capable": false,
+                      "Scan Direction": "Forward",
+                      "Index Name": "questions_pkey",
+                      "Relation Name": "questions",
+                      "Alias": "q",
+                      "Startup Cost": 0.28,
+                      "Total Cost": 8.29,
+                      "Plan Rows": 1,
+                      "Plan Width": 22,
+                      "Disabled": false,
+                      "Index Cond": "(id = s.question_id)"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "ms": 106,
+        "rows": 23,
+        "sql": "SELECT * FROM (\n  SELECT p.question_id, q.subject, q.chapter, p.selected_answer, p.is_correct, p.answered_at, p.mode\n  FROM practice_attempts p JOIN questions q ON q.id=p.question_id WHERE p.user_id=$1\n  UNION ALL\n  SELECT i.source_question_id, i.subject, i.chapter, i.selected_answer, i.is_correct, i.answered_at, d.kind\n  FROM diagnostic_items i JOIN diagnostic_sessions d ON d.id=i.session_id\n  WHERE d.user_id=$1 AND i.answered_at IS NOT NULL) h ORDER BY answered_at, question_id",
+        "plan": [
+          {
+            "QUERY PLAN": [
+              {
+                "Plan": {
+                  "Node Type": "Sort",
+                  "Parallel Aware": false,
+                  "Async Capable": false,
+                  "Startup Cost": 59.31,
+                  "Total Cost": 59.32,
+                  "Plan Rows": 4,
+                  "Plan Width": 134,
+                  "Disabled": false,
+                  "Sort Key": [
+                    "p.answered_at",
+                    "p.question_id"
+                  ],
+                  "Plans": [
+                    {
+                      "Node Type": "Append",
+                      "Parent Relationship": "Outer",
+                      "Parallel Aware": false,
+                      "Async Capable": false,
+                      "Startup Cost": 4.45,
+                      "Total Cost": 59.27,
+                      "Plan Rows": 4,
+                      "Plan Width": 134,
+                      "Disabled": false,
+                      "Subplans Removed": 0,
+                      "Plans": [
+                        {
+                          "Node Type": "Nested Loop",
+                          "Parent Relationship": "Member",
+                          "Parallel Aware": false,
+                          "Async Capable": false,
+                          "Join Type": "Inner",
+                          "Startup Cost": 4.45,
+                          "Total Cost": 36.18,
+                          "Plan Rows": 3,
+                          "Plan Width": 132,
+                          "Disabled": false,
+                          "Inner Unique": true,
+                          "Plans": [
+                            {
+                              "Node Type": "Bitmap Heap Scan",
+                              "Parent Relationship": "Outer",
+                              "Parallel Aware": false,
+                              "Async Capable": false,
+                              "Relation Name": "practice_attempts",
+                              "Alias": "p",
+                              "Startup Cost": 4.17,
+                              "Total Cost": 11.28,
+                              "Plan Rows": 3,
+                              "Plan Width": 77,
+                              "Disabled": false,
+                              "Recheck Cond": "(user_id = '[account]'::text)",
+                              "Plans": [
+                                {
+                                  "Node Type": "Bitmap Index Scan",
+                                  "Parent Relationship": "Outer",
+                                  "Parallel Aware": false,
+                                  "Async Capable": false,
+                                  "Index Name": "practice_attempts_history_idx",
+                                  "Startup Cost": 0,
+                                  "Total Cost": 4.17,
+                                  "Plan Rows": 3,
+                                  "Plan Width": 0,
+                                  "Disabled": false,
+                                  "Index Cond": "(user_id = '[account]'::text)"
+                                }
+                              ]
+                            },
+                            {
+                              "Node Type": "Index Scan",
+                              "Parent Relationship": "Inner",
+                              "Parallel Aware": false,
+                              "Async Capable": false,
+                              "Scan Direction": "Forward",
+                              "Index Name": "questions_pkey",
+                              "Relation Name": "questions",
+                              "Alias": "q",
+                              "Startup Cost": 0.28,
+                              "Total Cost": 8.29,
+                              "Plan Rows": 1,
+                              "Plan Width": 59,
+                              "Disabled": false,
+                              "Index Cond": "(id = p.question_id)"
+                            }
+                          ]
+                        },
+                        {
+                          "Node Type": "Hash Join",
+                          "Parent Relationship": "Member",
+                          "Parallel Aware": false,
+                          "Async Capable": false,
+                          "Join Type": "Inner",
+                          "Startup Cost": 9.53,
+                          "Total Cost": 23.07,
+                          "Plan Rows": 1,
+                          "Plan Width": 141,
+                          "Disabled": false,
+                          "Inner Unique": true,
+                          "Hash Cond": "(i.session_id = d.id)",
+                          "Plans": [
+                            {
+                              "Node Type": "Seq Scan",
+                              "Parent Relationship": "Outer",
+                              "Parallel Aware": false,
+                              "Async Capable": false,
+                              "Relation Name": "diagnostic_items",
+                              "Alias": "i",
+                              "Startup Cost": 0,
+                              "Total Cost": 12.8,
+                              "Plan Rows": 279,
+                              "Plan Width": 125,
+                              "Disabled": false,
+                              "Filter": "(answered_at IS NOT NULL)"
+                            },
+                            {
+                              "Node Type": "Hash",
+                              "Parent Relationship": "Inner",
+                              "Parallel Aware": false,
+                              "Async Capable": false,
+                              "Startup Cost": 9.5,
+                              "Total Cost": 9.5,
+                              "Plan Rows": 2,
+                              "Plan Width": 48,
+                              "Disabled": false,
+                              "Plans": [
+                                {
+                                  "Node Type": "Bitmap Heap Scan",
+                                  "Parent Relationship": "Outer",
+                                  "Parallel Aware": false,
+                                  "Async Capable": false,
+                                  "Relation Name": "diagnostic_sessions",
+                                  "Alias": "d",
+                                  "Startup Cost": 4.16,
+                                  "Total Cost": 9.5,
+                                  "Plan Rows": 2,
+                                  "Plan Width": 48,
+                                  "Disabled": false,
+                                  "Recheck Cond": "(user_id = '[account]'::text)",
+                                  "Plans": [
+                                    {
+                                      "Node Type": "Bitmap Index Scan",
+                                      "Parent Relationship": "Outer",
+                                      "Parallel Aware": false,
+                                      "Async Capable": false,
+                                      "Index Name": "diagnostic_sessions_user_kind_idx",
+                                      "Startup Cost": 0,
+                                      "Total Cost": 4.16,
+                                      "Plan Rows": 2,
+                                      "Plan Width": 0,
+                                      "Disabled": false,
+                                      "Index Cond": "(user_id = '[account]'::text)"
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "ms": 113,
+        "rows": 46,
+        "sql": "WITH wrong AS (\n    SELECT question_id,MAX(answered_at) AS last_wrong,(ARRAY_AGG(selected_answer ORDER BY answered_at DESC))[1] AS user_answer FROM (\n      SELECT question_id,created_at AS answered_at,selected_answer FROM question_answer_stats WHERE user_id=$1 AND NOT is_correct\n      UNION ALL SELECT question_id,answered_at,selected_answer FROM (\n  SELECT p.question_id, q.subject, q.chapter, p.selected_answer, p.is_correct, p.answered_at, p.mode\n  FROM practice_attempts p JOIN questions q ON q.id=p.question_id WHERE p.user_id=$1\n  UNION ALL\n  SELECT i.source_question_id, i.subject, i.chapter, i.selected_answer, i.is_correct, i.answered_at, d.kind\n  FROM diagnostic_items i JOIN diagnostic_sessions d ON d.id=i.session_id\n  WHERE d.user_id=$1 AND i.answered_at IS NOT NULL) h WHERE NOT is_correct\n    ) answers GROUP BY question_id\n  ) SELECT q.id, q.subject, q.question, q.answer, q.explanation,\n    jsonb_build_array(q.option_a,q.option_b,q.option_c,q.option_d) AS options,\n    COALESCE(r.favorite,FALSE) AS favorite,\n    (r.wrong IS TRUE OR w.question_id IS NOT NULL AND (r.wrong IS DISTINCT FROM FALSE OR w.last_wrong > r.wrong_updated_at)) AS wrong,\n    w.user_answer AS \"userAnswer\",\n    COALESCE(r.note,'') AS note\n    FROM questions q JOIN question_sets qs ON qs.id=q.question_set_id\n    LEFT JOIN question_review_state r ON r.question_id=q.id AND r.user_id=$1\n    LEFT JOIN wrong w ON w.question_id=q.id\n    WHERE qs.visibility='public' AND (r.favorite OR r.wrong IS TRUE OR w.question_id IS NOT NULL AND (r.wrong IS DISTINCT FROM FALSE OR w.last_wrong > r.wrong_updated_at))",
+        "plan": [
+          {
+            "QUERY PLAN": [
+              {
+                "Plan": {
+                  "Node Type": "Hash Join",
+                  "Parallel Aware": false,
+                  "Async Capable": false,
+                  "Join Type": "Left",
+                  "Startup Cost": 71.26,
+                  "Total Cost": 114.8,
+                  "Plan Rows": 733,
+                  "Plan Width": 217,
+                  "Disabled": false,
+                  "Inner Unique": true,
+                  "Hash Cond": "(q.id = question_answer_stats.question_id)",
+                  "Filter": "(r.favorite OR (r.wrong IS TRUE) OR ((question_answer_stats.question_id IS NOT NULL) AND ((r.wrong IS DISTINCT FROM false) OR ((max(question_answer_stats.created_at)) > r.wrong_updated_at))))",
+                  "Plans": [
+                    {
+                      "Node Type": "Hash Join",
+                      "Parent Relationship": "Outer",
+                      "Parallel Aware": false,
+                      "Async Capable": false,
+                      "Join Type": "Left",
+                      "Startup Cost": 17.46,
+                      "Total Cost": 53.39,
+                      "Plan Rows": 800,
+                      "Plan Width": 280,
+                      "Disabled": false,
+                      "Inner Unique": true,
+                      "Hash Cond": "(q.id = r.question_id)",
+                      "Plans": [
+                        {
+                          "Node Type": "Nested Loop",
+                          "Parent Relationship": "Outer",
+                          "Parallel Aware": false,
+                          "Async Capable": false,
+                          "Join Type": "Inner",
+                          "Startup Cost": 4.77,
+                          "Total Cost": 38.58,
+                          "Plan Rows": 800,
+                          "Plan Width": 238,
+                          "Disabled": false,
+                          "Inner Unique": false,
+                          "Plans": [
+                            {
+                              "Node Type": "Seq Scan",
+                              "Parent Relationship": "Outer",
+                              "Parallel Aware": false,
+                              "Async Capable": false,
+                              "Relation Name": "question_sets",
+                              "Alias": "qs",
+                              "Startup Cost": 0,
+                              "Total Cost": 1.01,
+                              "Plan Rows": 1,
+                              "Plan Width": 4,
+                              "Disabled": false,
+                              "Filter": "(visibility = 'public'::text)"
+                            },
+                            {
+                              "Node Type": "Bitmap Heap Scan",
+                              "Parent Relationship": "Inner",
+                              "Parallel Aware": false,
+                              "Async Capable": false,
+                              "Relation Name": "questions",
+                              "Alias": "q",
+                              "Startup Cost": 4.77,
+                              "Total Cost": 36.77,
+                              "Plan Rows": 80,
+                              "Plan Width": 242,
+                              "Disabled": false,
+                              "Recheck Cond": "(question_set_id = qs.id)",
+                              "Plans": [
+                                {
+                                  "Node Type": "Bitmap Index Scan",
+                                  "Parent Relationship": "Outer",
+                                  "Parallel Aware": false,
+                                  "Async Capable": false,
+                                  "Index Name": "idx_questions_question_set_id",
+                                  "Startup Cost": 0,
+                                  "Total Cost": 4.75,
+                                  "Plan Rows": 80,
+                                  "Plan Width": 0,
+                                  "Disabled": false,
+                                  "Index Cond": "(question_set_id = qs.id)"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "Node Type": "Hash",
+                          "Parent Relationship": "Inner",
+                          "Parallel Aware": false,
+                          "Async Capable": false,
+                          "Startup Cost": 12.64,
+                          "Total Cost": 12.64,
+                          "Plan Rows": 4,
+                          "Plan Width": 46,
+                          "Disabled": false,
+                          "Plans": [
+                            {
+                              "Node Type": "Bitmap Heap Scan",
+                              "Parent Relationship": "Outer",
+                              "Parallel Aware": false,
+                              "Async Capable": false,
+                              "Relation Name": "question_review_state",
+                              "Alias": "r",
+                              "Startup Cost": 4.18,
+                              "Total Cost": 12.64,
+                              "Plan Rows": 4,
+                              "Plan Width": 46,
+                              "Disabled": false,
+                              "Recheck Cond": "(user_id = '[account]'::text)",
+                              "Plans": [
+                                {
+                                  "Node Type": "Bitmap Index Scan",
+                                  "Parent Relationship": "Outer",
+                                  "Parallel Aware": false,
+                                  "Async Capable": false,
+                                  "Index Name": "question_review_state_pkey",
+                                  "Startup Cost": 0,
+                                  "Total Cost": 4.18,
+                                  "Plan Rows": 4,
+                                  "Plan Width": 0,
+                                  "Disabled": false,
+                                  "Index Cond": "(user_id = '[account]'::text)"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "Node Type": "Hash",
+                      "Parent Relationship": "Inner",
+                      "Parallel Aware": false,
+                      "Async Capable": false,
+                      "Startup Cost": 53.75,
+                      "Total Cost": 53.75,
+                      "Plan Rows": 4,
+                      "Plan Width": 44,
+                      "Disabled": false,
+                      "Plans": [
+                        {
+                          "Node Type": "Aggregate",
+                          "Strategy": "Sorted",
+                          "Partial Mode": "Simple",
+                          "Parent Relationship": "Outer",
+                          "Parallel Aware": false,
+                          "Async Capable": false,
+                          "Startup Cost": 53.66,
+                          "Total Cost": 53.75,
+                          "Plan Rows": 4,
+                          "Plan Width": 44,
+                          "Disabled": false,
+                          "Group Key": [
+                            "question_answer_stats.question_id"
+                          ],
+                          "Plans": [
+                            {
+                              "Node Type": "Sort",
+                              "Parent Relationship": "Outer",
+                              "Parallel Aware": false,
+                              "Async Capable": false,
+                              "Startup Cost": 53.66,
+                              "Total Cost": 53.67,
+                              "Plan Rows": 4,
+                              "Plan Width": 44,
+                              "Disabled": false,
+                              "Sort Key": [
+                                "question_answer_stats.question_id",
+                                "question_answer_stats.created_at DESC"
+                              ],
+                              "Plans": [
+                                {
+                                  "Node Type": "Append",
+                                  "Parent Relationship": "Outer",
+                                  "Parallel Aware": false,
+                                  "Async Capable": false,
+                                  "Startup Cost": 4.17,
+                                  "Total Cost": 53.62,
+                                  "Plan Rows": 4,
+                                  "Plan Width": 44,
+                                  "Disabled": false,
+                                  "Subplans Removed": 0,
+                                  "Plans": [
+                                    {
+                                      "Node Type": "Bitmap Heap Scan",
+                                      "Parent Relationship": "Member",
+                                      "Parallel Aware": false,
+                                      "Async Capable": false,
+                                      "Relation Name": "question_answer_stats",
+                                      "Alias": "question_answer_stats",
+                                      "Startup Cost": 4.17,
+                                      "Total Cost": 11.28,
+                                      "Plan Rows": 2,
+                                      "Plan Width": 44,
+                                      "Disabled": false,
+                                      "Recheck Cond": "(user_id = '[account]'::text)",
+                                      "Filter": "(NOT is_correct)",
+                                      "Plans": [
+                                        {
+                                          "Node Type": "Bitmap Index Scan",
+                                          "Parent Relationship": "Outer",
+                                          "Parallel Aware": false,
+                                          "Async Capable": false,
+                                          "Index Name": "question_answer_stats_user_question_key",
+                                          "Startup Cost": 0,
+                                          "Total Cost": 4.17,
+                                          "Plan Rows": 3,
+                                          "Plan Width": 0,
+                                          "Disabled": false,
+                                          "Index Cond": "(user_id = '[account]'::text)"
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "Node Type": "Append",
+                                      "Parent Relationship": "Member",
+                                      "Parallel Aware": false,
+                                      "Async Capable": false,
+                                      "Startup Cost": 4.45,
+                                      "Total Cost": 42.32,
+                                      "Plan Rows": 2,
+                                      "Plan Width": 44,
+                                      "Disabled": false,
+                                      "Subplans Removed": 0,
+                                      "Plans": [
+                                        {
+                                          "Node Type": "Subquery Scan",
+                                          "Parent Relationship": "Member",
+                                          "Parallel Aware": false,
+                                          "Async Capable": false,
+                                          "Alias": "*SELECT* 1",
+                                          "Startup Cost": 4.45,
+                                          "Total Cost": 19.6,
+                                          "Plan Rows": 1,
+                                          "Plan Width": 44,
+                                          "Disabled": false,
+                                          "Plans": [
+                                            {
+                                              "Node Type": "Nested Loop",
+                                              "Parent Relationship": "Subquery",
+                                              "Parallel Aware": false,
+                                              "Async Capable": false,
+                                              "Join Type": "Inner",
+                                              "Startup Cost": 4.45,
+                                              "Total Cost": 19.59,
+                                              "Plan Rows": 1,
+                                              "Plan Width": 141,
+                                              "Disabled": false,
+                                              "Inner Unique": true,
+                                              "Plans": [
+                                                {
+                                                  "Node Type": "Bitmap Heap Scan",
+                                                  "Parent Relationship": "Outer",
+                                                  "Parallel Aware": false,
+                                                  "Async Capable": false,
+                                                  "Relation Name": "practice_attempts",
+                                                  "Alias": "p",
+                                                  "Startup Cost": 4.17,
+                                                  "Total Cost": 11.28,
+                                                  "Plan Rows": 1,
+                                                  "Plan Width": 44,
+                                                  "Disabled": false,
+                                                  "Recheck Cond": "(user_id = '[account]'::text)",
+                                                  "Filter": "(NOT is_correct)",
+                                                  "Plans": [
+                                                    {
+                                                      "Node Type": "Bitmap Index Scan",
+                                                      "Parent Relationship": "Outer",
+                                                      "Parallel Aware": false,
+                                                      "Async Capable": false,
+                                                      "Index Name": "practice_attempts_history_idx",
+                                                      "Startup Cost": 0,
+                                                      "Total Cost": 4.17,
+                                                      "Plan Rows": 3,
+                                                      "Plan Width": 0,
+                                                      "Disabled": false,
+                                                      "Index Cond": "(user_id = '[account]'::text)"
+                                                    }
+                                                  ]
+                                                },
+                                                {
+                                                  "Node Type": "Index Only Scan",
+                                                  "Parent Relationship": "Inner",
+                                                  "Parallel Aware": false,
+                                                  "Async Capable": false,
+                                                  "Scan Direction": "Forward",
+                                                  "Index Name": "questions_pkey",
+                                                  "Relation Name": "questions",
+                                                  "Alias": "q_1",
+                                                  "Startup Cost": 0.28,
+                                                  "Total Cost": 8.29,
+                                                  "Plan Rows": 1,
+                                                  "Plan Width": 4,
+                                                  "Disabled": false,
+                                                  "Index Cond": "(id = p.question_id)"
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "Node Type": "Subquery Scan",
+                                          "Parent Relationship": "Member",
+                                          "Parallel Aware": false,
+                                          "Async Capable": false,
+                                          "Alias": "*SELECT* 2",
+                                          "Startup Cost": 9.53,
+                                          "Total Cost": 22.7,
+                                          "Plan Rows": 1,
+                                          "Plan Width": 44,
+                                          "Disabled": false,
+                                          "Plans": [
+                                            {
+                                              "Node Type": "Hash Join",
+                                              "Parent Relationship": "Subquery",
+                                              "Parallel Aware": false,
+                                              "Async Capable": false,
+                                              "Join Type": "Inner",
+                                              "Startup Cost": 9.53,
+                                              "Total Cost": 22.69,
+                                              "Plan Rows": 1,
+                                              "Plan Width": 141,
+                                              "Disabled": false,
+                                              "Inner Unique": true,
+                                              "Hash Cond": "(i.session_id = d.id)",
+                                              "Plans": [
+                                                {
+                                                  "Node Type": "Seq Scan",
+                                                  "Parent Relationship": "Outer",
+                                                  "Parallel Aware": false,
+                                                  "Async Capable": false,
+                                                  "Relation Name": "diagnostic_items",
+                                                  "Alias": "i",
+                                                  "Startup Cost": 0,
+                                                  "Total Cost": 12.8,
+                                                  "Plan Rows": 139,
+                                                  "Plan Width": 60,
+                                                  "Disabled": false,
+                                                  "Filter": "((answered_at IS NOT NULL) AND (NOT is_correct))"
+                                                },
+                                                {
+                                                  "Node Type": "Hash",
+                                                  "Parent Relationship": "Inner",
+                                                  "Parallel Aware": false,
+                                                  "Async Capable": false,
+                                                  "Startup Cost": 9.5,
+                                                  "Total Cost": 9.5,
+                                                  "Plan Rows": 2,
+                                                  "Plan Width": 16,
+                                                  "Disabled": false,
+                                                  "Plans": [
+                                                    {
+                                                      "Node Type": "Bitmap Heap Scan",
+                                                      "Parent Relationship": "Outer",
+                                                      "Parallel Aware": false,
+                                                      "Async Capable": false,
+                                                      "Relation Name": "diagnostic_sessions",
+                                                      "Alias": "d",
+                                                      "Startup Cost": 4.16,
+                                                      "Total Cost": 9.5,
+                                                      "Plan Rows": 2,
+                                                      "Plan Width": 16,
+                                                      "Disabled": false,
+                                                      "Recheck Cond": "(user_id = '[account]'::text)",
+                                                      "Plans": [
+                                                        {
+                                                          "Node Type": "Bitmap Index Scan",
+                                                          "Parent Relationship": "Outer",
+                                                          "Parallel Aware": false,
+                                                          "Async Capable": false,
+                                                          "Index Name": "diagnostic_sessions_user_kind_idx",
+                                                          "Startup Cost": 0,
+                                                          "Total Cost": 4.16,
+                                                          "Plan Rows": 2,
+                                                          "Plan Width": 0,
+                                                          "Disabled": false,
+                                                          "Index Cond": "(user_id = '[account]'::text)"
+                                                        }
+                                                      ]
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "ms": 113,
+        "rows": 1,
+        "sql": "SELECT payload FROM learning_imports WHERE user_id=$1",
+        "plan": [
+          {
+            "QUERY PLAN": [
+              {
+                "Plan": {
+                  "Node Type": "Bitmap Heap Scan",
+                  "Parallel Aware": false,
+                  "Async Capable": false,
+                  "Relation Name": "learning_imports",
+                  "Alias": "learning_imports",
+                  "Startup Cost": 4.18,
+                  "Total Cost": 12.64,
+                  "Plan Rows": 4,
+                  "Plan Width": 32,
+                  "Disabled": false,
+                  "Recheck Cond": "(user_id = '[account]'::text)",
+                  "Plans": [
+                    {
+                      "Node Type": "Bitmap Index Scan",
+                      "Parent Relationship": "Outer",
+                      "Parallel Aware": false,
+                      "Async Capable": false,
+                      "Index Name": "learning_imports_pkey",
+                      "Startup Cost": 0,
+                      "Total Cost": 4.18,
+                      "Plan Rows": 4,
+                      "Plan Width": 0,
+                      "Disabled": false,
+                      "Index Cond": "(user_id = '[account]'::text)"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "ms": 125,
+        "rows": 1,
+        "sql": "WITH progress AS (\n    SELECT q.subject, COUNT(*)::int AS completed,\n      COUNT(*) FILTER (WHERE s.is_correct)::int AS correct,\n      COUNT(*) FILTER (WHERE NOT s.is_correct)::int AS wrong\n    FROM question_answer_stats s JOIN questions q ON q.id=s.question_id\n    WHERE s.user_id=$1 GROUP BY q.subject\n  ), today AS (\n    SELECT COUNT(*)::int AS completed FROM (\n  SELECT p.question_id, q.subject, q.chapter, p.selected_answer, p.is_correct, p.answered_at, p.mode\n  FROM practice_attempts p JOIN questions q ON q.id=p.question_id WHERE p.user_id=$1\n  UNION ALL\n  SELECT i.source_question_id, i.subject, i.chapter, i.selected_answer, i.is_correct, i.answered_at, d.kind\n  FROM diagnostic_items i JOIN diagnostic_sessions d ON d.id=i.session_id\n  WHERE d.user_id=$1 AND i.answered_at IS NOT NULL) h\n    WHERE answered_at >= (DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Taipei') AT TIME ZONE 'Asia/Taipei')\n      AND answered_at < ((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Taipei') + INTERVAL '1 day') AT TIME ZONE 'Asia/Taipei')\n  ) SELECT COALESCE((SELECT jsonb_object_agg(subject,jsonb_build_object('completed',completed,'correct',correct,'wrong',wrong)) FROM progress),'{}'::jsonb) AS progress,\n    (SELECT completed FROM today) AS \"todayCompleted\",\n    TO_CHAR(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Taipei','YYYY-MM-DD') AS \"todayDate\"",
+        "plan": [
+          {
+            "QUERY PLAN": [
+              {
+                "Plan": {
+                  "Node Type": "Result",
+                  "Parallel Aware": false,
+                  "Async Capable": false,
+                  "Startup Cost": 78.81,
+                  "Total Cost": 78.83,
+                  "Plan Rows": 1,
+                  "Plan Width": 68,
+                  "Disabled": false,
+                  "Plans": [
+                    {
+                      "Node Type": "Aggregate",
+                      "Strategy": "Plain",
+                      "Partial Mode": "Simple",
+                      "Parent Relationship": "InitPlan",
+                      "Subplan Name": "InitPlan 1",
+                      "Parallel Aware": false,
+                      "Async Capable": false,
+                      "Startup Cost": 36.31,
+                      "Total Cost": 36.32,
+                      "Plan Rows": 1,
+                      "Plan Width": 32,
+                      "Disabled": false,
+                      "Plans": [
+                        {
+                          "Node Type": "Aggregate",
+                          "Strategy": "Sorted",
+                          "Partial Mode": "Simple",
+                          "Parent Relationship": "Outer",
+                          "Parallel Aware": false,
+                          "Async Capable": false,
+                          "Startup Cost": 36.2,
+                          "Total Cost": 36.29,
+                          "Plan Rows": 3,
+                          "Plan Width": 30,
+                          "Disabled": false,
+                          "Group Key": [
+                            "q.subject"
+                          ],
+                          "Plans": [
+                            {
+                              "Node Type": "Sort",
+                              "Parent Relationship": "Outer",
+                              "Parallel Aware": false,
+                              "Async Capable": false,
+                              "Startup Cost": 36.2,
+                              "Total Cost": 36.21,
+                              "Plan Rows": 3,
+                              "Plan Width": 19,
+                              "Disabled": false,
+                              "Sort Key": [
+                                "q.subject"
+                              ],
+                              "Plans": [
+                                {
+                                  "Node Type": "Nested Loop",
+                                  "Parent Relationship": "Outer",
+                                  "Parallel Aware": false,
+                                  "Async Capable": false,
+                                  "Join Type": "Inner",
+                                  "Startup Cost": 4.45,
+                                  "Total Cost": 36.18,
+                                  "Plan Rows": 3,
+                                  "Plan Width": 19,
+                                  "Disabled": false,
+                                  "Inner Unique": true,
+                                  "Plans": [
+                                    {
+                                      "Node Type": "Bitmap Heap Scan",
+                                      "Parent Relationship": "Outer",
+                                      "Parallel Aware": false,
+                                      "Async Capable": false,
+                                      "Relation Name": "question_answer_stats",
+                                      "Alias": "s",
+                                      "Startup Cost": 4.17,
+                                      "Total Cost": 11.28,
+                                      "Plan Rows": 3,
+                                      "Plan Width": 5,
+                                      "Disabled": false,
+                                      "Recheck Cond": "(user_id = '[account]'::text)",
+                                      "Plans": [
+                                        {
+                                          "Node Type": "Bitmap Index Scan",
+                                          "Parent Relationship": "Outer",
+                                          "Parallel Aware": false,
+                                          "Async Capable": false,
+                                          "Index Name": "question_answer_stats_user_question_key",
+                                          "Startup Cost": 0,
+                                          "Total Cost": 4.17,
+                                          "Plan Rows": 3,
+                                          "Plan Width": 0,
+                                          "Disabled": false,
+                                          "Index Cond": "(user_id = '[account]'::text)"
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "Node Type": "Index Scan",
+                                      "Parent Relationship": "Inner",
+                                      "Parallel Aware": false,
+                                      "Async Capable": false,
+                                      "Scan Direction": "Forward",
+                                      "Index Name": "questions_pkey",
+                                      "Relation Name": "questions",
+                                      "Alias": "q",
+                                      "Startup Cost": 0.28,
+                                      "Total Cost": 8.29,
+                                      "Plan Rows": 1,
+                                      "Plan Width": 22,
+                                      "Disabled": false,
+                                      "Index Cond": "(id = s.question_id)"
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "Node Type": "Aggregate",
+                      "Strategy": "Plain",
+                      "Partial Mode": "Simple",
+                      "Parent Relationship": "InitPlan",
+                      "Subplan Name": "InitPlan 2",
+                      "Parallel Aware": false,
+                      "Async Capable": false,
+                      "Startup Cost": 42.48,
+                      "Total Cost": 42.49,
+                      "Plan Rows": 1,
+                      "Plan Width": 4,
+                      "Disabled": false,
+                      "Plans": [
+                        {
+                          "Node Type": "Append",
+                          "Parent Relationship": "Outer",
+                          "Parallel Aware": false,
+                          "Async Capable": false,
+                          "Startup Cost": 0.45,
+                          "Total Cost": 42.47,
+                          "Plan Rows": 2,
+                          "Plan Width": 0,
+                          "Disabled": false,
+                          "Subplans Removed": 0,
+                          "Plans": [
+                            {
+                              "Node Type": "Subquery Scan",
+                              "Parent Relationship": "Member",
+                              "Parallel Aware": false,
+                              "Async Capable": false,
+                              "Alias": "*SELECT* 1",
+                              "Startup Cost": 0.45,
+                              "Total Cost": 16.54,
+                              "Plan Rows": 1,
+                              "Plan Width": 0,
+                              "Disabled": false,
+                              "Plans": [
+                                {
+                                  "Node Type": "Nested Loop",
+                                  "Parent Relationship": "Subquery",
+                                  "Parallel Aware": false,
+                                  "Async Capable": false,
+                                  "Join Type": "Inner",
+                                  "Startup Cost": 0.45,
+                                  "Total Cost": 16.53,
+                                  "Plan Rows": 1,
+                                  "Plan Width": 141,
+                                  "Disabled": false,
+                                  "Inner Unique": true,
+                                  "Plans": [
+                                    {
+                                      "Node Type": "Index Only Scan",
+                                      "Parent Relationship": "Outer",
+                                      "Parallel Aware": false,
+                                      "Async Capable": false,
+                                      "Scan Direction": "Forward",
+                                      "Index Name": "practice_attempts_history_idx",
+                                      "Relation Name": "practice_attempts",
+                                      "Alias": "p",
+                                      "Startup Cost": 0.17,
+                                      "Total Cost": 8.22,
+                                      "Plan Rows": 1,
+                                      "Plan Width": 4,
+                                      "Disabled": false,
+                                      "Index Cond": "((user_id = '[account]'::text) AND (answered_at >= (date_trunc('day'::text, (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Taipei'::text)) AT TIME ZONE 'Asia/Taipei'::text)) AND (answered_at < ((date_trunc('day'::text, (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Taipei'::text)) + '1 day'::interval) AT TIME ZONE 'Asia/Taipei'::text)))"
+                                    },
+                                    {
+                                      "Node Type": "Index Only Scan",
+                                      "Parent Relationship": "Inner",
+                                      "Parallel Aware": false,
+                                      "Async Capable": false,
+                                      "Scan Direction": "Forward",
+                                      "Index Name": "questions_pkey",
+                                      "Relation Name": "questions",
+                                      "Alias": "q_1",
+                                      "Startup Cost": 0.28,
+                                      "Total Cost": 8.29,
+                                      "Plan Rows": 1,
+                                      "Plan Width": 4,
+                                      "Disabled": false,
+                                      "Index Cond": "(id = p.question_id)"
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "Node Type": "Subquery Scan",
+                              "Parent Relationship": "Member",
+                              "Parallel Aware": false,
+                              "Async Capable": false,
+                              "Alias": "*SELECT* 2",
+                              "Startup Cost": 4.31,
+                              "Total Cost": 25.92,
+                              "Plan Rows": 1,
+                              "Plan Width": 0,
+                              "Disabled": false,
+                              "Plans": [
+                                {
+                                  "Node Type": "Nested Loop",
+                                  "Parent Relationship": "Subquery",
+                                  "Parallel Aware": false,
+                                  "Async Capable": false,
+                                  "Join Type": "Inner",
+                                  "Startup Cost": 4.31,
+                                  "Total Cost": 25.91,
+                                  "Plan Rows": 1,
+                                  "Plan Width": 141,
+                                  "Disabled": false,
+                                  "Inner Unique": false,
+                                  "Plans": [
+                                    {
+                                      "Node Type": "Bitmap Heap Scan",
+                                      "Parent Relationship": "Outer",
+                                      "Parallel Aware": false,
+                                      "Async Capable": false,
+                                      "Relation Name": "diagnostic_sessions",
+                                      "Alias": "d",
+                                      "Startup Cost": 4.16,
+                                      "Total Cost": 9.5,
+                                      "Plan Rows": 2,
+                                      "Plan Width": 16,
+                                      "Disabled": false,
+                                      "Recheck Cond": "(user_id = '[account]'::text)",
+                                      "Plans": [
+                                        {
+                                          "Node Type": "Bitmap Index Scan",
+                                          "Parent Relationship": "Outer",
+                                          "Parallel Aware": false,
+                                          "Async Capable": false,
+                                          "Index Name": "diagnostic_sessions_user_kind_idx",
+                                          "Startup Cost": 0,
+                                          "Total Cost": 4.16,
+                                          "Plan Rows": 2,
+                                          "Plan Width": 0,
+                                          "Disabled": false,
+                                          "Index Cond": "(user_id = '[account]'::text)"
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "Node Type": "Index Scan",
+                                      "Parent Relationship": "Inner",
+                                      "Parallel Aware": false,
+                                      "Async Capable": false,
+                                      "Scan Direction": "Forward",
+                                      "Index Name": "diagnostic_items_session_id_source_question_id_key",
+                                      "Relation Name": "diagnostic_items",
+                                      "Alias": "i",
+                                      "Startup Cost": 0.15,
+                                      "Total Cost": 8.19,
+                                      "Plan Rows": 1,
+                                      "Plan Width": 16,
+                                      "Disabled": false,
+                                      "Index Cond": "(session_id = d.id)",
+                                      "Filter": "((answered_at IS NOT NULL) AND (answered_at >= (date_trunc('day'::text, (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Taipei'::text)) AT TIME ZONE 'Asia/Taipei'::text)) AND (answered_at < ((date_trunc('day'::text, (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Taipei'::text)) + '1 day'::interval) AT TIME ZONE 'Asia/Taipei'::text)))"
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "indexes": [
+      {
+        "tablename": "question_answer_stats",
+        "indexdef": "CREATE UNIQUE INDEX question_answer_stats_pkey ON public.question_answer_stats USING btree (id)"
+      },
+      {
+        "tablename": "question_answer_stats",
+        "indexdef": "CREATE UNIQUE INDEX question_answer_stats_user_question_key ON public.question_answer_stats USING btree (user_id, question_id)"
+      },
+      {
+        "tablename": "question_answer_stats",
+        "indexdef": "CREATE INDEX question_answer_stats_question_idx ON public.question_answer_stats USING btree (question_id)"
+      },
+      {
+        "tablename": "question_answer_stats",
+        "indexdef": "CREATE INDEX question_answer_stats_created_idx ON public.question_answer_stats USING btree (created_at)"
+      },
+      {
+        "tablename": "diagnostic_sessions",
+        "indexdef": "CREATE UNIQUE INDEX verification_task_review_idx ON public.diagnostic_sessions USING btree (reinforcement_task_id, (((verification_metadata ->> 'review_attempt'::text))::integer)) WHERE (kind = 'verification'::text)"
+      },
+      {
+        "tablename": "diagnostic_sessions",
+        "indexdef": "CREATE UNIQUE INDEX diagnostic_sessions_pkey ON public.diagnostic_sessions USING btree (id)"
+      },
+      {
+        "tablename": "diagnostic_sessions",
+        "indexdef": "CREATE UNIQUE INDEX diagnostic_sessions_initial_user_idx ON public.diagnostic_sessions USING btree (user_id) WHERE (kind = 'initial'::text)"
+      },
+      {
+        "tablename": "diagnostic_sessions",
+        "indexdef": "CREATE UNIQUE INDEX diagnostic_sessions_id_user_idx ON public.diagnostic_sessions USING btree (id, user_id)"
+      },
+      {
+        "tablename": "diagnostic_sessions",
+        "indexdef": "CREATE UNIQUE INDEX diagnostic_sessions_active_confirmation_idx ON public.diagnostic_sessions USING btree (user_id) WHERE ((kind = 'confirmation'::text) AND (completed_at IS NULL))"
+      },
+      {
+        "tablename": "diagnostic_sessions",
+        "indexdef": "CREATE INDEX diagnostic_sessions_user_kind_idx ON public.diagnostic_sessions USING btree (user_id, kind, created_at DESC)"
+      },
+      {
+        "tablename": "diagnostic_items",
+        "indexdef": "CREATE UNIQUE INDEX diagnostic_items_pkey ON public.diagnostic_items USING btree (session_id, \"position\")"
+      },
+      {
+        "tablename": "diagnostic_items",
+        "indexdef": "CREATE UNIQUE INDEX diagnostic_items_session_id_source_question_id_key ON public.diagnostic_items USING btree (session_id, source_question_id)"
+      },
+      {
+        "tablename": "diagnostic_items",
+        "indexdef": "CREATE INDEX diagnostic_items_question_idx ON public.diagnostic_items USING btree (question_id)"
+      },
+      {
+        "tablename": "learning_imports",
+        "indexdef": "CREATE UNIQUE INDEX learning_imports_pkey ON public.learning_imports USING btree (user_id, device_id)"
+      },
+      {
+        "tablename": "practice_attempts",
+        "indexdef": "CREATE UNIQUE INDEX practice_attempts_pkey ON public.practice_attempts USING btree (user_id, event_id)"
+      },
+      {
+        "tablename": "practice_attempts",
+        "indexdef": "CREATE INDEX practice_attempts_history_idx ON public.practice_attempts USING btree (user_id, question_id, answered_at)"
+      },
+      {
+        "tablename": "question_review_state",
+        "indexdef": "CREATE UNIQUE INDEX question_review_state_pkey ON public.question_review_state USING btree (user_id, question_id)"
+      }
+    ],
+    "full": {
+      "ms": 437,
+      "bytes": 43846,
+      "historyRows": 23
+    },
+    "summary": {
+      "ms": 125,
+      "bytes": 274
+    }
+  },
+  "before-browser": [
+    {
+      "role": "guest",
+      "run": 0,
+      "heroMs": 359,
+      "statusMs": 494,
+      "requests": [
+        {
+          "path": "/api/auth/get-session",
+          "start": 328,
+          "end": 483
+        },
+        {
+          "path": "/api/stats/weekly-most-missed",
+          "start": 351,
+          "end": 502
+        },
+        {
+          "path": "/api/quiz",
+          "start": 352,
+          "end": 503
+        },
+        {
+          "path": "/api/auth/get-session",
+          "start": 352,
+          "end": 504
+        }
+      ]
+    },
+    {
+      "role": "guest",
+      "run": 1,
+      "heroMs": 345,
+      "statusMs": 450,
+      "requests": [
+        {
+          "path": "/api/auth/get-session",
+          "start": 291,
+          "end": 442
+        },
+        {
+          "path": "/api/stats/weekly-most-missed",
+          "start": 338,
+          "end": 491
+        },
+        {
+          "path": "/api/quiz",
+          "start": 338,
+          "end": 491
+        },
+        {
+          "path": "/api/auth/get-session",
+          "start": 338,
+          "end": 492
+        }
+      ]
+    },
+    {
+      "role": "guest",
+      "run": 2,
+      "heroMs": 345,
+      "statusMs": 464,
+      "requests": [
+        {
+          "path": "/api/auth/get-session",
+          "start": 307,
+          "end": 457
+        },
+        {
+          "path": "/api/stats/weekly-most-missed",
+          "start": 337,
+          "end": 488
+        },
+        {
+          "path": "/api/quiz",
+          "start": 337,
+          "end": 489
+        },
+        {
+          "path": "/api/auth/get-session",
+          "start": 338,
+          "end": 489
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "run": 0,
+      "heroMs": 353,
+      "statusMs": 1377,
+      "requests": [
+        {
+          "path": "/api/auth/get-session",
+          "start": 313,
+          "end": 463
+        },
+        {
+          "path": "/api/stats/weekly-most-missed",
+          "start": 347,
+          "end": 499
+        },
+        {
+          "path": "/api/quiz",
+          "start": 347,
+          "end": 500
+        },
+        {
+          "path": "/api/auth/get-session",
+          "start": 348,
+          "end": 500
+        },
+        {
+          "path": "/api/admin/status",
+          "start": 468,
+          "end": 618
+        },
+        {
+          "path": "/api/admin/status",
+          "start": 534,
+          "end": 688
+        },
+        {
+          "path": "/api/learning",
+          "start": 468,
+          "end": 1369
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "run": 1,
+      "heroMs": 342,
+      "statusMs": 1369,
+      "requests": [
+        {
+          "path": "/api/auth/get-session",
+          "start": 302,
+          "end": 451
+        },
+        {
+          "path": "/api/stats/weekly-most-missed",
+          "start": 334,
+          "end": 484
+        },
+        {
+          "path": "/api/quiz",
+          "start": 334,
+          "end": 485
+        },
+        {
+          "path": "/api/auth/get-session",
+          "start": 334,
+          "end": 485
+        },
+        {
+          "path": "/api/admin/status",
+          "start": 456,
+          "end": 610
+        },
+        {
+          "path": "/api/admin/status",
+          "start": 520,
+          "end": 672
+        },
+        {
+          "path": "/api/learning",
+          "start": 457,
+          "end": 1360
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "run": 2,
+      "heroMs": 330,
+      "statusMs": 1366,
+      "requests": [
+        {
+          "path": "/api/auth/get-session",
+          "start": 295,
+          "end": 445
+        },
+        {
+          "path": "/api/stats/weekly-most-missed",
+          "start": 318,
+          "end": 468
+        },
+        {
+          "path": "/api/quiz",
+          "start": 318,
+          "end": 468
+        },
+        {
+          "path": "/api/auth/get-session",
+          "start": 318,
+          "end": 469
+        },
+        {
+          "path": "/api/admin/status",
+          "start": 455,
+          "end": 607
+        },
+        {
+          "path": "/api/admin/status",
+          "start": 502,
+          "end": 657
+        },
+        {
+          "path": "/api/learning",
+          "start": 455,
+          "end": 1358
+        }
+      ]
+    },
+    {
+      "role": "returning",
+      "run": 0,
+      "heroMs": 345,
+      "statusMs": 1373,
+      "requests": [
+        {
+          "path": "/api/auth/get-session",
+          "start": 306,
+          "end": 456
+        },
+        {
+          "path": "/api/stats/weekly-most-missed",
+          "start": 339,
+          "end": 503
+        },
+        {
+          "path": "/api/quiz",
+          "start": 339,
+          "end": 503
+        },
+        {
+          "path": "/api/auth/get-session",
+          "start": 339,
+          "end": 504
+        },
+        {
+          "path": "/api/admin/status",
+          "start": 461,
+          "end": 614
+        },
+        {
+          "path": "/api/admin/status",
+          "start": 539,
+          "end": 691
+        },
+        {
+          "path": "/api/learning",
+          "start": 462,
+          "end": 1365
+        }
+      ]
+    },
+    {
+      "role": "returning",
+      "run": 1,
+      "heroMs": 367,
+      "statusMs": 1387,
+      "requests": [
+        {
+          "path": "/api/auth/get-session",
+          "start": 317,
+          "end": 467
+        },
+        {
+          "path": "/api/stats/weekly-most-missed",
+          "start": 362,
+          "end": 511
+        },
+        {
+          "path": "/api/quiz",
+          "start": 362,
+          "end": 512
+        },
+        {
+          "path": "/api/auth/get-session",
+          "start": 362,
+          "end": 512
+        },
+        {
+          "path": "/api/admin/status",
+          "start": 472,
+          "end": 628
+        },
+        {
+          "path": "/api/admin/status",
+          "start": 530,
+          "end": 684
+        },
+        {
+          "path": "/api/learning",
+          "start": 473,
+          "end": 1379
+        }
+      ]
+    },
+    {
+      "role": "returning",
+      "run": 2,
+      "heroMs": 358,
+      "statusMs": 1391,
+      "requests": [
+        {
+          "path": "/api/auth/get-session",
+          "start": 314,
+          "end": 464
+        },
+        {
+          "path": "/api/stats/weekly-most-missed",
+          "start": 349,
+          "end": 499
+        },
+        {
+          "path": "/api/quiz",
+          "start": 349,
+          "end": 500
+        },
+        {
+          "path": "/api/auth/get-session",
+          "start": 349,
+          "end": 500
+        },
+        {
+          "path": "/api/admin/status",
+          "start": 469,
+          "end": 625
+        },
+        {
+          "path": "/api/admin/status",
+          "start": 524,
+          "end": 675
+        },
+        {
+          "path": "/api/learning",
+          "start": 469,
+          "end": 1381
+        }
+      ]
+    }
+  ],
+  "after-browser": [
+    {
+      "role": "guest",
+      "run": 0,
+      "heroMs": 480,
+      "statusMs": 599,
+      "requests": [
+        {
+          "path": "/api/auth/get-session",
+          "start": 440,
+          "end": 590
+        },
+        {
+          "path": "/api/stats/weekly-most-missed",
+          "start": 466,
+          "end": 616
+        },
+        {
+          "path": "/api/quiz",
+          "start": 467,
+          "end": 617
+        }
+      ]
+    },
+    {
+      "role": "guest",
+      "run": 1,
+      "heroMs": 362,
+      "statusMs": 488,
+      "requests": [
+        {
+          "path": "/api/auth/get-session",
+          "start": 323,
+          "end": 480
+        },
+        {
+          "path": "/api/stats/weekly-most-missed",
+          "start": 353,
+          "end": 502
+        },
+        {
+          "path": "/api/quiz",
+          "start": 353,
+          "end": 503
+        }
+      ]
+    },
+    {
+      "role": "guest",
+      "run": 2,
+      "heroMs": 360,
+      "statusMs": 479,
+      "requests": [
+        {
+          "path": "/api/auth/get-session",
+          "start": 319,
+          "end": 470
+        },
+        {
+          "path": "/api/stats/weekly-most-missed",
+          "start": 350,
+          "end": 500
+        },
+        {
+          "path": "/api/quiz",
+          "start": 350,
+          "end": 501
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "run": 0,
+      "heroMs": 363,
+      "statusMs": 631,
+      "requests": [
+        {
+          "path": "/api/auth/get-session",
+          "start": 323,
+          "end": 478
+        },
+        {
+          "path": "/api/stats/weekly-most-missed",
+          "start": 354,
+          "end": 505
+        },
+        {
+          "path": "/api/quiz",
+          "start": 355,
+          "end": 506
+        },
+        {
+          "path": "/api/learning/summary",
+          "start": 488,
+          "end": 621
+        },
+        {
+          "path": "/api/admin/status",
+          "start": 489,
+          "end": 639
+        },
+        {
+          "path": "/api/learning",
+          "start": 489,
+          "end": 1398
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "run": 1,
+      "heroMs": 353,
+      "statusMs": 590,
+      "requests": [
+        {
+          "path": "/api/auth/get-session",
+          "start": 309,
+          "end": 465
+        },
+        {
+          "path": "/api/stats/weekly-most-missed",
+          "start": 342,
+          "end": 493
+        },
+        {
+          "path": "/api/quiz",
+          "start": 343,
+          "end": 494
+        },
+        {
+          "path": "/api/learning/summary",
+          "start": 477,
+          "end": 583
+        },
+        {
+          "path": "/api/admin/status",
+          "start": 477,
+          "end": 632
+        },
+        {
+          "path": "/api/learning",
+          "start": 478,
+          "end": 1384
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "run": 2,
+      "heroMs": 446,
+      "statusMs": 672,
+      "requests": [
+        {
+          "path": "/api/auth/get-session",
+          "start": 390,
+          "end": 539
+        },
+        {
+          "path": "/api/stats/weekly-most-missed",
+          "start": 428,
+          "end": 579
+        },
+        {
+          "path": "/api/quiz",
+          "start": 429,
+          "end": 580
+        },
+        {
+          "path": "/api/learning/summary",
+          "start": 557,
+          "end": 660
+        },
+        {
+          "path": "/api/admin/status",
+          "start": 558,
+          "end": 709
+        },
+        {
+          "path": "/api/learning",
+          "start": 559,
+          "end": 1469
+        }
+      ]
+    },
+    {
+      "role": "returning",
+      "run": 0,
+      "heroMs": 339,
+      "statusMs": 466,
+      "requests": [
+        {
+          "path": "/api/auth/get-session",
+          "start": 297,
+          "end": 448
+        },
+        {
+          "path": "/api/stats/weekly-most-missed",
+          "start": 329,
+          "end": 482
+        },
+        {
+          "path": "/api/quiz",
+          "start": 329,
+          "end": 483
+        },
+        {
+          "path": "/api/learning/summary",
+          "start": 465,
+          "end": 567
+        },
+        {
+          "path": "/api/admin/status",
+          "start": 466,
+          "end": 623
+        },
+        {
+          "path": "/api/learning",
+          "start": 466,
+          "end": 1368
+        }
+      ]
+    },
+    {
+      "role": "returning",
+      "run": 1,
+      "heroMs": 345,
+      "statusMs": 473,
+      "requests": [
+        {
+          "path": "/api/auth/get-session",
+          "start": 308,
+          "end": 458
+        },
+        {
+          "path": "/api/stats/weekly-most-missed",
+          "start": 335,
+          "end": 485
+        },
+        {
+          "path": "/api/quiz",
+          "start": 335,
+          "end": 486
+        },
+        {
+          "path": "/api/learning/summary",
+          "start": 472,
+          "end": 574
+        },
+        {
+          "path": "/api/admin/status",
+          "start": 473,
+          "end": 622
+        },
+        {
+          "path": "/api/learning",
+          "start": 473,
+          "end": 1375
+        }
+      ]
+    },
+    {
+      "role": "returning",
+      "run": 2,
+      "heroMs": 351,
+      "statusMs": 471,
+      "requests": [
+        {
+          "path": "/api/auth/get-session",
+          "start": 305,
+          "end": 454
+        },
+        {
+          "path": "/api/stats/weekly-most-missed",
+          "start": 339,
+          "end": 491
+        },
+        {
+          "path": "/api/quiz",
+          "start": 339,
+          "end": 491
+        },
+        {
+          "path": "/api/learning/summary",
+          "start": 468,
+          "end": 582
+        },
+        {
+          "path": "/api/admin/status",
+          "start": 469,
+          "end": 624
+        },
+        {
+          "path": "/api/learning",
+          "start": 469,
+          "end": 1380
+        }
+      ]
+    }
+  ],
+  "before-public-local": [
+    {
+      "path": "/api/auth/get-session",
+      "run": 0,
+      "status": 200,
+      "ttfbMs": 137,
+      "totalMs": 139,
+      "bytes": 4
+    },
+    {
+      "path": "/api/auth/get-session",
+      "run": 1,
+      "status": 200,
+      "ttfbMs": 11,
+      "totalMs": 12,
+      "bytes": 4
+    },
+    {
+      "path": "/api/auth/get-session",
+      "run": 2,
+      "status": 200,
+      "ttfbMs": 24,
+      "totalMs": 24,
+      "bytes": 4
+    },
+    {
+      "path": "/api/auth/get-session",
+      "run": 3,
+      "status": 200,
+      "ttfbMs": 13,
+      "totalMs": 13,
+      "bytes": 4
+    },
+    {
+      "path": "/api/learning",
+      "run": 0,
+      "status": 200,
+      "ttfbMs": 20,
+      "totalMs": 21,
+      "bytes": 14
+    },
+    {
+      "path": "/api/learning",
+      "run": 1,
+      "status": 200,
+      "ttfbMs": 10,
+      "totalMs": 10,
+      "bytes": 14
+    },
+    {
+      "path": "/api/learning",
+      "run": 2,
+      "status": 200,
+      "ttfbMs": 15,
+      "totalMs": 15,
+      "bytes": 14
+    },
+    {
+      "path": "/api/learning",
+      "run": 3,
+      "status": 200,
+      "ttfbMs": 17,
+      "totalMs": 17,
+      "bytes": 14
+    },
+    {
+      "path": "/api/quiz?scope=public&settings=1&chapters=1",
+      "run": 0,
+      "status": 200,
+      "ttfbMs": 1736,
+      "totalMs": 1736,
+      "bytes": 962
+    },
+    {
+      "path": "/api/quiz?scope=public&settings=1&chapters=1",
+      "run": 1,
+      "status": 200,
+      "ttfbMs": 260,
+      "totalMs": 261,
+      "bytes": 962
+    },
+    {
+      "path": "/api/quiz?scope=public&settings=1&chapters=1",
+      "run": 2,
+      "status": 200,
+      "ttfbMs": 275,
+      "totalMs": 275,
+      "bytes": 962
+    },
+    {
+      "path": "/api/quiz?scope=public&settings=1&chapters=1",
+      "run": 3,
+      "status": 200,
+      "ttfbMs": 240,
+      "totalMs": 240,
+      "bytes": 962
+    },
+    {
+      "path": "/api/stats/weekly-most-missed",
+      "run": 0,
+      "status": 200,
+      "ttfbMs": 171,
+      "totalMs": 171,
+      "bytes": 35
+    },
+    {
+      "path": "/api/stats/weekly-most-missed",
+      "run": 1,
+      "status": 200,
+      "ttfbMs": 142,
+      "totalMs": 142,
+      "bytes": 35
+    },
+    {
+      "path": "/api/stats/weekly-most-missed",
+      "run": 2,
+      "status": 200,
+      "ttfbMs": 156,
+      "totalMs": 156,
+      "bytes": 35
+    },
+    {
+      "path": "/api/stats/weekly-most-missed",
+      "run": 3,
+      "status": 200,
+      "ttfbMs": 131,
+      "totalMs": 131,
+      "bytes": 35
+    },
+    {
+      "path": "/api/admin/status",
+      "run": 0,
+      "status": 401,
+      "ttfbMs": 31,
+      "totalMs": 32,
+      "bytes": 39
+    },
+    {
+      "path": "/api/admin/status",
+      "run": 1,
+      "status": 401,
+      "ttfbMs": 10,
+      "totalMs": 10,
+      "bytes": 39
+    },
+    {
+      "path": "/api/admin/status",
+      "run": 2,
+      "status": 401,
+      "ttfbMs": 16,
+      "totalMs": 16,
+      "bytes": 39
+    },
+    {
+      "path": "/api/admin/status",
+      "run": 3,
+      "status": 401,
+      "ttfbMs": 5,
+      "totalMs": 6,
+      "bytes": 39
+    }
+  ],
+  "after-public-local": [
+    {
+      "path": "/api/auth/get-session",
+      "run": 0,
+      "status": 200,
+      "ttfbMs": 180,
+      "totalMs": 182,
+      "bytes": 4
+    },
+    {
+      "path": "/api/auth/get-session",
+      "run": 1,
+      "status": 200,
+      "ttfbMs": 10,
+      "totalMs": 11,
+      "bytes": 4
+    },
+    {
+      "path": "/api/auth/get-session",
+      "run": 2,
+      "status": 200,
+      "ttfbMs": 17,
+      "totalMs": 17,
+      "bytes": 4
+    },
+    {
+      "path": "/api/auth/get-session",
+      "run": 3,
+      "status": 200,
+      "ttfbMs": 12,
+      "totalMs": 12,
+      "bytes": 4
+    },
+    {
+      "path": "/api/learning",
+      "run": 0,
+      "status": 200,
+      "ttfbMs": 37,
+      "totalMs": 38,
+      "bytes": 14
+    },
+    {
+      "path": "/api/learning",
+      "run": 1,
+      "status": 200,
+      "ttfbMs": 7,
+      "totalMs": 7,
+      "bytes": 14
+    },
+    {
+      "path": "/api/learning",
+      "run": 2,
+      "status": 200,
+      "ttfbMs": 18,
+      "totalMs": 18,
+      "bytes": 14
+    },
+    {
+      "path": "/api/learning",
+      "run": 3,
+      "status": 200,
+      "ttfbMs": 6,
+      "totalMs": 6,
+      "bytes": 14
+    },
+    {
+      "path": "/api/learning/summary",
+      "run": 0,
+      "status": 200,
+      "ttfbMs": 31,
+      "totalMs": 31,
+      "bytes": 14
+    },
+    {
+      "path": "/api/learning/summary",
+      "run": 1,
+      "status": 200,
+      "ttfbMs": 9,
+      "totalMs": 9,
+      "bytes": 14
+    },
+    {
+      "path": "/api/learning/summary",
+      "run": 2,
+      "status": 200,
+      "ttfbMs": 14,
+      "totalMs": 14,
+      "bytes": 14
+    },
+    {
+      "path": "/api/learning/summary",
+      "run": 3,
+      "status": 200,
+      "ttfbMs": 15,
+      "totalMs": 16,
+      "bytes": 14
+    },
+    {
+      "path": "/api/quiz?scope=public&settings=1&chapters=1",
+      "run": 0,
+      "status": 200,
+      "ttfbMs": 439,
+      "totalMs": 443,
+      "bytes": 962
+    },
+    {
+      "path": "/api/quiz?scope=public&settings=1&chapters=1",
+      "run": 1,
+      "status": 200,
+      "ttfbMs": 6,
+      "totalMs": 7,
+      "bytes": 962
+    },
+    {
+      "path": "/api/quiz?scope=public&settings=1&chapters=1",
+      "run": 2,
+      "status": 200,
+      "ttfbMs": 21,
+      "totalMs": 22,
+      "bytes": 962
+    },
+    {
+      "path": "/api/quiz?scope=public&settings=1&chapters=1",
+      "run": 3,
+      "status": 200,
+      "ttfbMs": 14,
+      "totalMs": 14,
+      "bytes": 962
+    },
+    {
+      "path": "/api/stats/weekly-most-missed",
+      "run": 0,
+      "status": 200,
+      "ttfbMs": 264,
+      "totalMs": 280,
+      "bytes": 232
+    },
+    {
+      "path": "/api/stats/weekly-most-missed",
+      "run": 1,
+      "status": 200,
+      "ttfbMs": 11,
+      "totalMs": 12,
+      "bytes": 232
+    },
+    {
+      "path": "/api/stats/weekly-most-missed",
+      "run": 2,
+      "status": 200,
+      "ttfbMs": 25,
+      "totalMs": 26,
+      "bytes": 232
+    },
+    {
+      "path": "/api/stats/weekly-most-missed",
+      "run": 3,
+      "status": 200,
+      "ttfbMs": 13,
+      "totalMs": 13,
+      "bytes": 232
+    },
+    {
+      "path": "/api/admin/status",
+      "run": 0,
+      "status": 401,
+      "ttfbMs": 28,
+      "totalMs": 29,
+      "bytes": 39
+    },
+    {
+      "path": "/api/admin/status",
+      "run": 1,
+      "status": 401,
+      "ttfbMs": 17,
+      "totalMs": 17,
+      "bytes": 39
+    },
+    {
+      "path": "/api/admin/status",
+      "run": 2,
+      "status": 401,
+      "ttfbMs": 9,
+      "totalMs": 9,
+      "bytes": 39
+    },
+    {
+      "path": "/api/admin/status",
+      "run": 3,
+      "status": 401,
+      "ttfbMs": 8,
+      "totalMs": 8,
+      "bytes": 39
+    }
+  ],
+  "productionSmoke": {
+    "deployedThisChange": false,
+    "pagesStatus": {
+      "/": 200,
+      "/analysis": 200,
+      "/subjects": 200,
+      "/favorites": 200,
+      "/wrong": 200
+    },
+    "errors": [
+      {
+        "path": "/",
+        "message": "Minified React error #418; visit https://react.dev/errors/418?args[]=text&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings."
+      }
+    ]
+  }
+}

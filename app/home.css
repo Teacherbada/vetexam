@@ -109,6 +109,8 @@
 .study-home .study-weekly-rate strong { display: block; font-size: 20px; font-weight: 600; }
 .study-home .study-weekly-rate small { display: block; font-size: 11px; }
 .study-home .study-weekly-entry > button { border: 1px solid var(--border); border-radius: 999px; padding: 8px 12px; white-space: nowrap; }
+.study-home .study-weekly-entry[data-source="random_fallback"] { grid-template-columns: minmax(0, 1fr); min-height: 172px; }
+.study-home .study-weekly-entry[data-source="random_fallback"] > button { grid-column: 1; justify-self: start; }
 .study-home .study-weekly-state { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; min-height: 172px; font-size: 14px; color: var(--text-secondary); }
 .study-home .study-weekly-state small { margin-top: 8px; font-size: 12px; }
 .study-home .study-progress-summary { display: grid; grid-template-columns: 118px minmax(0, 1fr); gap: 22px; align-items: center; margin: 20px 0; }

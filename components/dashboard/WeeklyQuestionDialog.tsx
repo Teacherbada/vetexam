@@ -12,7 +12,7 @@ import dialogStyles from "./weekly-question-dialog.module.css";
 
 type Question = { id: number; questionSetId: number; questionNumber: number; subject: string; question: string; options: string[]; answer: string; explanation: string; examYear: number | null; questionSetName: string };
 
-export default function WeeklyQuestionDialog({ questionId, onClose }: { questionId: number; onClose: () => void }) {
+export default function WeeklyQuestionDialog({ questionId, onClose, title = '本週魔王題' }: { questionId: number; onClose: () => void; title?: string }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const locked = useRef(false);
   const [question, setQuestion] = useState<Question | null>(null);
@@ -53,12 +53,12 @@ export default function WeeklyQuestionDialog({ questionId, onClose }: { question
   }
 
   return <dialog ref={dialog} className={dialogStyles.dialog} aria-labelledby="weekly-question-title" onClose={onClose}>
-    <div className={dialogStyles.header}><h2 id="weekly-question-title">本週魔王題</h2><button className="study-button" onClick={() => dialog.current?.close()} autoFocus>關閉</button></div>
+    <div className={dialogStyles.header}><h2 id="weekly-question-title">{title}</h2><button className="study-button" onClick={() => dialog.current?.close()} autoFocus>關閉</button></div>
     {error ? <div role="status"><p>暫時無法載入題目。</p><button className="study-button" onClick={() => { setError(false); setRetry((value) => value + 1); }}>重新載入</button></div>
       : !question ? <p role="status">載入題目中…</p> : <>
         <p className={styles.meta}>{question.subject} · {formatExamYear(question.examYear)} · 第 {question.questionNumber} 題</p>
         <h3 className={styles.question}>{question.question}</h3>
-        <div className={styles.options} role="group" aria-label="本週魔王題答案選項">{question.options.map((option, index) => {
+        <div className={styles.options} role="group" aria-label={`${title}答案選項`}>{question.options.map((option, index) => {
           if (!option.trim()) return null;
           const letter = String.fromCharCode(65 + index);
           const correct = Boolean(selected) && hasAnswer && letter === answer;

@@ -13,6 +13,25 @@ export const HISTORY_SQL = `
   FROM diagnostic_items i JOIN diagnostic_sessions d ON d.id=i.session_id
   WHERE d.user_id=$1 AND i.answered_at IS NOT NULL`;
 
+// Same first-answer progress and history sources as readLearning/getTodayProgress.
+// Aggregate in PostgreSQL instead of transferring question IDs and full history.
+export async function readLearningSummary(client: PoolClient, userId: string) {
+  const { rows } = await client.query(`WITH progress AS (
+    SELECT q.subject, COUNT(*)::int AS completed,
+      COUNT(*) FILTER (WHERE s.is_correct)::int AS correct,
+      COUNT(*) FILTER (WHERE NOT s.is_correct)::int AS wrong
+    FROM question_answer_stats s JOIN questions q ON q.id=s.question_id
+    WHERE s.user_id=$1 GROUP BY q.subject
+  ), today AS (
+    SELECT COUNT(*)::int AS completed FROM (${HISTORY_SQL}) h
+    WHERE answered_at >= (DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Taipei') AT TIME ZONE 'Asia/Taipei')
+      AND answered_at < ((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Taipei') + INTERVAL '1 day') AT TIME ZONE 'Asia/Taipei')
+  ) SELECT COALESCE((SELECT jsonb_object_agg(subject,jsonb_build_object('completed',completed,'correct',correct,'wrong',wrong)) FROM progress),'{}'::jsonb) AS progress,
+    (SELECT completed FROM today) AS "todayCompleted",
+    TO_CHAR(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Taipei','YYYY-MM-DD') AS "todayDate"`, [userId]);
+  return { owner: userId, ...rows[0] };
+}
+
 export async function readLearning(client: PoolClient, userId: string) {
   const { rows: first } = await client.query(`SELECT s.question_id, q.subject, s.is_correct FROM question_answer_stats s
     JOIN questions q ON q.id=s.question_id WHERE s.user_id=$1`, [userId]);

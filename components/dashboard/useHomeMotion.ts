@@ -22,6 +22,8 @@ export default function useHomeMotion(ready: boolean) {
       for (const entry of entries) if (entry.isIntersecting) show(entry.target as HTMLElement);
     }, { threshold: 0.06 });
     for (const target of element.querySelectorAll<HTMLElement>('[data-home-reveal], .study-progress')) {
+      // Data-driven text must remain readable as soon as it arrives.
+      if (target.matches('[data-widget="progress"], [data-widget="daily-goal"], [data-widget="achievement"], [data-widget="subjects"], [data-widget="chapter-stats"], [data-widget="weekly-most-missed"]')) continue;
       if (seen.current.has(target)) continue;
       target.dataset.homeMotion = 'pending';
       pending.add(target);

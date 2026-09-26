@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useState, useSyncExternalStore, type CSSProperties } from "react";
-import { getLearning, getLearningStatus, learningOwner, subscribeLearning } from '@/lib/learning-client';
-import { getTodayProgress } from '@/data/tasksProgress';
+import { getLearningSummary, getSummaryStatus, getLearningStatus, learningOwner, subscribeLearning } from '@/lib/learning-client';
+import { buildQuizUrl } from '@/lib/quiz-url';
+import { readAdminStatus } from '@/lib/admin-status-client';
 import LearningStatus from '@/components/LearningStatus';
 import { dailyGoal } from "@/data/tasks";
 import { authClient } from "@/lib/auth-client";
@@ -26,18 +27,24 @@ export default function Home() {
   const [isLoadingLocalProgress, setIsLoadingProgress] = useState(true);
   const [localTodayProgress, setTodayProgress] = useState(0);
   const [localProgress, setProgress] = useState<Record<string, { answered: number[]; correct: number; wrong: number }>>({});
-  const account = useSyncExternalStore(subscribeLearning, getLearning, () => null);
+  const { data: session, isPending: isLoadingUser } = authClient.useSession();
+  const user = session?.user ?? null;
+  const userId = user?.id ?? null;
+  const account = useSyncExternalStore(subscribeLearning, getLearningSummary, () => null);
+  const summaryStatus = useSyncExternalStore(subscribeLearning, getSummaryStatus, () => 'loading');
   const syncStatus = useSyncExternalStore(subscribeLearning, getLearningStatus, () => 'loading');
-  const progress = learningOwner() ? account?.progress ?? {} : localProgress;
-  const todayProgress = learningOwner() ? getTodayProgress().completed : localTodayProgress;
-  const isLoadingProgress = isLoadingLocalProgress || syncStatus === 'loading';
-  const motionRoot = useHomeMotion(!isLoadingProgress);
+  const matchingAccount = user && account?.owner === user.id ? account : null;
+  const identityReady = !isLoadingUser && learningOwner() === (user?.id ?? null);
+  const progress = user ? matchingAccount?.progress ?? {} : identityReady ? Object.fromEntries(Object.entries(localProgress).map(([subject,row]) => [subject, { completed: row.answered.length, correct: row.correct, wrong: row.wrong }])) : {};
+  const todayProgress = user ? matchingAccount?.todayCompleted ?? 0 : identityReady ? localTodayProgress : 0;
+  const isLoadingProgress = !identityReady || isLoadingLocalProgress || (!!user && !matchingAccount && summaryStatus !== 'error');
+  const summaryError = !!user && !matchingAccount && summaryStatus === 'error';
+  const motionRoot = useHomeMotion(true);
   const [examDate, setExamDate] = useState("2027-07-31");
 
-  const [user, setUser] = useState<{ name?: string; email: string } | null>(null);
-  const [isLoadingUser, setIsLoadingUser] = useState(true);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [adminStatus, setAdminStatus] = useState<{ owner: string; allowed: boolean } | null>(null);
+  const isAdmin = !!userId && adminStatus?.owner === userId && adminStatus.allowed;
 
   useEffect(() => {
     const data = JSON.parse(
@@ -72,32 +79,11 @@ export default function Home() {
     }
   }, []);
 
-  useEffect(() => { if (!user) { setIsAdmin(false); return; } fetch("/api/admin/status", { cache: "no-store" }).then(response => response.ok ? response.json() : null).then(data => setIsAdmin(data?.isAdmin === true)).catch(() => setIsAdmin(false)); }, [user]);
-
-  // 取得目前登入使用者
   useEffect(() => {
-    const getSession = async () => {
-      try {
-        const result = await authClient.getSession();
-
-        if (result.data?.user) {
-          setUser(result.data.user);
-        } else {
-          setUser(null);
-        }
-      } catch (error) {
-        console.error(
-          "取得登入狀態失敗：",
-          error
-        );
-        setUser(null);
-      } finally {
-        setIsLoadingUser(false);
-      }
-    };
-
-    getSession();
-  }, []);
+    let active = true;
+    if (userId) void readAdminStatus(userId).then(allowed => { if (active) setAdminStatus({ owner: userId, allowed }); });
+    return () => { active = false; };
+  }, [userId]);
 
   const handleLogout = async () => {
     try {
@@ -105,7 +91,6 @@ export default function Home() {
 
       await authClient.signOut();
 
-      setUser(null);
     } catch (error) {
       console.error(
         "登出失敗：",
@@ -153,11 +138,11 @@ export default function Home() {
     { href: "/subscription", label: "會員方案", icon: "leaf" },
   ];
   const subjectIcons: StudyIconName[] = ["leaf", "file", "search", "heart", "target", "book"];
-  const studied = subjects.filter((subject) => progress[subject]?.answered.length > 0);
-  const completed = Object.values(progress).reduce((sum, item) => sum + item.answered.length, 0);
+  const studied = subjects.filter((subject) => progress[subject]?.completed > 0);
+  const completed = Object.values(progress).reduce((sum, item) => sum + item.completed, 0);
   const remaining = Math.max(0, dailyGoal.target - todayProgress);
   const visibleSubjects = subjects.filter((subject) => subject.includes(search.trim()));
-  const subjectHref = (subject: string) => `/questions?${new URLSearchParams({ subjects: subject, count: "20", order: "random" })}`;
+  const subjectHref = (subject: string) => buildQuizUrl([{ subject, years: [], count: '20' }], 'random', 'practice', 'all');
   const navLinks = navigation.map(({ href, label, icon, comingSoon }) => comingSoon ? <span key={href} className="study-nav-link-disabled" aria-disabled="true"><StudyIcon name={icon} /><span>{label}</span><small>敬請期待 ✨</small></span> : <Link key={href} href={href} aria-current={href === "/" ? "page" : undefined}><StudyIcon name={icon} />{label}</Link>);
 
   const correct = Object.values(progress).reduce((sum, item) => sum + item.correct, 0);
@@ -192,8 +177,8 @@ export default function Home() {
             <p className="study-hero-description">每一題的累積，都是成為更好獸醫的力量。</p>
             <Link href="/subjects" className="study-button study-button-primary study-welcome-action">開始刷題<StudyIcon name="arrow" /></Link>
           </section>} visual={<section className={styles.heroStatus} aria-labelledby="home-status-title">
-            <div className={styles.statusHeading}><div><p className={styles.kicker}>{learningOwner() ? '帳號紀錄' : '本裝置紀錄'}</p><h2 id="home-status-title">今日學習狀態</h2></div><div className={styles.companions}><StudyCompanions /></div></div>
-            {isLoadingProgress ? <p role="status" className={styles.statusMessage}>讀取學習進度中…</p> : syncStatus === 'error' ? <p className={styles.statusMessage}>學習紀錄暫時無法更新。</p> : completed ? <>
+            <div className={styles.statusHeading}><div><p className={styles.kicker}>{user ? '帳號紀錄' : '本裝置紀錄'}</p><h2 id="home-status-title">今日學習狀態</h2></div><div className={styles.companions}><StudyCompanions /></div></div>
+            {isLoadingProgress ? <p role="status" className={styles.statusMessage}>讀取學習進度中…</p> : summaryError ? <p className={styles.statusMessage}>學習紀錄暫時無法更新。</p> : completed ? <>
               <p className={styles.todayCount}><strong>{todayProgress}</strong><span> / {dailyGoal.target} 題</span></p>
               <ProgressBar value={todayProgress / dailyGoal.target * 100} label="今日學習完成百分比" />
               <div className={styles.statusFooter}><span>今天已完成</span><Link href="/analysis" className="study-text-link">查看學習紀錄<StudyIcon name="arrow" /></Link></div>
@@ -222,7 +207,7 @@ export default function Home() {
               <dl><div><dt>已答題數</dt><dd>{completed.toLocaleString()} 題</dd></div><div><dt>正確題數</dt><dd>{correct.toLocaleString()} 題</dd></div><div><dt>錯誤題數</dt><dd>{wrong.toLocaleString()} 題</dd></div><div><dt>整體正確率</dt><dd>{accuracy}%</dd></div></dl>
             </div> : <div className="study-empty"><StudyIcon name="book" /><h3>你的第一步，從這裡開始</h3><p>完成練習後，就能看見累積成果。</p></div>}
             <p className="study-progress-note"><StudyIcon name="leaf" />持續練習，讓每一次作答都更有把握。</p>
-            <details className="study-record-details"><summary>各科累積紀錄<span>{learningOwner() ? '帳號紀錄' : '本裝置紀錄'}</span></summary>              {isLoadingProgress ? <LoadingState label="讀取紀錄中…" /> : studied.length ? studied.map((subject) => { const record = progress[subject]; const accuracy = Math.round(record.correct / record.answered.length * 100); return <div className="study-record" key={subject}><div className="study-section-heading"><h3>{subject}</h3><span>已完成 {record.answered.length} 題</span></div><ProgressBar value={accuracy} label={`${subject}正確率`} /><div className="study-record-stats"><span>正確 {record.correct} 題 · 錯題 {record.wrong} 題</span><strong>正確率 {accuracy}%</strong></div></div>; }) : <div className="study-empty"><span className="study-empty-icon"><StudyIcon name="book" /></span><h3>你的第一步，從這裡開始</h3><p>完成練習後，就能在這裡看見各科累積成果。</p><Link href="/subjects" className="study-text-link">選擇第一個科目 <StudyIcon name="arrow" /></Link></div>}</details>
+            <details className="study-record-details"><summary>各科累積紀錄<span>{user ? '帳號紀錄' : '本裝置紀錄'}</span></summary>              {isLoadingProgress ? <LoadingState label="讀取紀錄中…" /> : studied.length ? studied.map((subject) => { const record = progress[subject]; const accuracy = Math.round(record.correct / record.completed * 100); return <div className="study-record" key={subject}><div className="study-section-heading"><h3>{subject}</h3><span>已完成 {record.completed} 題</span></div><ProgressBar value={accuracy} label={`${subject}正確率`} /><div className="study-record-stats"><span>正確 {record.correct} 題 · 錯題 {record.wrong} 題</span><strong>正確率 {accuracy}%</strong></div></div>; }) : <div className="study-empty"><span className="study-empty-icon"><StudyIcon name="book" /></span><h3>你的第一步，從這裡開始</h3><p>完成練習後，就能在這裡看見各科累積成果。</p><Link href="/subjects" className="study-text-link">選擇第一個科目 <StudyIcon name="arrow" /></Link></div>}</details>
           </section>),
             "subjects": (<section className="study-card study-banks" aria-labelledby="banks-title">
           <div className="study-section-heading"><h2 id="banks-title"><StudyIcon name="book" />選擇題庫開始練習</h2><Link href="/subjects" className="study-text-link">查看全部題庫<StudyIcon name="arrow" /></Link></div>

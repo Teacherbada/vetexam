@@ -14,6 +14,7 @@ import { EXAM_SUBJECTS } from "@/data/exam-chapters";
 import ChapterPicker from "@/components/questions/ChapterPicker";
 import { authClient } from '@/lib/auth-client';
 import type { QuestionState } from '@/lib/question-state';
+import { buildQuizUrl as quizUrl } from '@/lib/quiz-url';
 
 type Row = { subject: string; years: number[]; count: string; chapter?: string };
 
@@ -68,7 +69,7 @@ export default function SubjectsPage() {
   }
 
   function buildQuizUrl() {
-    return `/questions?${new URLSearchParams({ groups: JSON.stringify(rows), order, mode, state: session?.user.id ? questionState : 'all', started: "1" })}`;
+    return quizUrl(rows, order, mode, session?.user.id ? questionState : 'all');
   }
 
   const totalCount = rows.reduce((sum, row) => sum + Math.min(availableCount(row), row.count === "all" ? Infinity : Number(row.count) || 0), 0);
