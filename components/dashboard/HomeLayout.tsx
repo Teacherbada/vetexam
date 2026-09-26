@@ -1,16 +1,17 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 
-type WidgetMetadata = { label: string; size: 'full' | 'half'; hideable: boolean; pairGroup: string | null };
+type WidgetMetadata = { label: string; size: 'full' | 'half' | 'third'; hideable: boolean; pairGroup: string | null };
 const widgets = {
-  countdown: { label: '國考倒數', size: 'full', hideable: true, pairGroup: null },
-  'daily-goal': { label: '今日目標', size: 'half', hideable: true, pairGroup: 'learning' },
-  progress: { label: '我的學習進度', size: 'half', hideable: true, pairGroup: 'learning' },
-  features: { label: 'VetExam 功能介紹', size: 'full', hideable: true, pairGroup: null },
+  'daily-goal': { label: '今日目標', size: 'third', hideable: true, pairGroup: null },
+  'due-review': { label: '到期複習', size: 'third', hideable: true, pairGroup: null },
+  countdown: { label: '國考倒數', size: 'third', hideable: true, pairGroup: null },
   subjects: { label: '選擇題庫開始練習', size: 'full', hideable: true, pairGroup: null },
-  'chapter-stats': { label: '各章節歷屆題量', size: 'full', hideable: true, pairGroup: null },
+  progress: { label: '我的學習進度', size: 'half', hideable: true, pairGroup: 'learning' },
+  'chapter-stats': { label: '各章節歷屆題量', size: 'half', hideable: true, pairGroup: 'learning' },
   'weekly-most-missed': { label: '本週最多人答錯', size: 'full', hideable: true, pairGroup: null },
+  features: { label: 'VetExam 功能介紹', size: 'full', hideable: true, pairGroup: null },
   achievement: { label: '學習小成就', size: 'half', hideable: true, pairGroup: null },
 } satisfies Record<string, WidgetMetadata>;
 type Id = keyof typeof widgets;
@@ -84,6 +85,8 @@ export default function HomeLayout({ hero, visual, introduction, children }: {
       paired.add(visible[index]); paired.add(visible[index + 1]); index++;
     }
   }
+  // Section boundaries follow the saved DOM order; customization never uses CSS reordering.
+  const introductionIndex = visible.findIndex(id => widgets[id].size !== 'third');
   return <>
     <div className="study-layout-toolbar"><button ref={toggle} className="study-text-link" type="button" aria-expanded={editing} aria-controls={editing ? 'home-layout-settings' : undefined}
       onClick={() => { setEditing(!editing); setDragging(null); setNotice(null); }}>{editing ? '完成自訂' : '自訂首頁'}</button></div>
@@ -96,9 +99,11 @@ export default function HomeLayout({ hero, visual, introduction, children }: {
     {editing && notice && <div className="study-layout-notice" role="status">已隱藏「{widgets[notice].label}」<button className="study-text-link" type="button" onClick={() => restore(notice)}>復原</button></div>}
     <span className="study-layout-announcement" role="status">{announcement}</span>
     <div className="study-welcome">{hero}<div className="study-hero-status-group">{visual}</div></div>
-    {introduction}
+    {visible.some(id => widgets[id].size === 'third') && <div className="study-today-heading"><p>照自己的步調，完成今天的一小步</p><h2>今天的學習</h2></div>}
     <div ref={grid} className="study-widget-grid">
-      {visible.map((id, index) => <div key={id} data-home-reveal data-widget={id} data-size={widgets[id].size} data-span={paired.has(id) ? 'half' : 'full'}
+      {visible.map((id, index) => <Fragment key={id}>
+        {index === introductionIndex && <div className="study-journey-slot">{introduction}</div>}
+        <div data-home-reveal data-widget={id} data-size={widgets[id].size} data-span={widgets[id].size === 'third' ? 'third' : paired.has(id) ? 'half' : 'full'}
         className={`study-widget${editing ? ' study-widget-editing' : ''}${dragging === id ? ' study-widget-dragging' : ''}`}
         onDragOver={event => { if (editing && dragging) event.preventDefault(); }}
         onDrop={event => { if (editing && dragging) { event.preventDefault(); move(dragging, id); } setDragging(null); }}>
@@ -113,7 +118,8 @@ export default function HomeLayout({ hero, visual, introduction, children }: {
           </div>
         </div>}
         <div className="study-widget-content">{children[id]}</div>
-      </div>)}
+      </div></Fragment>)}
+      {introductionIndex === -1 && <div className="study-journey-slot">{introduction}</div>}
     </div>
   </>;
 }

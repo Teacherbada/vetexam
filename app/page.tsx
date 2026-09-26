@@ -8,7 +8,7 @@ import { readAdminStatus } from '@/lib/admin-status-client';
 import LearningStatus from '@/components/LearningStatus';
 import { dailyGoal } from "@/data/tasks";
 import { authClient } from "@/lib/auth-client";
-import { ProgressBar, StudyCompanions, StudyIcon, type StudyIconName } from "@/components/dashboard/StudyUI";
+import { ProgressBar, StudyIcon, type StudyIconName } from "@/components/dashboard/StudyUI";
 import "./home.css";
 import foundation from "@/components/ui/foundation.module.css";
 import styles from "./home-foundation.module.css";
@@ -171,23 +171,25 @@ export default function Home() {
         </div>
       </header>
       <main ref={motionRoot} id="main-content" className="study-content" tabIndex={-1}>
-        <HomeLayout introduction={<HomeJourney />} hero={<section className="study-hero">
+        <HomeLayout introduction={<HomeJourney />} hero={<section className="study-hero" data-home-reveal>
             <p className="study-eyebrow">一起，向獸醫之路前進 <StudyIcon name="paw" /></p>
-            <h1>今天也刷一點吧</h1>
+            <h1>今天也刷一點吧！</h1>
             <p className="study-hero-description">每一題的累積，都是成為更好獸醫的力量。</p>
-            <Link href="/subjects" className="study-button study-button-primary study-welcome-action">開始刷題<StudyIcon name="arrow" /></Link>
+            <div className={styles.heroActions}><Link href="/subjects" className="study-button study-button-primary">開始刷題<StudyIcon name="arrow" /></Link><Link href="/study-plan" className="study-button">設定學習計畫<StudyIcon name="calendar" /></Link></div>
           </section>} visual={<section className={styles.heroStatus} aria-labelledby="home-status-title">
-            <div className={styles.statusHeading}><div><p className={styles.kicker}>{user ? '帳號紀錄' : '本裝置紀錄'}</p><h2 id="home-status-title">今日學習狀態</h2></div><div className={styles.companions}><StudyCompanions /></div></div>
+            <div className={styles.statusHeading}><div><p className={styles.kicker}>{user ? '帳號紀錄' : '本裝置紀錄'}</p><h2 id="home-status-title">今日學習狀態</h2></div><span className={styles.statusIcon}><StudyIcon name="leaf" /></span></div>
             {isLoadingProgress ? <p role="status" className={styles.statusMessage}>讀取學習進度中…</p> : summaryError ? <p className={styles.statusMessage}>學習紀錄暫時無法更新。</p> : completed ? <>
-              <p className={styles.todayCount}><strong>{todayProgress}</strong><span> / {dailyGoal.target} 題</span></p>
+              <p className={styles.todayCount}><strong>{todayProgress}</strong><span> / {dailyGoal.target} 題 · 今日目標</span></p>
               <ProgressBar value={todayProgress / dailyGoal.target * 100} label="今日學習完成百分比" />
               <div className={styles.statusFooter}><span>今天已完成</span><Link href="/analysis" className="study-text-link">查看學習紀錄<StudyIcon name="arrow" /></Link></div>
             </> : <div className={styles.statusMessage}><h3>你的第一步，從這裡開始</h3><p>完成練習後，就能看見累積成果。</p><p className={styles.firstGoal}>今日目標 {dailyGoal.target} 題，照自己的步調開始。</p></div>}
+            <dl className={styles.statusMetrics}><div><dt>今日完成</dt><dd>{isLoadingProgress || summaryError ? '—' : todayProgress}<small> 題</small></dd></div><div><dt>正確率</dt><dd>{isLoadingProgress || summaryError ? '—' : `${accuracy}%`}</dd></div><div><dt>累積題數</dt><dd>{isLoadingProgress || summaryError ? '—' : completed.toLocaleString()}<small> 題</small></dd></div></dl>
           </section>}>
           {{
+            "due-review": (<section className="study-card study-due"><h2><StudyIcon name="book" />到期複習</h2><p className={styles.reviewLead}>讓學過的，再熟悉一點。</p><p className="study-muted">查看記憶排程，練習已到期的題目。</p><Link href="/review" className="study-text-link">查看到期複習<StudyIcon name="arrow" /></Link></section>),
             "countdown": (<section className="study-card study-countdown"><h2><StudyIcon name="calendar" />國考倒數</h2><p className="study-days">{daysLeft}<span>天</span></p><label htmlFor="exam-date">我的目標考試日期</label><input id="exam-date" type="date" value={examDate} onChange={(event) => { if (event.target.value) { setExamDate(event.target.value); localStorage.setItem("examDate", event.target.value); } }} /><p className="study-muted">照自己的步調，準備每一天。</p></section>),
             "features": (<section className="study-card study-features" aria-labelledby="features-title">
-          <h2 id="features-title"><StudyIcon name="paw" />VetExam 讓國考準備更有效率</h2>
+          <h2 id="features-title"><StudyIcon name="paw" />更多學習工具</h2>
           <p className="study-muted">從刷題、複習到分析，一站完成，陪你穩穩準備每一步。</p>
           <div className="study-feature-grid">{([
             { href: "/subjects", icon: "book", title: "國考題庫", description: "依科目、年份與章節系統化練習" },
@@ -201,7 +203,7 @@ export default function Home() {
             "weekly-most-missed": (<WeeklyMostMissed variant="homepage" loading={<LoadingState label="正在整理本週錯題…" />} />),
             "progress": (<section className="study-card study-records" aria-labelledby="records-title">
             {syncStatus === 'error' && <LearningStatus />}
-            <div className="study-section-heading"><h2 id="records-title"><StudyIcon name="chart" />我的學習進度</h2><Link href="/analysis" className="study-text-link">查看詳情<StudyIcon name="arrow" /></Link></div>
+            <div className="study-section-heading"><h2 id="records-title"><StudyIcon name="chart" />你的學習狀況</h2><Link href="/analysis" className="study-text-link">查看詳情<StudyIcon name="arrow" /></Link></div>
             {isLoadingProgress ? <LoadingState label="讀取學習進度中…" /> : completed ? <div className="study-progress-summary">
               <div className="study-accuracy" style={{ "--accuracy": Math.max(0, Math.min(accuracy, 100)) + "%" } as CSSProperties} role="img" aria-label={"整體正確率 " + accuracy + "%"}><span><strong>{accuracy}%</strong><small>整體正確率</small></span></div>
               <dl><div><dt>已答題數</dt><dd>{completed.toLocaleString()} 題</dd></div><div><dt>正確題數</dt><dd>{correct.toLocaleString()} 題</dd></div><div><dt>錯誤題數</dt><dd>{wrong.toLocaleString()} 題</dd></div><div><dt>整體正確率</dt><dd>{accuracy}%</dd></div></dl>
@@ -210,7 +212,7 @@ export default function Home() {
             <details className="study-record-details"><summary>各科累積紀錄<span>{user ? '帳號紀錄' : '本裝置紀錄'}</span></summary>              {isLoadingProgress ? <LoadingState label="讀取紀錄中…" /> : studied.length ? studied.map((subject) => { const record = progress[subject]; const accuracy = Math.round(record.correct / record.completed * 100); return <div className="study-record" key={subject}><div className="study-section-heading"><h3>{subject}</h3><span>已完成 {record.completed} 題</span></div><ProgressBar value={accuracy} label={`${subject}正確率`} /><div className="study-record-stats"><span>正確 {record.correct} 題 · 錯題 {record.wrong} 題</span><strong>正確率 {accuracy}%</strong></div></div>; }) : <div className="study-empty"><span className="study-empty-icon"><StudyIcon name="book" /></span><h3>你的第一步，從這裡開始</h3><p>完成練習後，就能在這裡看見各科累積成果。</p><Link href="/subjects" className="study-text-link">選擇第一個科目 <StudyIcon name="arrow" /></Link></div>}</details>
           </section>),
             "subjects": (<section className="study-card study-banks" aria-labelledby="banks-title">
-          <div className="study-section-heading"><h2 id="banks-title"><StudyIcon name="book" />選擇題庫開始練習</h2><Link href="/subjects" className="study-text-link">查看全部題庫<StudyIcon name="arrow" /></Link></div>
+          <div className="study-section-heading"><h2 id="banks-title"><StudyIcon name="book" />快速開始</h2><Link href="/subjects" className="study-text-link">查看全部題庫<StudyIcon name="arrow" /></Link></div>
           <div className="study-bank-tools"><p className="study-muted">依科目選擇題庫，或隨機 20 題立即開始練習。</p><details className="study-subject-filter"><summary><StudyIcon name="search" />篩選科目</summary><label><span>搜尋國考科目</span><input type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="搜尋國考科目…" /></label></details></div>
           <div className="study-bank-grid">{visibleSubjects.map(subject => <Link href={subjectHref(subject)} key={subject} className={"study-bank study-pastel-" + subjects.indexOf(subject)}><span className="study-subject-icon"><StudyIcon name={subjectIcons[subjects.indexOf(subject)]} /></span><h3>{subject}</h3><p>{availability.error ? "題數暫時無法載入" : !availability.data ? "讀取題數中…" : (subjectCounts.get(subject) ?? 0).toLocaleString() + " 題"}</p><span className="study-bank-action">開始練習<StudyIcon name="arrow" /></span></Link>)}</div>
           {visibleSubjects.length === 0 && <p className="study-empty" role="status">沒有符合的科目，試試「病理」或「藥理」。</p>}
