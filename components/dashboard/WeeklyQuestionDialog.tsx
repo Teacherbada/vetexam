@@ -12,7 +12,7 @@ import dialogStyles from "./weekly-question-dialog.module.css";
 
 type Question = { id: number; questionSetId: number; questionNumber: number; subject: string; question: string; options: string[]; answer: string; explanation: string; examYear: number | null; questionSetName: string };
 
-export default function WeeklyQuestionDialog({ questionId, onClose, title = '本週魔王題' }: { questionId: number; onClose: () => void; title?: string }) {
+export default function WeeklyQuestionDialog({ questionId, onClose, title = '本週魔王題', inline = false }: { questionId: number; onClose?: () => void; title?: string; inline?: boolean }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const locked = useRef(false);
   const [question, setQuestion] = useState<Question | null>(null);
@@ -20,11 +20,12 @@ export default function WeeklyQuestionDialog({ questionId, onClose, title = '本
   const [error, setError] = useState(false);
   const [retry, setRetry] = useState(0);
   useEffect(() => {
+    if (inline) return;
     dialog.current?.showModal();
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => { document.body.style.overflow = previousOverflow; };
-  }, []);
+  }, [inline]);
   useEffect(() => {
     const controller = new AbortController();
     fetch(`/api/quiz?scope=public&questionId=${questionId}`, {
@@ -52,8 +53,7 @@ export default function WeeklyQuestionDialog({ questionId, onClose, title = '本
     }
   }
 
-  return <dialog ref={dialog} className={dialogStyles.dialog} aria-labelledby="weekly-question-title" onClose={onClose}>
-    <div className={dialogStyles.header}><h2 id="weekly-question-title">{title}</h2><button className="study-button" onClick={() => dialog.current?.close()} autoFocus>關閉</button></div>
+  const content = <>
     {error ? <div role="status"><p>暫時無法載入題目。</p><button className="study-button" onClick={() => { setError(false); setRetry((value) => value + 1); }}>重新載入</button></div>
       : !question ? <p role="status">載入題目中…</p> : <>
         <p className={styles.meta}>{question.subject} · {formatExamYear(question.examYear)} · 第 {question.questionNumber} 題</p>
@@ -70,5 +70,13 @@ export default function WeeklyQuestionDialog({ questionId, onClose, title = '本
           <OptionDistribution questionId={question.id} selectedAnswer={selected} correctAnswer={answer} expanded />
         </>}
       </>}
+  </>;
+  if (inline) return <section className={dialogStyles.inline} aria-label={`${title}作答`}>
+    <p className={dialogStyles.hint}>直接點選一個答案，看看你的判斷。</p>
+    {content}
+  </section>;
+  return <dialog ref={dialog} className={dialogStyles.dialog} aria-labelledby="weekly-question-title" onClose={onClose}>
+    <div className={dialogStyles.header}><h2 id="weekly-question-title">{title}</h2><button className="study-button" onClick={() => dialog.current?.close()} autoFocus>關閉</button></div>
+    {content}
   </dialog>;
 }

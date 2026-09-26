@@ -4,4 +4,9 @@
 .header h2 { font-size: 18px; font-weight: 600; }
 .dialog :is(button, summary):focus-visible { outline: 3px solid #3F725F; outline-offset: 3px; }
 .dialog button { cursor: pointer; }
+.inline { min-width: 0; padding-top: 20px; }
+.hint { margin-bottom: 16px; color: var(--text-secondary); font-size: 14px; }
+.inline button { cursor: pointer; }
+.inline button:disabled { cursor: default; }
+.inline :is(button, summary):focus-visible { outline: 3px solid #3F725F; outline-offset: 3px; }
 @media (max-width: 600px) { .dialog { padding: 20px 16px; } }

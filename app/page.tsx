@@ -238,7 +238,6 @@ export default function Home() {
               <div><span>Threads</span><a href="https://www.threads.net/@vetexam.tw">@vetexam.tw</a></div>
             </address>
             <PolicyLinks />
-            <nav className={styles.footerUtilities} aria-label="網站協助"><Link href="/feedback" className="study-text-link">回報問題<StudyIcon name="arrow" /></Link>{isAdmin && <Link href="/admin" className="study-text-link">後台管理<StudyIcon name="arrow" /></Link>}</nav>
             <div className="study-footer-meta"><small>© 2026 VetExam. All rights reserved.</small><Link href="/feedback">聯絡與意見回饋 <StudyIcon name="arrow" /></Link></div>
           </footer>
       </main>

@@ -130,7 +130,8 @@
 .home.home :global(.study-chapter-footer) { flex-wrap: wrap; }
 .home.home :global(.study-weekly-question) { font-size: 18px; line-height: 1.9; }
 .home.home :global(.study-weekly-meta), .home.home :global(.study-weekly-stats) { font-size: 14px; }
-.home.home :global(.study-weekly-entry) { gap: 16px; }
+.home.home :global(.study-weekly-entry) { grid-template-columns: 28px minmax(0,1fr) 64px; gap: 16px; padding-block: 16px; margin-top: 16px; }
+.home.home :global(.study-weekly-entry[data-source="random_fallback"]) { grid-template-columns: minmax(0,1fr); min-height: 0; }
 .home.home :global(.study-weekly-rank), .home.home :global(.study-tag) { border-radius: 999px; }
 .home.home :global(.study-weekly-rank) { color: var(--ui-danger); background: var(--ui-danger-bg); }
 .home.home :global(.study-weekly-rate) { color: var(--ui-danger); }
@@ -144,10 +145,21 @@
 .home.home :global(.study-footer) small { font-size: 12px; }
 .home.home dialog { border-radius: 16px; box-shadow: var(--ui-shadow); }
 .home.home dialog button { min-height: 44px; border-radius: 10px; }
-/* Homepage owns in-flow footer entries; shared floating links stay untouched on other routes. */
-.home ~ :global(a[href="/feedback"]), .home ~ :global(a[href="/admin"]) { display: none; }
-.footerUtilities { display: flex; flex-wrap: wrap; gap: 12px 24px; width: 100%; padding-block: 12px; border-block: 1px solid var(--ui-border); }
-.home.home .footerUtilities a { position: static; min-height: 44px; }
+/* Homepage-only floating shortcuts, using the existing links and admin visibility logic. */
+.home.home :global(.study-content) { padding-bottom: 176px; }
+.home ~ :global(a[href="/feedback"]), .home ~ :global(a[href="/admin"]) {
+ position: fixed; display: inline-flex; align-items: center; justify-content: center;
+ right: max(20px, env(safe-area-inset-right)); left: auto;
+ bottom: calc(20px + env(safe-area-inset-bottom)); z-index: 50;
+ min-height: 56px; padding: 14px 24px; margin: 0; border-radius: 999px;
+ font-size: 16px; font-weight: 700; line-height: 1.5; color: #fff;
+ background: #0f172a; box-shadow: 0 6px 16px rgb(15 23 42 / 12%);
+ text-decoration: none;
+}
+.home ~ :global(a[href="/admin"]) { bottom: calc(100px + env(safe-area-inset-bottom)); background: #4b2ff0; }
+.home ~ :global(a[href="/feedback"]):hover { background: #1e293b; }
+.home ~ :global(a[href="/admin"]):hover { background: #3d24d6; }
+.home ~ :global(a[href="/feedback"]):focus-visible, .home ~ :global(a[href="/admin"]):focus-visible { outline: 3px solid #3f725f; outline-offset: 4px; }
 @media(max-width:1199px) {
  .home.home :global(.study-mobile-nav) { margin-left: auto; }
  .home.home :global(.study-account) { margin-left: 0; }
