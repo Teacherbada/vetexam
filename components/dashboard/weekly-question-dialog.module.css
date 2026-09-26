@@ -4,9 +4,16 @@
 .header h2 { font-size: 18px; font-weight: 600; }
 .dialog :is(button, summary):focus-visible { outline: 3px solid #3F725F; outline-offset: 3px; }
 .dialog button { cursor: pointer; }
-.inline { min-width: 0; padding-top: 20px; }
-.hint { margin-bottom: 16px; color: var(--text-secondary); font-size: 14px; }
+.inline { min-width: 0; padding-top: 12px; }
+.hint { margin-bottom: 8px; color: var(--text-secondary); font-size: 14px; }
 .inline button { cursor: pointer; }
 .inline button:disabled { cursor: default; }
 .inline :is(button, summary):focus-visible { outline: 3px solid #3F725F; outline-offset: 3px; }
 @media (max-width: 600px) { .dialog { padding: 20px 16px; } }
+
+.inline .meta { font-size: 12px; }
+.inline .question { margin: 8px 0 14px; font-size: 16px; line-height: 1.75; }
+.inline .options { gap: 8px; }
+.inline .option { min-height: 44px; padding: 10px 12px; gap: 10px; flex-wrap: wrap; border-radius: 10px; }
+.inline .letter { width: 26px; height: 26px; font-size: 12px; }
+.inline .optionText { font-size: 15px; line-height: 1.65; }

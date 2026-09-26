@@ -56,14 +56,14 @@ export default function WeeklyQuestionDialog({ questionId, onClose, title = '本
   const content = <>
     {error ? <div role="status"><p>暫時無法載入題目。</p><button className="study-button" onClick={() => { setError(false); setRetry((value) => value + 1); }}>重新載入</button></div>
       : !question ? <p role="status">載入題目中…</p> : <>
-        <p className={styles.meta}>{question.subject} · {formatExamYear(question.examYear)} · 第 {question.questionNumber} 題</p>
-        <h3 className={styles.question}>{question.question}</h3>
-        <div className={styles.options} role="group" aria-label={`${title}答案選項`}>{question.options.map((option, index) => {
+        <p className={`${styles.meta} ${inline ? dialogStyles.meta : ""}`}>{question.subject} · {formatExamYear(question.examYear)} · 第 {question.questionNumber} 題</p>
+        <h3 className={`${styles.question} ${inline ? dialogStyles.question : ""}`}>{question.question}</h3>
+        <div className={`${styles.options} ${inline ? dialogStyles.options : ""}`} role="group" aria-label={`${title}答案選項`}>{question.options.map((option, index) => {
           if (!option.trim()) return null;
           const letter = String.fromCharCode(65 + index);
           const correct = Boolean(selected) && hasAnswer && letter === answer;
           const wrong = selected === letter && hasAnswer && !correct;
-          return <button key={letter} className={`${styles.option} ${correct ? styles.correct : wrong ? styles.wrong : selected === letter ? styles.selected : ""}`} disabled={Boolean(selected)} aria-pressed={selected === letter} onClick={() => choose(letter)}><span className={styles.letter}>{letter}</span><span className={styles.optionText}>{option}</span>{correct && <span className={styles.answerStatus}>正確答案</span>}{selected === letter && <span className={styles.answerStatus}>你的答案</span>}</button>;
+          return <button key={letter} className={`${styles.option} ${inline ? dialogStyles.option : ""} ${correct ? styles.correct : wrong ? styles.wrong : selected === letter ? styles.selected : ""}`} disabled={Boolean(selected)} aria-pressed={selected === letter} onClick={() => choose(letter)}><span className={`${styles.letter} ${inline ? dialogStyles.letter : ""}`}>{letter}</span><span className={`${styles.optionText} ${inline ? dialogStyles.optionText : ""}`}>{option}</span>{correct && <span className={styles.answerStatus}>正確答案</span>}{selected === letter && <span className={styles.answerStatus}>你的答案</span>}</button>;
         })}</div>
         {selected && <>
           <section className={styles.explanation} aria-label="答案與解析"><p role="status" className={hasAnswer ? selected === answer ? styles.correctText : styles.wrongText : undefined}>{hasAnswer ? `你的答案：${selected} · 正確答案：${answer}` : "本題尚未提供正確答案，暫不計入作答統計。"}</p><h2>官方解析</h2><p className={styles.explanationText}>{question.explanation || "目前沒有提供解析。"}</p></section>

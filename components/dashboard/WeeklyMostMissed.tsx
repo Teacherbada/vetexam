@@ -19,6 +19,7 @@ export default function WeeklyMostMissed({ variant, loading }: { variant?: "home
   const [error, setError] = useState(false);
   const [retry, setRetry] = useState(0);
   const [challengeOpen, setChallengeOpen] = useState(false);
+  const [challengeStarted, setChallengeStarted] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -44,14 +45,21 @@ export default function WeeklyMostMissed({ variant, loading }: { variant?: "home
           <div className={variant === "homepage" ? "study-weekly-entry" : undefined} data-source={result.source}>
           {variant === "homepage" && !fallback && <span className="study-weekly-rank" aria-label="本週第一名">1</span>}
           <div className="study-weekly-copy"><p className="study-weekly-meta">{question.exam_subject} · 第 {question.question_number} 題</p>
-          {variant !== "homepage" && <p className="study-weekly-question">{question.question}</p>}
+          {!challengeOpen && <p className="study-weekly-question">{question.question}</p>}
           {!fallback && <p className="study-weekly-stats"><strong>{question.wrong_attempts} 人答錯</strong><span>／{question.total_attempts} 人作答</span></p>}</div>
           {variant === "homepage" && !fallback && question.total_attempts > 0 && <p className="study-weekly-rate"><strong>{Math.round(question.wrong_attempts / question.total_attempts * 100)}%</strong><small>答錯率</small></p>}
           {variant !== "homepage" && <button onClick={() => setChallengeOpen(true)} className="study-text-link">挑戰這題 <StudyIcon name="arrow" /></button>}
           </div>
-          {variant === "homepage" && <WeeklyQuestionDialog key={question.question_id} questionId={question.question_id} title={fallback ? '今日隨機挑戰' : '本週最多人答錯'} inline />}
+          {variant === "homepage" && <>
+            <button className="study-text-link study-weekly-toggle" aria-expanded={challengeOpen} aria-controls="weekly-inline-challenge" onClick={() => { setChallengeStarted(true); setChallengeOpen((open) => !open); }}>
+              {challengeOpen ? '收合題目' : '挑戰這題'} <StudyIcon name="arrow" />
+            </button>
+            <div id="weekly-inline-challenge" hidden={!challengeOpen}>
+              {challengeStarted && <WeeklyQuestionDialog key={question.question_id} questionId={question.question_id} title={fallback ? '今日隨機挑戰' : '本週最多人答錯'} inline />}
+            </div>
+          </>}
         </> : <div className="study-weekly-state"><p>本週作答資料累積中</p><small>每題滿 {result.min_attempts} 人作答後，顯示答錯人數最多的題目。</small><Link href="/subjects" className="study-text-link">先來刷題 <StudyIcon name="arrow" /></Link></div>}
     </div>
-    {challengeOpen && question && <WeeklyQuestionDialog questionId={question.question_id} title={fallback ? '今日隨機挑戰' : undefined} onClose={() => setChallengeOpen(false)} />}
+    {variant !== "homepage" && challengeOpen && question && <WeeklyQuestionDialog questionId={question.question_id} title={fallback ? '今日隨機挑戰' : undefined} onClose={() => setChallengeOpen(false)} />}
   </section>;
 }

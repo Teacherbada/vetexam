@@ -237,3 +237,9 @@
 }
 @keyframes homeReveal { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes homeProgress { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+/* Keep the optional homepage challenge compact until the reader expands it. */
+.home.home :global(.study-weekly-entry) { margin-top: 12px; padding-block: 12px; gap: 12px; }
+.home.home :global(.study-weekly-question) { font-size: 15px; line-height: 1.7; -webkit-line-clamp: 2; }
+.home.home :global(.study-weekly-toggle) { margin-top: 12px; min-height: 44px; padding: 8px 14px; border: 1px solid var(--border); border-radius: 999px; }
+.home.home :global(.study-weekly-toggle[aria-expanded="true"] svg) { transform: rotate(-90deg); }
