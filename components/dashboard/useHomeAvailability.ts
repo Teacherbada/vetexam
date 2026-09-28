@@ -12,15 +12,17 @@ export function useHomeAvailability() {
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     const controller = new AbortController();
+    let active = true;
+    const timeout = setTimeout(() => controller.abort(), 8000);
     fetch("/api/quiz?scope=public&settings=1&chapters=1", {
-      cache: "no-store", signal: AbortSignal.any([controller.signal, AbortSignal.timeout(8000)]),
+      cache: "no-store", signal: controller.signal,
     }).then(async response => {
       if (!response.ok) throw new Error("Unable to load public availability");
       const result = await response.json();
       if (!Array.isArray(result.availability) || !Array.isArray(result.chapterAvailability)) throw new Error("Invalid availability");
-      if (!controller.signal.aborted) setData(result);
-    }).catch(() => { if (!controller.signal.aborted) setError(true); });
-    return () => controller.abort();
+      if (active) setData(result);
+    }).catch(() => { if (active) setError(true); }).finally(() => clearTimeout(timeout));
+    return () => { active = false; clearTimeout(timeout); controller.abort(); };
   }, [attempt]);
   return { data, error, retry: () => { setError(false); setData(null); setAttempt(value => value + 1); } };
 }

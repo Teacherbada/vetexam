@@ -1,40 +1,52 @@
 import "server-only";
 import { neon } from "@neondatabase/serverless";
 import { auth } from "@/lib/auth";
+import { logAuthEvent } from "@/lib/auth-diagnostics";
 import { evaluateSubscription, type SubscriptionRecord } from "@/lib/subscription-state";
 
 // Accept headers, never a caller-supplied user ID or role. No shared cross-user cache.
 export async function getUserSubscription(headers: Headers) {
-  const session = await auth.api.getSession({ headers });
-  if (!session?.user?.id) return null;
-  if (!process.env.DATABASE_URL) throw new Error("Subscription database unavailable");
-  const sql = neon(process.env.DATABASE_URL);
-  const rows = await sql`
-    SELECT id, user_id, plan, status, expires_at, trial_start, trial_end,
-      current_period_start, current_period_end, cancel_at_period_end, canceled_at,
-      access_source, provider, provider_customer_id, provider_subscription_id,
-      created_at, updated_at, NOW() AS checked_at,
-      to_jsonb(s)->>'billing_plan' AS billing_plan,
-      to_jsonb(s)->>'reward_start' AS reward_start, to_jsonb(s)->>'reward_end' AS reward_end
-    FROM subscriptions s WHERE user_id = ${session.user.id} LIMIT 1
-  `;
-  const record = (rows[0] ?? null) as (SubscriptionRecord & { checked_at: string }) | null;
-  const access = evaluateSubscription(record, record ? new Date(record.checked_at) : new Date());
-  // Provider identifiers and internal grant provenance stay on the server.
-  const subscription = record ? {
-    id: record.id, user_id: record.user_id, plan: access.hasProAccess ? "pro" : record.plan, status: access.status,
-    expires_at: record.expires_at, trial_start: record.trial_start, trial_end: record.trial_end,
-    current_period_start: record.current_period_start, current_period_end: record.current_period_end,
-    cancel_at_period_end: record.cancel_at_period_end, canceled_at: record.canceled_at,
-    created_at: record.created_at, updated_at: record.updated_at,
-    billing_plan: record.billing_plan ?? null,
-    reward_start: record.reward_start ?? null, reward_end: record.reward_end ?? null,
-  } : null;
-  return {
-    user: { id: session.user.id, name: session.user.name, email: session.user.email },
-    subscription,
-    access,
-  };
+  const session = await auth.api.getSession({ headers }).catch((error: unknown) => {
+    logAuthEvent('AUTH_SESSION_FETCH_FAILED', headers, 'subscription.session');
+    throw error;
+  });
+  if (!session?.user?.id) {
+    logAuthEvent(session ? 'USER_FETCH_FAILED' : 'AUTH_SESSION_MISSING', headers, 'subscription.session');
+    return null;
+  }
+  try {
+    if (!process.env.DATABASE_URL) throw new Error("Subscription database unavailable");
+    const sql = neon(process.env.DATABASE_URL);
+    const rows = await sql`
+      SELECT id, user_id, plan, status, expires_at, trial_start, trial_end,
+        current_period_start, current_period_end, cancel_at_period_end, canceled_at,
+        access_source, provider, provider_customer_id, provider_subscription_id,
+        created_at, updated_at, NOW() AS checked_at,
+        to_jsonb(s)->>'billing_plan' AS billing_plan,
+        to_jsonb(s)->>'reward_start' AS reward_start, to_jsonb(s)->>'reward_end' AS reward_end
+      FROM subscriptions s WHERE user_id = ${session.user.id} LIMIT 1
+    `;
+    const record = (rows[0] ?? null) as (SubscriptionRecord & { checked_at: string }) | null;
+    const access = evaluateSubscription(record, record ? new Date(record.checked_at) : new Date());
+    // Provider identifiers and internal grant provenance stay on the server.
+    const subscription = record ? {
+      id: record.id, user_id: record.user_id, plan: access.hasProAccess ? "pro" : record.plan, status: access.status,
+      expires_at: record.expires_at, trial_start: record.trial_start, trial_end: record.trial_end,
+      current_period_start: record.current_period_start, current_period_end: record.current_period_end,
+      cancel_at_period_end: record.cancel_at_period_end, canceled_at: record.canceled_at,
+      created_at: record.created_at, updated_at: record.updated_at,
+      billing_plan: record.billing_plan ?? null,
+      reward_start: record.reward_start ?? null, reward_end: record.reward_end ?? null,
+    } : null;
+    return {
+      user: { id: session.user.id, name: session.user.name, email: session.user.email },
+      subscription,
+      access,
+    };
+  } catch (error) {
+    logAuthEvent('SUBSCRIPTION_FETCH_FAILED', headers, 'subscription.query');
+    throw error;
+  }
 }
 
 export async function hasProAccess(headers: Headers) {

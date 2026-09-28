@@ -12,6 +12,7 @@ function load(path, mocks = {}) {
   }).outputText;
   const exports = {};
   new Function("require", "exports", code)(name => {
+    if (name === '@/lib/auth-diagnostics') return load('lib/auth-diagnostics.ts');
     if (Object.hasOwn(mocks, name)) return mocks[name];
     throw new Error(`Unexpected import: ${name}`);
   }, exports);

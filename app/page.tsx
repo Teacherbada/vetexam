@@ -28,14 +28,15 @@ export default function Home() {
   const [isLoadingLocalProgress, setIsLoadingProgress] = useState(true);
   const [localTodayProgress, setTodayProgress] = useState(0);
   const [localProgress, setProgress] = useState<Record<string, { answered: number[]; correct: number; wrong: number }>>({});
-  const { data: session, isPending: isLoadingUser } = authClient.useSession();
+  const { data: session, isPending: isLoadingUser, error: sessionError, refetch: refetchSession } = authClient.useSession();
+  const authStatus = isLoadingUser ? 'loading' : sessionError ? 'error' : session?.user ? 'authenticated' : 'unauthenticated';
   const user = session?.user ?? null;
   const userId = user?.id ?? null;
   const account = useSyncExternalStore(subscribeLearning, getLearningSummary, () => null);
   const summaryStatus = useSyncExternalStore(subscribeLearning, getSummaryStatus, () => 'loading');
   const syncStatus = useSyncExternalStore(subscribeLearning, getLearningStatus, () => 'loading');
   const matchingAccount = user && account?.owner === user.id ? account : null;
-  const identityReady = !isLoadingUser && learningOwner() === (user?.id ?? null);
+  const identityReady = !isLoadingUser && !sessionError && learningOwner() === (user?.id ?? null);
   const progress = user ? matchingAccount?.progress ?? {} : identityReady ? Object.fromEntries(Object.entries(localProgress).map(([subject,row]) => [subject, { completed: row.answered.length, correct: row.correct, wrong: row.wrong }])) : {};
   const todayProgress = user ? matchingAccount?.todayCompleted ?? 0 : identityReady ? localTodayProgress : 0;
   const isLoadingProgress = !identityReady || isLoadingLocalProgress || (!!user && !matchingAccount && summaryStatus !== 'error');
@@ -48,35 +49,42 @@ export default function Home() {
   const isAdmin = !!userId && adminStatus?.owner === userId && adminStatus.allowed;
 
   useEffect(() => {
-    const data = JSON.parse(
-      localStorage.getItem("progress") || "{}"
-    );
-
-    // Hydrate existing browser-only records after mount to preserve server rendering.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setProgress(data);
-
-    const daily = JSON.parse(
-      localStorage.getItem("dailyProgress") || "{}"
-    );
-
-    const today = new Date().toISOString().split("T")[0];
-
-    setTodayProgress(
-      daily[today]?.completed || 0
-    );
-
-    setIsLoadingProgress(false);
-    const savedExamDate =
-      localStorage.getItem("examDate");
-
-    if (savedExamDate) {
-      setExamDate(savedExamDate);
-    } else {
-      localStorage.setItem(
-        "examDate",
-        "2027-07-31"
+    try {
+      const data = JSON.parse(
+        localStorage.getItem("progress") || "{}"
       );
+
+      // Hydrate existing browser-only records after mount to preserve server rendering.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setProgress(data);
+
+      const daily = JSON.parse(
+        localStorage.getItem("dailyProgress") || "{}"
+      );
+
+      const today = new Date().toISOString().split("T")[0];
+
+      setTodayProgress(
+        daily[today]?.completed || 0
+      );
+
+      setIsLoadingProgress(false);
+      const savedExamDate =
+        localStorage.getItem("examDate");
+
+      if (savedExamDate) {
+        setExamDate(savedExamDate);
+      } else {
+        localStorage.setItem(
+          "examDate",
+          "2027-07-31"
+        );
+      }
+    } catch {
+      // Browser storage is optional; failure must not unmount the account/session UI.
+      console.warn('LOCAL_STORAGE_UNAVAILABLE', { stage: 'home' });
+    } finally {
+      setIsLoadingProgress(false);
     }
   }, []);
 
@@ -164,7 +172,7 @@ export default function Home() {
           <nav className="study-desktop-nav" aria-label="主要導覽">{navLinks}</nav>
           <details className="study-mobile-nav"><summary aria-label="開啟導覽選單"><StudyIcon name="menu" /></summary><nav aria-label="行動版導覽">{navLinks}</nav></details>
           <div className="study-account" aria-live="polite">
-            {isLoadingUser ? <span className="study-muted">讀取帳號中…</span> : user ? <>
+            {authStatus === 'loading' ? <span className="study-muted">讀取帳號中…</span> : authStatus === 'error' ? <><span className="study-muted" role="alert">暫時無法讀取帳號</span><button className="study-button" onClick={() => void refetchSession()}>重試</button></> : user ? <>
               <span className="study-avatar" aria-hidden="true">{(user.name || user.email).slice(0, 1).toUpperCase()}</span>
               <details className="study-account-menu"><summary>{user.name || user.email}<span aria-hidden="true">⌄</span></summary><div><p>{user.email}</p><button className="study-button" onClick={handleLogout} disabled={isLoggingOut}>{isLoggingOut ? "登出中…" : "登出"}</button></div></details>
             </> : <><Link href="/login" className="study-button">登入</Link><Link href="/register" className="study-register">建立帳號 <StudyIcon name="arrow" /></Link></>}

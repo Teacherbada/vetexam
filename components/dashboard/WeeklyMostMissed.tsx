@@ -23,14 +23,17 @@ export default function WeeklyMostMissed({ variant, loading }: { variant?: "home
 
   useEffect(() => {
     const controller = new AbortController();
-    fetch("/api/stats/weekly-most-missed", { cache: "no-store", signal: AbortSignal.any([controller.signal, AbortSignal.timeout(8000)]) })
+    let active = true;
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    fetch("/api/stats/weekly-most-missed", { cache: "no-store", signal: controller.signal })
       .then((response) => {
         if (!response.ok) throw new Error("Unable to load weekly question");
         return response.json();
       })
-      .then((data) => { if (!controller.signal.aborted) setResult(data); })
-      .catch(() => { if (!controller.signal.aborted) setError(true); });
-    return () => controller.abort();
+      .then((data) => { if (active) setResult(data); })
+      .catch(() => { if (active) setError(true); })
+      .finally(() => clearTimeout(timeout));
+    return () => { active = false; clearTimeout(timeout); controller.abort(); };
   }, [retry]);
 
   const question = result?.question;

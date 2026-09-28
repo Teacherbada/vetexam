@@ -1,31 +1,38 @@
 import { NextResponse } from "next/server";
 import { neon } from "@neondatabase/serverless";
 import { auth } from "@/lib/auth";
+import { logAuthEvent } from "@/lib/auth-diagnostics";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+const headers = { "Cache-Control": "private, no-store", Vary: "Cookie" };
 
 export async function GET(request: Request) {
+  let stage: 'session' | 'subscription' = 'session';
   try {
     const session = await auth.api.getSession({
       headers: request.headers,
     });
 
     if (!session?.user?.id) {
+      logAuthEvent(session ? 'USER_FETCH_FAILED' : 'AUTH_SESSION_MISSING', request.headers, 'debug.session');
       return NextResponse.json({
         loggedIn: false,
         session: null,
-      });
+      }, { headers });
     }
 
+    stage = 'subscription';
     const databaseUrl = process.env.DATABASE_URL;
 
     if (!databaseUrl) {
+      logAuthEvent('SUBSCRIPTION_FETCH_FAILED', request.headers, 'debug.subscription', 500);
       return NextResponse.json(
         {
           error: "DATABASE_URL 不存在",
+          loggedIn: true,
         },
-        { status: 500 }
+        { status: 500, headers }
       );
     }
 
@@ -51,18 +58,16 @@ export async function GET(request: Request) {
       },
 
       subscriptions,
-    });
-  } catch (error) {
-    console.error("DEBUG SESSION ERROR:", error);
+    }, { headers });
+  } catch {
+    logAuthEvent(stage === 'session' ? 'AUTH_SESSION_FETCH_FAILED' : 'SUBSCRIPTION_FETCH_FAILED', request.headers, `debug.${stage}`, 500);
 
     return NextResponse.json(
       {
-        error:
-          error instanceof Error
-            ? error.message
-            : "未知錯誤",
+        error: "暫時無法取得診斷資料，請稍後再試。",
+        ...(stage === 'subscription' ? { loggedIn: true } : {}),
       },
-      { status: 500 }
+      { status: 500, headers }
     );
   }
 }

@@ -8,5 +8,6 @@ export const authClient = createAuthClient({
 
   fetchOptions: {
     credentials: "include",
+    cache: "no-store",
   },
 });
