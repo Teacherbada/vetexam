@@ -1,4 +1,5 @@
 import { createAuthClient } from "better-auth/react";
+import { fetchAuthSession } from "@/lib/auth-session-fetch";
 
 export const authClient = createAuthClient({
   baseURL:
@@ -9,5 +10,6 @@ export const authClient = createAuthClient({
   fetchOptions: {
     credentials: "include",
     cache: "no-store",
+    customFetchImpl: fetchAuthSession,
   },
 });

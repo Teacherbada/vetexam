@@ -172,7 +172,7 @@ export default function Home() {
           <nav className="study-desktop-nav" aria-label="主要導覽">{navLinks}</nav>
           <details className="study-mobile-nav"><summary aria-label="開啟導覽選單"><StudyIcon name="menu" /></summary><nav aria-label="行動版導覽">{navLinks}</nav></details>
           <div className="study-account" aria-live="polite">
-            {authStatus === 'loading' ? <span className="study-muted">讀取帳號中…</span> : authStatus === 'error' ? <><span className="study-muted" role="alert">暫時無法讀取帳號</span><button className="study-button" onClick={() => void refetchSession()}>重試</button></> : user ? <>
+            {authStatus === 'loading' ? <span className="study-muted">讀取帳號中…</span> : authStatus === 'error' ? <><span className="study-muted" role="alert">{sessionError?.message === 'AUTH_SESSION_TIMEOUT' ? '讀取帳號逾時，請重試' : '暫時無法讀取帳號'}</span><button className="study-button" onClick={() => void refetchSession()}>重試</button></> : user ? <>
               <span className="study-avatar" aria-hidden="true">{(user.name || user.email).slice(0, 1).toUpperCase()}</span>
               <details className="study-account-menu"><summary>{user.name || user.email}<span aria-hidden="true">⌄</span></summary><div><p>{user.email}</p><button className="study-button" onClick={handleLogout} disabled={isLoggingOut}>{isLoggingOut ? "登出中…" : "登出"}</button></div></details>
             </> : <><Link href="/login" className="study-button">登入</Link><Link href="/register" className="study-register">建立帳號 <StudyIcon name="arrow" /></Link></>}

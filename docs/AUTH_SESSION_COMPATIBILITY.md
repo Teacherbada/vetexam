@@ -112,3 +112,15 @@ NEXT_PUBLIC_BETTER_AUTH_URL=https://vetexam-tw.vercel.app
 6. 對照 Vercel 的固定事件與 stage。區分無 cookie、session 驗證失敗、subscription 故障、403 origin 問題，以及瀏覽器 JS 例外。
 
 完成上述後，才能確認原回報的 Mac 故障是否完全排除。
+
+## 後續：首頁讀取帳號超過五分鐘
+
+第一輪修復 `837a396` 已部署，使用者回報問題仍存在。朋友直接開啟 `/api/debug/session` 很快得到 `loggedIn:false`，直接開啟 `/api/auth/get-session` 很快得到 `null`。這兩項是正常匿名回應，不能再將故障直接歸因伺服器 session 查詢卡死；需區分頁面內 fetch 被阻擋、client 初始化／hydration 未完成、瀏覽器相容性或資源載入失敗。瀏覽器版本仍待提供。
+
+另已重現一項會造成無限等待的獨立缺口：目前沒有 session deadline，且 Better Auth 1.6.26 的 session atom 自帶 AbortSignal，better-fetch 因此略過一般 timeout 設定。此次透過既有 `customFetchImpl` 擴充點，只為 `/api/auth/get-session` 增加 15 秒 deadline，涵蓋 response headers 與 body，保留上游取消訊號。逾時交由原 session hook 設定 error，首頁顯示「讀取帳號逾時，請重試」，不當成登出、不改 cookie、不重寫 Auth。其他登入／註冊 request 原樣透傳。
+
+檔案：`lib/auth-session-fetch.ts`、`lib/auth-client.ts`、`app/page.tsx`、`tests/auth-session-timeout.test.mjs`、`tests/auth-session-browser.mjs`、本報告。沒有變更 `lib/auth.ts` 或資料庫 timeout 設定。
+
+驗證：新增三項測試以真實 Better Auth 1.6.26 session atom 檢查卡住的 headers/body、取消、HTTP 狀態／body 保留、已登入資料保留及重試成功；Auth 相關共 10 項通過。Windows Chrome fixture 模擬未回應的 session，約 15 秒後出現 timeout 提示，重試恢復帳號，無 pageerror。Build、typecheck、變更檔案 lint 通過。全部單元測試 183 項：162 通過、20 跳過、1 項相同既有失敗。
+
+限制：若瀏覽器根本沒有執行頁面的 JavaScript，client deadline 也無法啟動。因此這是已驗證的等待上限與錯誤處理修復，**不能據此宣稱朋友的初始化故障已解決**。下一步需要 Safari／Chrome 的實際版本及更新後症狀。

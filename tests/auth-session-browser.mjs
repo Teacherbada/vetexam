@@ -69,6 +69,13 @@ try {
   assert.equal(await page.locator('.study-account a[href="/login"]').count(), 0);
   mode = 'normal'; await page.getByRole('button', { name: '重試', exact: true }).click();
   await page.locator('.study-account-menu summary').filter({ hasText: user.name }).waitFor();
+  mode = 'slow'; await page.goto(base);
+  await page.getByText('讀取帳號中…', { exact: true }).waitFor();
+  await page.getByText('讀取帳號逾時，請重試', { exact: true }).waitFor({ timeout: 20000 });
+  assert.equal(await page.locator('.study-account a[href="/login"]').count(), 0);
+  mode = 'normal'; releaseSession();
+  await page.getByRole('button', { name: '重試', exact: true }).click();
+  await page.locator('.study-account-menu summary').filter({ hasText: user.name }).waitFor();
   await page.addInitScript(() => {
     Object.defineProperty(AbortSignal, 'any', { value: undefined, configurable: true });
     Object.defineProperty(AbortSignal, 'timeout', { value: undefined, configurable: true });
@@ -77,7 +84,7 @@ try {
   await page.reload();
   await page.locator('.study-account-menu summary').filter({ hasText: user.name }).waitFor();
   assert.deepEqual(errors, []);
-  console.log(JSON.stringify({ browser: await context.browser().version(), platform: process.platform, nativeProfileCookiePersistence: persisted, restoredFixtureCookies: !persisted, passed: ['loading vs anonymous', 'fixture sign-in', 'refresh', 'six page session requests', '503 error and retry', 'admin/subscription 503 leaves account intact', 'storage blocked and missing timeout API'], sessionRequests }));
+  console.log(JSON.stringify({ browser: await context.browser().version(), platform: process.platform, nativeProfileCookiePersistence: persisted, restoredFixtureCookies: !persisted, passed: ['loading vs anonymous', 'fixture sign-in', 'refresh', 'six page session requests', '503 error and retry', 'hung session deadline and retry', 'admin/subscription 503 leaves account intact', 'storage blocked and missing timeout API'], sessionRequests }));
 } catch (error) {
   console.error({ pageErrors: errors });
   throw error;
