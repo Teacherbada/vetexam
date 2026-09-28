@@ -124,3 +124,13 @@ NEXT_PUBLIC_BETTER_AUTH_URL=https://vetexam-tw.vercel.app
 驗證：新增三項測試以真實 Better Auth 1.6.26 session atom 檢查卡住的 headers/body、取消、HTTP 狀態／body 保留、已登入資料保留及重試成功；Auth 相關共 10 項通過。Windows Chrome fixture 模擬未回應的 session，約 15 秒後出現 timeout 提示，重試恢復帳號，無 pageerror。Build、typecheck、變更檔案 lint 通過。全部單元測試 183 項：162 通過、20 跳過、1 項相同既有失敗。
 
 限制：若瀏覽器根本沒有執行頁面的 JavaScript，client deadline 也無法啟動。因此這是已驗證的等待上限與錯誤處理修復，**不能據此宣稱朋友的初始化故障已解決**。下一步需要 Safari／Chrome 的實際版本及更新後症狀。
+
+## Safari 15.5：確認正式首頁的語法相容性阻礙
+
+使用者後續確認版本為 Safari 15.5。Next.js 16.2.12 隨附文件的預設目標為 Safari 16.4。實際讀取正式首頁（部署 `6204b296`）的 11 個 script，確認 `/_next/static/chunks/06mol31af8b1r.js` 含有 Next.js error boundary 的 `static { this.contextType = ... }`。Safari 直到 16.4 才支援 class static initialization blocks，見 [WebKit 官方說明](https://webkit.org/blog/13966/webkit-features-in-safari-16-4/)。這是確認存在的頁面啟動阻礙：舊 Safari 無法解析該腳本，session hook 和 15 秒 deadline 因而無法啟動，符合 API 很快回應匿名狀態、畫面仍停在 loading 的回報。尚未取得朋友電腦的 console，不宣稱這是唯一故障。
+
+此次僅修改 `package.json`，依 Next.js 文件加入 browserslist，保留 Chrome 111、Edge 111、Firefox 111，將 Safari 編譯目標設為 15.5。没有修改 Cookie、SameSite、Secure、Domain、Better Auth 核心、Vercel 環境變數或業務規則。新增 `tests/auth-browser-syntax.mjs`，以 TypeScript AST 檢查編譯後的腳本是否仍含這個不相容語法；不以 user agent 分流、不另寫登入流程。
+
+驗證：舊編譯檔可觸發語法檢查失敗；清除舊 build/cache 後，與正式網站相同的 `npm run build`（Turbopack）成功，49 個前端腳本的 static block 數量為 0。Typecheck、新增檢查檔的 lint 通過。全專案 lint（排除 `.tmp` 診斷產物）仍有原先 73 errors／8 warnings。`node --test tests/*.test.*`：176 項，155 通過、20 跳過、1 項既有 subscription import mock 失敗。
+
+Windows Chrome 153 的本機 production build fixture 測試通過首次登入、重新整理、六個路由、503 與逾時重試、subscription/admin 失敗不抹除帳號，以及停用 AbortSignal.any/timeout 和 storage 的情境。本機 fixture cookie 關閉重開未保留，後續路由測試有明確恢復 fixture；不計為持久登入通過。沒有 macOS Safari 15.5 或 macOS Chrome 實機，仍需部署後在朋友原瀏覽器完成登入與持久性驗收。這項語法修復不代表已驗證 Next.js 所有功能皆支援 Safari 15.5。
