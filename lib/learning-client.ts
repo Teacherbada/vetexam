@@ -31,6 +31,9 @@ async function refreshSummary(token: number) {
 let owner: string | null = null;
 let snapshot: Learning | null = null;
 let status = 'loading';
+const FOCUS_STALE_MS = 5 * 60 * 1000;
+let lastFullReadAt: number | null = null;
+let focusRefresh: { generation: number; task: Promise<void> } | null = null;
 let migrationFailed = false;
 let identityKnown = false;
 let earlyCommands: Record<string, unknown>[] = [];
@@ -49,6 +52,7 @@ async function post(body: Record<string, unknown>) {
 }
 let generation = 0;
 export async function setLearningOwner(next: string | null) {
+  lastFullReadAt = null;
   owner = next; snapshot = null; status = 'loading'; identityKnown = true; migrationFailed = false; const token = ++generation;
   summaryVersion++; summary = null; summaryStatus = next ? 'loading' : 'guest';
   if (next) { const cached = localValue<LearningSummary | null>(`learningSummary:v1:${next}`, null); if (validSummary(cached, next)) { summary = cached; summaryStatus = 'ready'; } }
@@ -81,6 +85,20 @@ export async function retryLearning() {
   if (owner) await migrateLearning(owner);
   await flushLearning(); await refreshLearning();
 }
+// Only passive tab focus may skip a recent read. Writes, online and manual retries
+// keep using retryLearning/flushLearning so pending answers are never throttled.
+export async function refreshLearningOnFocus() {
+  if (!owner) return;
+  const age = lastFullReadAt === null ? Infinity : Date.now() - lastFullReadAt;
+  if (status === 'ready' && !migrationFailed && snapshot?.owner === owner &&
+      summary?.todayDate === todayKey() && age >= 0 && age < FOCUS_STALE_MS &&
+      localValue<Command[]>(`learningOutbox:${owner}`, []).length === 0) return;
+  if (focusRefresh?.generation === generation) return focusRefresh.task;
+  const pending = { generation, task: retryLearning() };
+  focusRefresh = pending;
+  try { await pending.task; }
+  finally { if (focusRefresh === pending) focusRefresh = null; }
+}
 export async function refreshLearning(token = generation) {
   if (!owner) return;
   try {
@@ -92,6 +110,7 @@ export async function refreshLearning(token = generation) {
     const date = todayKey();
     saveSummary({ owner: owner!, progress: Object.fromEntries(Object.entries((data as Learning).progress).map(([subject,row]) => [subject, { completed: row.answered.length, correct: row.correct, wrong: row.wrong }])), todayDate: date,
       todayCompleted: (data as Learning).history.filter(row => taiwanDate.format(new Date(row.answered_at)) === date).length });
+    lastFullReadAt = Date.now();
     status = migrationFailed || localValue<Command[]>(`learningOutbox:${owner}`, []).length ? 'error' : 'ready'; notify();
   } catch { if (token === generation) { status = 'error'; notify(); } }
 }
