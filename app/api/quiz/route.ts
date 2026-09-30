@@ -10,6 +10,9 @@ import { readPublicAvailability } from '@/lib/home-public-data';
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+// Match String.trim() in usableAnswer, including Unicode whitespace.
+const answerWhitespace = "\u0009\u000a\u000b\u000c\u000d \u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff";
+
 function parseList(value: string | null) {
   return (value ?? "").split(",").map((item) => item.trim()).filter(Boolean);
 }
@@ -58,6 +61,14 @@ export async function GET(request: Request) {
         selection = stateSelection(state as QuestionState, await questionTransaction(client => readQuestionState(client, session.user.id)));
       }
       const stateFilter = !selection ? sql`TRUE` : selection.exclude ? sql`NOT (q.id = ANY(${selection.ids}::integer[]))` : sql`q.id = ANY(${selection.ids}::integer[])`;
+      // Filter before LIMIT so incomplete imports cannot consume practice slots.
+      // Direct question links retain access to unanswered questions.
+      const answerFilter = questionId !== null ? sql`TRUE` : sql`
+        UPPER(BTRIM(q.answer, ${answerWhitespace})) ~ '^[A-E]$' AND
+        NULLIF(BTRIM(CASE UPPER(BTRIM(q.answer, ${answerWhitespace}))
+          WHEN 'A' THEN q.option_a WHEN 'B' THEN q.option_b
+          WHEN 'C' THEN q.option_c WHEN 'D' THEN q.option_d
+          WHEN 'E' THEN q.option_e END, ${answerWhitespace}), '') IS NOT NULL`;
       const batches = await Promise.all(groups.map(async (group) => {
         const yearFilter = group.years.length ? sql`qs.exam_year = ANY(${group.years})` : sql`TRUE`;
         const subjectFilter = questionId === null ? sql`q.subject = ${group.subject}` : sql`q.id = ${questionId}`;
@@ -66,7 +77,7 @@ export async function GET(request: Request) {
         return sql`
           SELECT q.*, qs.exam_year, qs.name AS question_set_name
           FROM questions q JOIN question_sets qs ON qs.id = q.question_set_id
-          WHERE qs.visibility = 'public' AND ${subjectFilter} AND ${yearFilter} AND ${chapterFilter} AND ${stateFilter}
+          WHERE qs.visibility = 'public' AND ${subjectFilter} AND ${yearFilter} AND ${chapterFilter} AND ${stateFilter} AND ${answerFilter}
           ORDER BY ${ordering} LIMIT ${group.count === "all" ? null : Number(group.count)}
         `;
       }));
@@ -80,7 +91,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ questions: unique.map((q) => ({
         id: Number(q.id), questionSetId: Number(q.question_set_id), questionNumber: Number(q.question_number),
         subject: q.subject ?? "", question: q.question ?? "",
-        options: [q.option_a ?? "", q.option_b ?? "", q.option_c ?? "", q.option_d ?? "", ...(questionId !== null && q.option_e?.trim() ? [q.option_e] : [])],
+        options: [q.option_a ?? "", q.option_b ?? "", q.option_c ?? "", q.option_d ?? "", ...(q.option_e?.trim() ? [q.option_e] : [])],
         answer: q.answer ?? "", explanation: q.explanation ?? "",
         imageDataUrl: q.image_data_url ?? null,
         examYear: q.exam_year == null ? null : Number(q.exam_year), questionSetName: q.question_set_name ?? "",

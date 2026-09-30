@@ -59,7 +59,7 @@ export default function QuestionDetail({ question, shareUrl }: { question: Publi
     <article className={styles.card}>
       <p className={styles.meta}>{formatExamYear(question.examYear)}｜{question.subject}｜第 {question.questionNumber} 題</p>
       <h1 className={styles.question}>{question.question}</h1>
-      {missing && <p role="status">本題正確答案目前正在整理中。<Link href="/feedback" className="study-button">回報題目</Link></p>}
+      {missing && <p role="status">本題正確答案待核對，暫不開放作答，不計入成績與作答統計。<Link href="/feedback" className="study-button">回報題目</Link></p>}
       <div className={styles.options} role="group" aria-label="答案選項">{question.options.map((option, index) => {
         if (!option.trim()) return null;
         const letter = String.fromCharCode(65 + index);
@@ -70,7 +70,7 @@ export default function QuestionDetail({ question, shareUrl }: { question: Publi
       {pending && <p role="status">正在送出作答…</p>}{error && <p role="alert">{error}</p>}
       {result?.available && <>
         <section className={styles.explanation} aria-label="作答結果"><h2>作答結果</h2><p role="status" className={result.correct ? styles.correctText : styles.wrongText}>{result.correct ? '答對' : '答錯'} · 你的答案：{selected} · 正確答案：{result.answer}</p>
-          <h2>VetExam 官方解析</h2><p className={styles.explanationText}>{result.explanation?.trim() || '目前尚未建立官方解析。'}</p>
+          <h2>VetExam 官方解析</h2><p className={styles.explanationText}>{result.explanation?.trim() || '目前沒有提供解析。'}</p>
         </section>
         <OptionDistribution questionId={question.id} selectedAnswer={selected} correctAnswer={result.answer!} expanded />
       </>}

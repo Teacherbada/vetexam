@@ -15,7 +15,7 @@ export async function answerPublicQuestion(client: PoolClient, userId: string | 
   const row = rows[0];
   const options = [row.option_a ?? '', row.option_b ?? '', row.option_c ?? '', row.option_d ?? '', row.option_e ?? ''];
   const answer = usableAnswer({ answer: row.answer, options });
-  if (!answer) return { status: 200, body: { available: false, message: '本題正確答案目前正在整理中。' } };
+  if (!answer) return { status: 200, body: { available: false, message: '本題正確答案待核對，暫不開放作答，不計入成績與作答統計。' } };
   if (!options[submission.selected_answer.charCodeAt(0) - 65]?.trim()) return { status: 400, body: { error: '請選擇有效選項' } };
   if (userId) await recordFirstAnswers(async (text, values) => (await client.query(text, values)).rows, userId, [submission]);
   return { status: 200, body: { available: true, selected_answer: submission.selected_answer,
