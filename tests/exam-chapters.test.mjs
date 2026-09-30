@@ -127,6 +127,7 @@ test('PostgreSQL: nullable migration, combined filters, counts, privacy, dedup a
     await client.query(migration); await client.query(migration);
     assert.equal((await client.query('SELECT chapter FROM pg_temp.questions')).rows[0].chapter, null);
     await client.query("INSERT INTO questions SELECT i,CASE WHEN i=3 THEN 2 WHEN i=4 THEN 3 ELSE 1 END,i,CASE WHEN i=5 THEN '獸醫藥理學' ELSE '獸醫病理學' END,'fixture','a','b','c','d','A','explanation','腫瘤' FROM generate_series(2,5) i");
+    await client.query("ALTER TABLE pg_temp.questions ADD COLUMN option_e text");
     const route = quiz(async (text, values) => (await client.query(text, values)).rows);
     const run = async (groups, extra) => { const res = await route.GET(request(groups, extra)); assert.equal(res.status, 200); return res.json(); };
     const ids = result => result.questions.map(q => q.id);
