@@ -69,26 +69,34 @@ try {
   const artifacts=new URL('../.tmp/ai-question-artifacts/',import.meta.url);await mkdir(artifacts,{recursive:true});
   for(const width of [320,375,768,1280]) {await page.setViewportSize({width,height:900});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'admin overflow '+width);if(width===375)await page.screenshot({path:new URL('admin-375.png',artifacts).pathname.replace(/^\/([A-Za-z]:)/,'$1'),fullPage:true});}
   await page.getByLabel(/我已人工核對題幹/).check();await page.getByRole('button',{name:'確認審核並發布此題',exact:true}).click();await page.getByText('已記錄人工審核並發布。',{exact:true}).waitFor();
+  let emptyBank=false; const secondId='00000000-0000-4000-8000-000000000003';
   await page.route('**/api/ai-questions**',route=>{
     const r=route.request();
-    if(r.method()==='GET')return route.fulfill({json:{questions:[{id,revision:row.revision,...(({subject,chapter,question,options})=>({subject,chapter,question,options}))(row.content)}],next:null}});
-    answers++;const body=r.postDataJSON();assert.equal(body.id,id);
+    if(r.method()==='GET')return route.fulfill({json:{questions:emptyBank?[]:[{id,revision:row.revision,...(({subject,chapter,question,options})=>({subject,chapter,question,options}))(row.content)},{id:secondId,revision:row.revision,...(({subject,chapter,options})=>({subject,chapter,options}))(row.content),question:'第二題 AI 練習'}],next:null}});
+    answers++;const body=r.postDataJSON();assert([id,secondId].includes(body.id));
     return route.fulfill({json:{answer:row.content.answer,correct:body.answer===row.content.answer,explanation:row.content.explanation,optionExplanations:row.content.optionExplanations,source:row.content.source,generationMethod:row.content.generationMethod}});
   });
   await page.goto(base+'/ai-bank-test-fixture?mode=practice');
-  await page.evaluate(()=>localStorage.setItem('progress',JSON.stringify({existing:'unchanged'})));
+  await page.evaluate(()=>localStorage.setItem('progress',JSON.stringify({existing:{answered:[1],correct:1,wrong:0}})));
   const before=await page.evaluate(()=>JSON.stringify({...localStorage}));
   await page.getByLabel('科目',{exact:true}).selectOption('獸醫公共衛生學');
+  await page.getByLabel('章節',{exact:true}).selectOption('獸醫流行病學');
   await page.getByRole('button',{name:'開始 AI 練習',exact:true}).click();
   await page.getByText('AI 試題｜非歷屆國考題',{exact:true}).waitFor();
   assert.equal(await page.getByText('教材來源',{exact:true}).count(),0);
   await page.getByRole('group',{name:'答案選項'}).getByRole('button').first().evaluate(el=>{el.click();el.click();});
+  assert.equal(answers,0);
+  await page.getByRole('button',{name:'提交答案',exact:true}).evaluate(el=>{el.click();el.click();});
   await page.getByRole('heading',{name:'教材來源'}).waitFor();assert.equal(answers,1);
   await page.getByText('人工修正的完整解析，保留作答紀錄。',{exact:true}).waitFor();
   assert.equal(await page.getByRole('link',{name:'開啟管理員提供的公開來源'}).count(),0);
   assert.equal(await page.getByText('未提供／未確認',{exact:true}).count(),2);
   assert.equal(await page.evaluate(()=>JSON.stringify({...localStorage})),before);
   for(const width of [320,375,768,1280]) {await page.setViewportSize({width,height:900});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'practice overflow '+width);if(width===375)await page.screenshot({path:new URL('practice-375.png',artifacts).pathname.replace(/^\/([A-Za-z]:)/,'$1'),fullPage:true});}
+  await page.getByRole('button',{name:'下一題',exact:true}).click();await page.getByRole('heading',{name:'第二題 AI 練習',exact:true}).waitFor();
+  await page.getByRole('group',{name:'答案選項'}).getByRole('button').first().click();assert.equal(answers,1);await page.getByRole('button',{name:'提交答案',exact:true}).click();await page.getByRole('button',{name:'查看測驗結果',exact:true}).click();
+  await page.getByRole('region',{name:'AI 測驗結果'}).getByText('AI 試題｜非歷屆國考題',{exact:true}).waitFor();assert.equal(answers,2);assert.equal(await page.evaluate(()=>JSON.stringify({...localStorage})),before);
+  emptyBank=true;await page.getByRole('button',{name:'重新選擇科目'}).click();await page.getByRole('button',{name:'開始 AI 練習',exact:true}).click();await page.getByText('此分類目前沒有已審核發布的 AI 試題。',{exact:true}).waitFor();assert.equal(await page.getByRole('group',{name:'答案選項'}).count(),0);
   // Existing practice and image question regression through the real quiz component.
   const image='data:image/svg+xml;base64,'+Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><rect width="80" height="80" fill="green"/></svg>').toString('base64');
   await page.route('**/api/quiz?**',route=>route.fulfill({json:{questions:[{id:991,questionSetId:1,questionNumber:1,subject:'獸醫病理學',question:'既有國考圖片題驗收',options:['a','b','c','d'],answer:'A',explanation:'既有解析',examYear:2026,questionSetName:'fixture',imageUrl:image,imageDataUrl:image,hasImage:true}]}}));
@@ -98,6 +106,9 @@ try {
   const img=page.locator('main img');assert(await img.count()>0);assert(await img.first().evaluate(el=>el.complete&&el.naturalWidth>0));
   await page.getByRole('group',{name:'答案選項',exact:true}).getByRole('button').first().click();
   await page.getByText('既有解析',{exact:true}).waitFor();
+  await page.route('**/api/quiz?*settings*',route=>route.fulfill({json:{availability:[],chapterAvailability:[]}}));
+  await page.goto(base+'/');await page.locator('.study-banks').getByRole('link',{name:/AI 試題/}).waitFor();assert.equal(await page.locator('.study-banks').getByRole('link',{name:/AI 試題/}).getAttribute('href'),'/ai-questions');
+  for(const width of [320,375,768,1280]){await page.setViewportSize({width,height:900});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'home overflow '+width);}
   assert.deepEqual(errors,[]);
   console.log('PASS real anonymous guards; JSON file+invalid preview+explicit subset; double-submit; publish/edit/re-review; stored answer/explanation/source; AI storage isolation; 320/375/768/1280px; existing exam/image practice.');
 } finally {

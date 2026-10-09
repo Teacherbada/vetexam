@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { EXAM_SUBJECTS, chapterGroups } from '@/data/exam-chapters';
 import { fetchAI } from '@/lib/ai-question-client';
+import { uploadLargeMaterial } from '@/lib/ai-material-upload-client';
 import { MATERIAL_LIMITS, type MaterialPage, type MaterialSpec } from '@/lib/ai-material-input';
 import styles from '../questions/questions.module.css';
 type Material = {id:string;filename:string;pages:MaterialPage[]};
@@ -19,6 +20,7 @@ export default function AIMaterialsAdmin() {
   const [materials,setMaterials]=useState<{id:string;filename:string}[]>([]), [jobs,setJobs]=useState<Job[]>([]), [job,setJob]=useState<Job|null>(null), [items,setItems]=useState<Item[]>([]);
   const [configured,setConfigured]=useState(false), [loaded,setLoaded]=useState(false), [busy,setBusy]=useState(false), [message,setMessage]=useState('');
   const [estimate,setEstimate]=useState<number|null>(null), [confirmText,setConfirmText]=useState(false), [confirmCost,setConfirmCost]=useState(false);
+  const upload=useRef({identity:'',id:''});
   const lock=useRef(false), requestKey=useRef(''), stop=useRef(false);
   useEffect(()=>{let mounted=true; api().then(d=>{if(mounted){setMaterials(d.materials);setJobs(d.jobs);setConfigured(d.keyConfigured);setLoaded(true);}}).catch(e=>{if(mounted)setMessage(e.message);});return()=>{mounted=false;stop.current=true;};},[]);
   function patch(p:Partial<MaterialSpec>) {setSpec(s=>({...s,...p}));setEstimate(null);setConfirmText(false);setConfirmCost(false);requestKey.current='';}
@@ -43,10 +45,11 @@ export default function AIMaterialsAdmin() {
     <p>AI 試題｜非歷屆國考題。依管理員提供的教材由 AI 生成，經人工審核後發布；不代表官方命題。</p>
     {message && <p role="status" className={styles.warning}>{message}</p>}
     {loaded&&!configured&&<p className={styles.warning}>伺服器尚未設定 OPENAI_API_KEY，尚未完成真實生成驗證。仍可上傳、預覽與估算費用。</p>}
-    <section className={styles.card}><h2>1. 上傳教材並預覽文字</h2><p>最多 3 MB、100 頁。上傳與預覽不呼叫 AI、不產生模型費用。教材只供管理員查看；會員只會看到核准的短摘錄。</p>
+    <section className={styles.card}><h2>1. 上傳教材並預覽文字</h2><p>最多 100 MB、100 頁。上傳與預覽不呼叫 AI、不產生模型費用。超過 3 MB 自動分段；中斷後可重新選取同一檔案續傳。教材只供管理員查看；會員只會看到核准的短摘錄。</p>
       <p>本版不提供 OCR 或圖表理解。掃描頁請先 OCR 並校對後上傳；需要圖表、公式或表格布局才能判斷的內容，請人工出題。</p>
       <p><a href="/examples/ai-material-sample.pdf" download>下載可測試的文字教材 PDF</a></p>
-      <fieldset disabled={busy}><label className={styles.field}>教材 PDF<input type="file" accept="application/pdf,.pdf" onChange={e=>{const file=e.target.files?.[0];e.target.value='';if(!file)return;if(file.size>MATERIAL_LIMITS.maxFileBytes){setMessage('PDF 最多 3 MB');return;}void task(async()=>{const form=new FormData();form.append('file',file);const d=await api(form);setMaterial(d.material);setPage(1);setSpec({...initial,materialId:d.material.id,title:file.name.replace(/\.pdf$/i,'')});setEstimate(null);setConfirmText(false);setConfirmCost(false);requestKey.current='';await refresh();});}} /></label>
+      <fieldset disabled={busy}><label className={styles.field}>教材 PDF<input type="file" accept="application/pdf,.pdf" onChange={e=>{const file=e.target.files?.[0];e.target.value='';if(!file)return;if(file.size>MATERIAL_LIMITS.maxFileBytes){setMessage('PDF 最多 100 MB');return;}void task(async()=>{const identity=JSON.stringify([file.name,file.size,file.lastModified]);if(upload.current.identity!==identity)upload.current={identity,id:crypto.randomUUID()};
+const form=new FormData();form.append('file',file);const d=file.size>MATERIAL_LIMITS.directFileBytes?await uploadLargeMaterial(file,upload.current.id,setMessage):await api(form);setMaterial(d.material);setPage(1);setSpec({...initial,materialId:d.material.id,title:file.name.replace(/\.pdf$/i,'')});setEstimate(null);setConfirmText(false);setConfirmCost(false);requestKey.current='';await refresh();});}} /></label>
       <label className={styles.field}>已上傳教材（最近 100 份）<select aria-label="已上傳教材（最近 100 份）" value={material?.id||''} onChange={e=>{if(e.target.value)void task(()=>openMaterial(e.target.value));}}><option value="">選擇教材</option>{materials.map(m=><option key={m.id} value={m.id}>{m.filename}</option>)}</select></label></fieldset>
       {material&&<><label className={styles.field}>預覽 PDF 頁次<select aria-label="預覽 PDF 頁次" value={page} onChange={e=>setPage(Number(e.target.value))}>{material.pages.map(p=><option key={p.page} value={p.page}>PDF 第 {p.page} 頁{p.usable?'':'｜需 OCR／人工處理'}</option>)}</select></label>
         <p className={styles.warning}>{current?.warning}</p><p><a href={'/api/admin/ai-materials?material='+material.id+'&pdf=1#page='+page} target="_blank" rel="noopener noreferrer">開啟原始 PDF 第 {page} 頁（限管理員）</a></p>

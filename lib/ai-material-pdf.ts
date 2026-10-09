@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { MATERIAL_LIMITS, type MaterialPage } from './ai-material-input';
 
 export async function extractMaterialPDF(bytes: Uint8Array): Promise<MaterialPage[]> {
-  if (bytes.length > MATERIAL_LIMITS.maxFileBytes || Buffer.from(bytes.subarray(0,5)).toString() !== '%PDF-') throw new Error('請上傳 3 MB 以下的 PDF');
+  if (bytes.length > MATERIAL_LIMITS.maxFileBytes || Buffer.from(bytes.subarray(0,5)).toString() !== '%PDF-') throw new Error('請上傳 100 MB 以下的 PDF');
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
   const task = pdfjs.getDocument({data:bytes,isEvalSupported:false,useSystemFonts:true,disableFontFace:true});
   try {

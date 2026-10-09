@@ -1,7 +1,7 @@
 import { EXAM_SUBJECTS, validChapter } from '@/data/exam-chapters';
 import { isRecord, uuid, AI_METHOD, parseAIQuestion, type AIQuestionInput } from './ai-question-input';
 
-export const MATERIAL_LIMITS = { model: 'gpt-4.1-mini-2025-04-14', maxFileBytes: 3 * 1024 * 1024, maxPages: 100, maxQuestions: 10, maxSourceBytes: 18000, maxInputTokens: 32000, maxOutputTokens: 2400, retries: 0, perQuestionMicroUSD: 16640, batchMicroUSD: 200000, dailyMicroUSD: 2000000 } as const;
+export const MATERIAL_LIMITS = { model: 'gpt-4.1-mini-2025-04-14', maxFileBytes: 100 * 1024 * 1024, chunkBytes: 1024 * 1024, directFileBytes: 3 * 1024 * 1024, maxPages: 100, maxQuestions: 10, maxSourceBytes: 18000, maxInputTokens: 32000, maxOutputTokens: 2400, retries: 0, perQuestionMicroUSD: 16640, batchMicroUSD: 200000, dailyMicroUSD: 2000000 } as const;
 export type MaterialPage = { page: number; text: string; hash: string; usable: boolean; visual: boolean; warning: string };
 export type MaterialSpec = { materialId: string; title: string; edition: string; subject: string; chapter: string; sourceChapter: string; start: number; end: number; count: number; difficulty: string; printedPages: Record<string,string> };
 export function parseMaterialSpec(value: unknown, pages: MaterialPage[]): MaterialSpec {

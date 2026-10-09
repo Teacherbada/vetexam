@@ -137,6 +137,7 @@ export default function Home() {
   const navigation: { href: string; label: string; icon: StudyIconName; comingSoon?: boolean }[] = [
     { href: "/", label: "首頁", icon: "home" },
     { href: "/subjects", label: "國考題庫", icon: "book" },
+    { href: "/ai-questions", label: "AI 試題", icon: "file" },
     ...(isAdmin ? [{ href: "/pdf", label: "國考解析", icon: "folder" as StudyIconName }] : []),
     { href: "/study-plan", label: "設定學習計畫", icon: "calendar" },
     { href: "/manual", label: "手動建立題庫", icon: "file", comingSoon: true },
@@ -224,6 +225,7 @@ export default function Home() {
           <div className="study-section-heading"><h2 id="banks-title"><StudyIcon name="book" />選擇題庫開始練習</h2><Link href="/subjects" className="study-text-link">查看全部題庫<StudyIcon name="arrow" /></Link></div>
           <div className="study-bank-tools"><p className="study-muted">依科目選擇題庫，或隨機 20 題立即開始練習。</p><details className="study-subject-filter"><summary><StudyIcon name="search" />篩選科目</summary><label><span>搜尋國考科目</span><input type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="搜尋國考科目…" /></label></details></div>
           <div className="study-bank-grid">{visibleSubjects.map(subject => <Link href={subjectHref(subject)} key={subject} className={"study-bank study-pastel-" + subjects.indexOf(subject)}><span className="study-subject-icon"><StudyIcon name={subjectIcons[subjects.indexOf(subject)]} /></span><h3>{subject}</h3><p>{availability.error ? "題數暫時無法載入" : !availability.data ? "讀取題數中…" : (subjectCounts.get(subject) ?? 0).toLocaleString() + " 題"}</p><span className="study-bank-action">開始練習<StudyIcon name="arrow" /></span></Link>)}</div>
+          <Link href="/ai-questions" className="study-button mt-4"><StudyIcon name="file" />AI 試題<span className="study-muted">非歷屆國考題</span><StudyIcon name="arrow" /></Link>
           {visibleSubjects.length === 0 && <p className="study-empty" role="status">沒有符合的科目，試試「病理」或「藥理」。</p>}
           {availability.error && <button type="button" className="study-text-link" onClick={availability.retry}>重新載入題數<StudyIcon name="arrow" /></button>}
         </section>),

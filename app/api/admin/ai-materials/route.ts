@@ -17,9 +17,16 @@ export async function GET(request: Request) {
     if (materialId) {
       if (!uuid(materialId)) throw new QuestionAdminError('教材識別碼無效');
       // Bytea is read through pg, never encoded into JSON or exposed to member endpoints.
-      const material=await questionTransaction(async c=>(await c.query('SELECT id,filename,pages'+(params.has('pdf')?',pdf':'')+' FROM ai_materials WHERE id=$1',[materialId])).rows[0]);
+      const material=await questionTransaction(async c=>(await c.query('SELECT id,filename,pages,octet_length(pdf) AS byte_length FROM ai_materials WHERE id=$1',[materialId])).rows[0]);
       if (!material) throw new QuestionAdminError('找不到教材',404);
-      if (params.has('pdf')) return new Response(new Uint8Array(material.pdf),{headers:{'Content-Type':'application/pdf','Content-Disposition':'inline; filename="material.pdf"','Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"sandbox; frame-ancestors 'self'"}});
+      if (params.has('pdf')) {
+        const part=params.get('part');
+        if(part===null && material.byte_length>MATERIAL_LIMITS.directFileBytes)return new Response(null,{status:307,headers:{Location:'/admin/ai-materials/source?material='+materialId,'Cache-Control':'private, no-store'}});
+        if(part!==null&&(!/^\d+$/.test(part)||Number(part)>=Math.ceil(material.byte_length/MATERIAL_LIMITS.chunkBytes)))throw new QuestionAdminError('教材分段無效');
+        const start=part===null?0:Number(part)*MATERIAL_LIMITS.chunkBytes,length=part===null?MATERIAL_LIMITS.directFileBytes:MATERIAL_LIMITS.chunkBytes;
+        const bytes=await questionTransaction(async c=>(await c.query('SELECT substring(pdf FROM $2::int FOR $3::int) AS bytes FROM ai_materials WHERE id=$1',[materialId,start+1,length])).rows[0].bytes);
+        return new Response(new Uint8Array(bytes),{headers:{'Content-Type':part===null?'application/pdf':'application/octet-stream','Content-Disposition':'inline; filename="material.pdf"','Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"sandbox; frame-ancestors 'self'"}});
+      }
       return aiJson({material});
     }
     if (jobId) {
@@ -42,9 +49,9 @@ export async function POST(request: Request) {
       if ((origin && origin!==new URL(request.url).origin) || request.headers.get('sec-fetch-site')==='cross-site') throw new QuestionAdminError('不允許此來源',403);
       const reader=request.body?.getReader(); if (!reader) throw new QuestionAdminError('缺少 PDF');
       const chunks: Uint8Array[]=[]; let size=0;
-      while (true) {const {done,value}=await reader.read(); if (done) break; size+=value.byteLength; if (size>MATERIAL_LIMITS.maxFileBytes+65536) {await reader.cancel();throw new QuestionAdminError('PDF 最多 3 MB',413);} chunks.push(value);}
+      while (true) {const {done,value}=await reader.read(); if (done) break; size+=value.byteLength; if (size>MATERIAL_LIMITS.directFileBytes+65536) {await reader.cancel();throw new QuestionAdminError('大於 3 MB 請使用教材分段上傳（最多 100 MB）',413);} chunks.push(value);}
       const form=await new Response(Buffer.concat(chunks),{headers:{'Content-Type':request.headers.get('content-type')!}}).formData(), file=form.get('file');
-      if (!(file instanceof File) || file.size>MATERIAL_LIMITS.maxFileBytes) throw new QuestionAdminError('請上傳 3 MB 以下 PDF');
+      if (!(file instanceof File) || file.size>MATERIAL_LIMITS.directFileBytes) throw new QuestionAdminError('大於 3 MB 請使用教材分段上傳（最多 100 MB）');
       const bytes=Buffer.from(await file.arrayBuffer());
       let pages; try { pages=await extractMaterialPDF(new Uint8Array(bytes)); } catch(e) { throw new QuestionAdminError('無法擷取教材：'+((e as Error).message.includes('password')?'PDF 已加密，請先解除密碼':(e as Error).message)); }
       const material=await questionTransaction(client=>saveMaterial(client,bytes,file.name || randomUUID()+'.pdf',pages,admin.session.user.id));

@@ -94,7 +94,7 @@ export async function publishAIBatch(client: PoolClient, body: Record<string,unk
   return {published:ids.size};
 }
 export async function listPublishedAI(query: Query, subject: string, chapter: string, after: string) {
-  return query("SELECT id,revision,content->>'subject' AS subject,content->>'chapter' AS chapter,content->>'question' AS question,content->'options' AS options FROM ai_questions WHERE status='published' AND review_status='approved' AND deleted_at IS NULL AND ($1='' OR content->>'subject'=$1) AND ($2='' OR content->>'chapter'=$2) AND ($3::uuid IS NULL OR id>$3::uuid) ORDER BY id LIMIT 51", [subject, chapter, uuid(after) ? after : null]);
+  return query("SELECT id,kind,revision,content->>'subject' AS subject,content->>'chapter' AS chapter,content->>'question' AS question,content->'options' AS options FROM ai_questions WHERE status='published' AND review_status='approved' AND deleted_at IS NULL AND ($1='' OR content->>'subject'=$1) AND ($2='' OR content->>'chapter'=$2) AND ($3::uuid IS NULL OR id>$3::uuid) ORDER BY id LIMIT 51", [subject, chapter, uuid(after) ? after : null]);
 }
 export async function answerAI(client: PoolClient, body: Record<string, unknown>, userId: string) {
   if (!uuid(body.id) || !uuid(body.requestKey) || !Number.isSafeInteger(body.revision) || typeof body.answer !== 'string' || !/^[A-D]$/.test(body.answer)) throw new QuestionAdminError('作答資料格式錯誤');
@@ -106,5 +106,5 @@ export async function answerAI(client: PoolClient, body: Record<string, unknown>
   const attempt = (await client.query("INSERT INTO ai_question_attempts(id,user_id,request_key,question_id,revision,selected_answer,is_correct,content_snapshot) VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb) ON CONFLICT(user_id,request_key) DO UPDATE SET request_key=EXCLUDED.request_key RETURNING *",
     [randomUUID(), userId, body.requestKey, body.id, row.revision, body.answer, body.answer === content.answer, JSON.stringify(content)])).rows[0];
   if (attempt.question_id !== body.id || attempt.revision !== body.revision || attempt.selected_answer !== body.answer) throw new QuestionAdminError('作答識別碼已用於其他作答', 409);
-  return { correct: attempt.is_correct, answer: content.answer, explanation: content.explanation, optionExplanations: content.optionExplanations, source: content.source, generationMethod: content.generationMethod };
+  return { kind: 'ai', correct: attempt.is_correct, answer: content.answer, explanation: content.explanation, optionExplanations: content.optionExplanations, source: content.source, generationMethod: content.generationMethod };
 }
