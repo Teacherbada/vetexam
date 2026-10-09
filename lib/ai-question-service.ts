@@ -47,14 +47,15 @@ export async function importAI(client: PoolClient, body: Record<string, unknown>
   return { ...summary, replayed: false };
 }
 export async function updateAI(client: PoolClient, body: Record<string, unknown>, userId: string) {
-  if (!uuid(body.id) || !Number.isSafeInteger(body.revision) || !['save','publish','unpublish'].includes(String(body.action))) throw new QuestionAdminError('題目、版本或操作無效');
+  if (!uuid(body.id) || !Number.isSafeInteger(body.revision) || !['save','publish','unpublish','delete'].includes(String(body.action))) throw new QuestionAdminError('題目、版本或操作無效');
   await client.query('LOCK TABLE ai_questions IN SHARE ROW EXCLUSIVE MODE');
-  const row = (await client.query('SELECT * FROM ai_questions WHERE id=$1 FOR UPDATE', [body.id])).rows[0];
+  const row = (await client.query('SELECT * FROM ai_questions WHERE id=$1 AND deleted_at IS NULL FOR UPDATE', [body.id])).rows[0];
   if (!row) throw new QuestionAdminError('找不到題目', 404);
   if (row.revision !== body.revision) throw new QuestionAdminError('題目已由其他視窗更新，請重新載入', 409);
   if (body.action === 'save') {
     const parsed = parseAIQuestion(body.content);
     if (parsed.errors.length) throw new QuestionAdminError(parsed.errors.join('；'));
+    await validateMaterialSource(client,String(body.id),parsed.question!,true);
     const fingerprint = aiFingerprint(parsed.question!);
     const duplicate = (await client.query('SELECT id FROM ai_questions WHERE fingerprint=$1 AND id<>$2', [fingerprint, body.id])).rows;
     if (duplicate.length) throw new QuestionAdminError('已有相同科目與題幹', 409);
@@ -64,19 +65,41 @@ export async function updateAI(client: PoolClient, body: Record<string, unknown>
     if (body.confirmReview !== true) throw new QuestionAdminError('請確認已人工核對題目、答案、解析與來源');
     const parsed = parseAIQuestion(row.content);
     if (parsed.errors.length) throw new QuestionAdminError(parsed.errors.join('；'));
+    await validateMaterialSource(client,String(body.id),parsed.question!,false);
     await client.query("UPDATE ai_questions SET status='published',review_status='approved',reviewed_by=$2,reviewed_at=now(),published_at=now(),revision=revision+1,updated_at=now() WHERE id=$1", [body.id, userId]);
+  } else if (body.action === 'delete') {
+    if (row.status !== 'draft' || body.confirmDelete !== true) throw new QuestionAdminError('請先退回草稿，並確認刪除；既有作答紀錄會保留');
+    await client.query('UPDATE ai_questions SET deleted_at=now(),revision=revision+1,updated_at=now() WHERE id=$1',[body.id]);
   } else {
     await client.query("UPDATE ai_questions SET status='draft',review_status='pending',reviewed_by=NULL,reviewed_at=NULL,published_at=NULL,revision=revision+1,updated_at=now() WHERE id=$1", [body.id]);
   }
   return (await client.query('SELECT * FROM ai_questions WHERE id=$1', [body.id])).rows[0];
 }
+async function validateMaterialSource(client: PoolClient, id: string, question: AIQuestionInput, update: boolean) {
+  const provenance=(await client.query('SELECT s.material_id,m.pages,j.spec FROM ai_question_material_sources s JOIN ai_materials m ON m.id=s.material_id JOIN ai_questions q ON q.id=s.question_id JOIN ai_generation_jobs j ON j.batch_id=q.batch_id WHERE s.question_id=$1',[id])).rows[0];
+  if (!provenance) return;
+  const page=provenance.pages.find((p: {page:number})=>String(p.page)===question.source.pdfPages);
+  const normalize=(s:string)=>s.normalize('NFKC').replace(/\s+/g,' ').trim();
+  if (!page?.usable || page.page<provenance.spec.start || page.page>provenance.spec.end || question.source.excerpt.length<12 || !normalize(page.text).includes(normalize(question.source.excerpt)) || question.source.url) throw new QuestionAdminError('教材來源須為本批擷取頁次與原文摘錄；不可加入私人教材連結');
+  if (update) await client.query('UPDATE ai_question_material_sources SET pdf_page=$2,page_hash=$3 WHERE question_id=$1',[id,page.page,page.hash]);
+}
+export async function publishAIBatch(client: PoolClient, body: Record<string,unknown>, userId: string) {
+  if (body.confirmReview !== true || !Array.isArray(body.questions) || !body.questions.length || body.questions.length>200) throw new QuestionAdminError('請選擇已人工審核的題目（最多 200 題）');
+  const ids=new Set<string>();
+  for (const item of body.questions) {
+    if (!item || !uuid(item.id) || ids.has(item.id)) throw new QuestionAdminError('批次題目無效或重複');
+    ids.add(item.id);
+    await updateAI(client,{action:'publish',id:item.id,revision:item.revision,confirmReview:true},userId);
+  }
+  return {published:ids.size};
+}
 export async function listPublishedAI(query: Query, subject: string, chapter: string, after: string) {
-  return query("SELECT id,revision,content->>'subject' AS subject,content->>'chapter' AS chapter,content->>'question' AS question,content->'options' AS options FROM ai_questions WHERE status='published' AND review_status='approved' AND ($1='' OR content->>'subject'=$1) AND ($2='' OR content->>'chapter'=$2) AND ($3::uuid IS NULL OR id>$3::uuid) ORDER BY id LIMIT 51", [subject, chapter, uuid(after) ? after : null]);
+  return query("SELECT id,revision,content->>'subject' AS subject,content->>'chapter' AS chapter,content->>'question' AS question,content->'options' AS options FROM ai_questions WHERE status='published' AND review_status='approved' AND deleted_at IS NULL AND ($1='' OR content->>'subject'=$1) AND ($2='' OR content->>'chapter'=$2) AND ($3::uuid IS NULL OR id>$3::uuid) ORDER BY id LIMIT 51", [subject, chapter, uuid(after) ? after : null]);
 }
 export async function answerAI(client: PoolClient, body: Record<string, unknown>, userId: string) {
   if (!uuid(body.id) || !uuid(body.requestKey) || !Number.isSafeInteger(body.revision) || typeof body.answer !== 'string' || !/^[A-D]$/.test(body.answer)) throw new QuestionAdminError('作答資料格式錯誤');
   // Share lock prevents withdrawal/edit between visibility check and recording.
-  const row = (await client.query("SELECT * FROM ai_questions WHERE id=$1 AND status='published' AND review_status='approved' FOR SHARE", [body.id])).rows[0];
+  const row = (await client.query("SELECT * FROM ai_questions WHERE id=$1 AND status='published' AND review_status='approved' AND deleted_at IS NULL FOR SHARE", [body.id])).rows[0];
   if (!row) throw new QuestionAdminError('題目未發布或已撤回', 404);
   if (row.revision !== body.revision) throw new QuestionAdminError('題目版本已更新，請重新載入', 409);
   const content = row.content as AIQuestionInput;

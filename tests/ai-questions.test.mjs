@@ -94,6 +94,7 @@ test('PostgreSQL: additive migration, preview/import/replay, review isolation, i
     await client.query('SET LOCAL search_path TO '+schema); // No fallback to public tables.
     const migration=readFileSync(new URL('../migrations/20261009_ai_question_bank.sql',import.meta.url),'utf8');
     await client.query(migration); await client.query(migration);
+    await client.query(readFileSync(new URL('../migrations/20261010_ai_material_generation.sql',import.meta.url),'utf8'));
     await client.query('CREATE TABLE questions(id integer PRIMARY KEY,question text); CREATE TABLE question_answer_stats(question_id integer,is_correct boolean)');
     await client.query("INSERT INTO questions VALUES(1,'exam fixture'); INSERT INTO question_answer_stats VALUES(1,true)");
     const query=async(sql,values)=>(await client.query(sql,values)).rows;

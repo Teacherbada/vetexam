@@ -7,7 +7,7 @@ import { AI_METHOD, type AIQuestionInput, type AIPreview } from '@/lib/ai-questi
 import AISource from '@/components/questions/AISource';
 import styles from '../questions/questions.module.css';
 
-type Row = { id: string; position: number; content: AIQuestionInput; revision: number; status: string; review_status: string; reviewed_at: string | null; reviewed_by: string | null };
+type Row = { source_material_id?: string; id: string; position: number; content: AIQuestionInput; revision: number; status: string; review_status: string; reviewed_at: string | null; reviewed_by: string | null };
 type Batch = { id: string; name: string; total: number; drafts: number; published: number; created_at: string; result: { excluded?: { index: number; errors: string[] }[] } };
 async function api(body?: unknown, query = '') {
   const response = await fetchAI('/api/admin/ai-questions' + query, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : { cache: 'no-store' });
@@ -19,11 +19,14 @@ export default function AIQuestionsAdmin() {
   const [text, setText] = useState(''), [preview, setPreview] = useState<AIPreview | null>(null), [onlyValid, setOnlyValid] = useState(false);
   const [batches, setBatches] = useState<Batch[]>([]), [next, setNext] = useState<string | null>(null), [batchId, setBatchId] = useState(''), [rows, setRows] = useState<Row[]>([]);
   const [status, setStatus] = useState('all'), [busy, setBusy] = useState(false), [message, setMessage] = useState('');
+  const [reviewed,setReviewed] = useState<Record<string,number>>({});
   const lock = useRef(false), requestKey = useRef('');
   async function loadBatches(after = '') { const data = await api(undefined, after ? '?after=' + after : ''); setBatches(current => { if (after) return [...current, ...data.batches.filter((fresh: Batch) => !current.some(b => b.id === fresh.id))]; return [...data.batches, ...current.filter(b => b.id === batchId && !data.batches.some((fresh: Batch) => fresh.id === b.id))]; }); setNext(data.next); }
   useEffect(() => {
     let cancelled = false;
     api().then(data => { if (!cancelled) { setBatches(data.batches); setNext(data.next); } }).catch(e => { if (!cancelled) setMessage(e.message); });
+    const batch = new URLSearchParams(window.location.search).get('batch');
+    if (batch) api(undefined,'?batch='+encodeURIComponent(batch)).then(data=>{if(!cancelled){setRows(data.questions);setBatchId(batch);}}).catch(e=>{if(!cancelled)setMessage(e.message);});
     return () => { cancelled = true; };
   }, []);
   async function task(run: () => Promise<void>) {
@@ -32,10 +35,10 @@ export default function AIQuestionsAdmin() {
     finally { lock.current = false; setBusy(false); }
   }
   function changeText(value: string) { setText(value); setPreview(null); setOnlyValid(false); requestKey.current = ''; }
-  async function openBatch(id: string) { const data = await api(undefined, '?batch=' + id); setRows(data.questions); setBatchId(id); }
+  async function openBatch(id: string) { const data = await api(undefined, '?batch=' + id); setRows(data.questions); setBatchId(id); setReviewed({}); }
   return <main className={styles.page + ' break-words'}><div className={styles.container}>
     <header className={styles.heading}><div><h1>AI 試題題庫</h1><p>管理員批次匯入、逐題人工審核後發布。成功匯入不代表已審核。</p></div>
-      <nav><Link href="/pdf">返回匯入介面</Link><Link href="/admin/questions">國考題維護</Link><Link href="/ai-questions">會員練習</Link></nav></header>
+      <nav><Link href="/admin/ai-materials">教材 PDF 出題</Link><Link href="/pdf">返回匯入介面</Link><Link href="/admin/questions">國考題維護</Link><Link href="/ai-questions">會員練習</Link></nav></header>
     {message && <p role="status" className={styles.warning}>{message}</p>}
     <section className={styles.card}><h2>批次匯入 JSON</h2><p>每批 1–200 題，最多 2 MB；固定四選一。題目與來源由管理員在網站外準備。</p>
       <p className={styles.muted}>來源至少提供書名／講義名、支持答案的摘錄及一項定位（來源章節、印刷頁碼或 PDF 頁次）。未知欄位留空；請勿填入私人教材下載連結。</p>
@@ -64,7 +67,7 @@ export default function AIQuestionsAdmin() {
             {row.question.options.map((o,i) => <p key={i}>{'ABCD'[i]}．{o}</p>)}<p>答案：{row.question.answer}</p><p className={styles.question}>{row.question.explanation}</p>
             {row.question.optionExplanations.map((e,i) => e && <p key={i}>{'ABCD'[i]} 解析：{e}</p>)}<AISource source={row.question.source} /></>}
         </details>)}
-        {preview.invalid > 0 && <label className={styles.warning}><input type="checkbox" disabled={busy} checked={onlyValid} onChange={e => setOnlyValid(e.target.checked)} /> 我已查看錯誤，明確選擇只匯入 {preview.valid} 題有效題目（排除 {preview.invalid} 題）</label>}
+        {preview.invalid > 0 && <label className={styles.warning}><input type="checkbox" style={{width:18,minHeight:18,height:18,marginRight:8}} disabled={busy} checked={onlyValid} onChange={e => setOnlyValid(e.target.checked)} /> 我已查看錯誤，明確選擇只匯入 {preview.valid} 題有效題目（排除 {preview.invalid} 題）</label>}
         <div className={styles.actions}><button className="study-button" disabled={busy || !preview.valid || (preview.invalid > 0 && !onlyValid)} onClick={() => void task(async () => {
           const result = await api({ action: 'import', input: JSON.parse(text), token: preview.token, onlyValid, requestKey: requestKey.current });
           setPreview(null); await loadBatches(); await openBatch(result.batchId);
@@ -80,18 +83,20 @@ export default function AIQuestionsAdmin() {
       {batches.find(b => b.id === batchId)?.result.excluded?.map(e => <p key={e.index} className={styles.warning}>匯入時已明確排除第 {e.index} 題：{e.errors.join('；')}</p>)}
       <label className={styles.field}>發布狀態<select aria-label="發布狀態" value={status} onChange={e => setStatus(e.target.value)}><option value="all">全部草稿與已發布</option><option value="draft">草稿／待審核</option><option value="published">已發布／已人工審核</option></select></label>
       {batchId && <p>此批次共 {rows.length} 題；修改任何內容後，必須重新審核發布。既有作答紀錄會保留。</p>}
-      {rows.filter(r => status === 'all' || r.status === status).map(row => <Editor key={row.id + ':' + row.revision} row={row} busy={busy} save={(action, content, confirmReview) => task(async () => {
-        const data = await api({ action, id: row.id, revision: row.revision, content, confirmReview });
-        setRows(current => current.map(r => r.id === row.id ? data.question : r));
-        await loadBatches(); setMessage(action === 'publish' ? '已記錄人工審核並發布。' : '已儲存為草稿／待審核；原有作答紀錄保留。');
+      {batchId && <div className={styles.actions}><button className="study-button" disabled={busy || !Object.keys(reviewed).length} onClick={()=>void task(async()=>{const questions=Object.entries(reviewed).map(([id,revision])=>({id,revision}));const result=await api({action:'publishBatch',questions,confirmReview:true});await openBatch(batchId);await loadBatches();setMessage('已將 '+result.published+' 題人工審核確認的草稿發布。');})}>批次發布已逐題確認的 {Object.keys(reviewed).length} 題</button></div>}
+      {rows.filter(r => status === 'all' || r.status === status).map(row => <Editor key={row.id + ':' + row.revision} row={row} busy={busy} markReviewed={confirmed=>setReviewed(current=>{const next={...current};if(confirmed)next[row.id]=row.revision;else delete next[row.id];return next;})} save={(action, content, confirmReview) => task(async () => {
+        const data = await api({ action, id: row.id, revision: row.revision, content, confirmReview, confirmDelete: action === 'delete' });
+        setRows(current => action === 'delete' ? current.filter(r=>r.id!==row.id) : current.map(r => r.id === row.id ? {...r,...data.question} : r));
+        setReviewed(current=>{const next={...current};delete next[row.id];return next;});
+        await loadBatches(); setMessage(action === 'delete' ? '草稿已刪除；既有作答紀錄保留。' : action === 'publish' ? '已記錄人工審核並發布。' : '已儲存為草稿／待審核；原有作答紀錄保留。');
       })} />)}
     </section>
   </div></main>;
 }
-function Editor({ row, busy, save }: { row: Row; busy: boolean; save: (action: string, content: AIQuestionInput, confirmed: boolean) => Promise<void> }) {
-  const [q, setQ] = useState(row.content), [confirmed, setConfirmed] = useState(false);
+function Editor({ row, busy, save, markReviewed }: { row: Row; busy: boolean; markReviewed: (confirmed:boolean)=>void; save: (action: string, content: AIQuestionInput, confirmed: boolean) => Promise<void> }) {
+  const [q, setQ] = useState(row.content), [confirmed, setConfirmed] = useState(false), [deleteConfirmed,setDeleteConfirmed] = useState(false);
   const dirty = JSON.stringify(q) !== JSON.stringify(row.content);
-  function patch(p: Partial<AIQuestionInput>) { setQ(current => ({ ...current, ...p })); setConfirmed(false); }
+  function patch(p: Partial<AIQuestionInput>) { setQ(current => ({ ...current, ...p })); setConfirmed(false); markReviewed(false); }
   return <details className={styles.card}><summary>第 {row.position} 題｜{row.status === 'published' ? '已發布／已人工審核' : '草稿／待審核'}｜{q.question.slice(0,70)}</summary>
     <p>版本 {row.revision}{row.reviewed_at ? '；人工審核時間：' + new Date(row.reviewed_at).toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' }) : '；尚未完成人工審核'}</p>
     <fieldset disabled={busy}>
@@ -106,10 +111,12 @@ function Editor({ row, busy, save }: { row: Row; busy: boolean; save: (action: s
         <label className={styles.field} key={key}>{label}<textarea aria-label={label} rows={key === 'excerpt' ? 3 : 1} value={q.source[key]} onChange={e => patch({ source: { ...q.source, [key]: e.target.value } })} /></label>)}
       <p>{AI_METHOD}</p>
       <AISource source={row.content.source} />
+      {row.source_material_id && <p><a href={'/api/admin/ai-materials?material='+row.source_material_id+'&pdf=1#page='+row.content.source.pdfPages} target="_blank" rel="noopener noreferrer">對照原始 PDF 第 {row.content.source.pdfPages} 頁（僅管理員）</a></p>}
       <div className={styles.actions}><button className="study-button" disabled={!dirty} onClick={() => void save('save',q,false)}>儲存修改並待審核</button>
         {row.status === 'published' && <button className="study-button" onClick={() => void save('unpublish',q,false)}>撤回為草稿</button>}</div>
-      {row.status === 'draft' && <><label><input type="checkbox" disabled={dirty} checked={confirmed} onChange={e => setConfirmed(e.target.checked)} /> 我已人工核對題幹、選項、答案、解析、來源及其可公開性</label>
+      {row.status === 'draft' && <><label><input type="checkbox" style={{width:18,minHeight:18,height:18,marginRight:8}} disabled={dirty} checked={confirmed} onChange={e => {setConfirmed(e.target.checked);markReviewed(e.target.checked);}} /> 我已人工核對題幹、選項、答案、解析、來源及其可公開性</label>
         <div className={styles.actions}><button className="study-button" disabled={dirty || !confirmed} onClick={() => void save('publish',q,confirmed)}>確認審核並發布此題</button></div>
+        <label className={styles.field}><span><input type="checkbox" style={{width:18,minHeight:18,height:18,marginRight:8}} checked={deleteConfirmed} onChange={e=>setDeleteConfirmed(e.target.checked)}/> 確認刪除此草稿（保留既有作答紀錄）</span></label><button className="study-button" disabled={!deleteConfirmed} onClick={()=>void save('delete',q,false)}>刪除草稿</button>
         {dirty && <p>請先儲存修改，再核對已儲存內容並發布。</p>}</>}
     </fieldset>
   </details>;
