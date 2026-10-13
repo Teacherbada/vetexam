@@ -1,5 +1,6 @@
 "use client";
 import QuestionCard, { type QuizQuestion as Question } from "@/components/questions/QuestionCard";
+import OfficialExplanation from '@/components/questions/OfficialExplanation';
 import LearningStatus from "@/components/LearningStatus";
 
 import { Suspense, useEffect, useRef, useState } from "react";
@@ -127,7 +128,7 @@ function QuestionsContent() {
       <h3 className={styles.question}>{question.question}</h3>
       {question.imageDataUrl && <ImageViewer src={question.imageDataUrl} alt={`第 ${question.questionNumber} 題圖片`} />}
       {question.options.map((option, optionIndex) => <p key={optionIndex} className={styles.explanationText}>{String.fromCharCode(65 + optionIndex)}. {option}</p>)}
-      <section className={styles.explanation}><p className={!usableAnswer(question) ? undefined : answers[question.id] === usableAnswer(question) ? styles.correctText : styles.wrongText}>{!usableAnswer(question) ? "本題正確答案尚未設定，不計入作答統計。" : !answers[question.id] ? "未作答" : answers[question.id] === usableAnswer(question) ? "✓ 正確" : "✗ 錯誤"}</p><p>你的答案：{answers[question.id] || "未作答"} · 正確答案：{usableAnswer(question) || "尚未設定"}</p>{question.explanation && <><h2>解析</h2><p className={styles.explanationText}>{question.explanation}</p></>}</section>
+      <section className={styles.explanation}><p className={!usableAnswer(question) ? undefined : answers[question.id] === usableAnswer(question) ? styles.correctText : styles.wrongText}>{!usableAnswer(question) ? "本題正確答案尚未設定，不計入作答統計。" : !answers[question.id] ? "未作答" : answers[question.id] === usableAnswer(question) ? "✓ 正確" : "✗ 錯誤"}</p><p>你的答案：{answers[question.id] || "未作答"} · 正確答案：{usableAnswer(question) || "尚未設定"}</p>{question.explanation?.trim() && <><h2>官方解析</h2><OfficialExplanation content={question.explanation} /></>}</section>
       {usableAnswer(question) && <OptionDistribution questionId={question.id} selectedAnswer={answers[question.id] || ""} correctAnswer={question.answer} />}
     </article>)}</div></main>;
 
@@ -140,7 +141,7 @@ function QuestionsContent() {
       <div className={styles.progressLabel}><span>第 <strong>{currentIndex + 1}</strong> / {questions.length} 題</span><span>已完成 {completedCount} 題{mode === "practice" && " · 答對 " + score + " 題"}</span></div>
       <ProgressBar value={completedCount / questions.length * 100} label="已完成題數比例" />
       <div className={styles.meta}><span>{currentQuestion.subject}{currentQuestion.examYear ? ` · ${formatExamYear(currentQuestion.examYear)}` : ""}</span><span className={styles.tag}>{mode === "exam" ? "模擬考" : "練習"} · {order === "random" ? "隨機順序" : "原始順序"}</span></div>
-      <QuestionCard focused appearance={styles} image={currentQuestion.imageDataUrl ? <ImageViewer src={currentQuestion.imageDataUrl} alt={`第 ${currentQuestion.questionNumber} 題圖片`} /> : undefined} currentQuestion={currentQuestion} selected={selected} showResult={showResult} answered={answered} isFavorite={isFavorite} favoriteQuestion={favoriteQuestion} chooseAnswer={chooseAnswer} />
+      <QuestionCard officialExplanation focused appearance={styles} image={currentQuestion.imageDataUrl ? <ImageViewer src={currentQuestion.imageDataUrl} alt={`第 ${currentQuestion.questionNumber} 題圖片`} /> : undefined} currentQuestion={currentQuestion} selected={selected} showResult={showResult} answered={answered} isFavorite={isFavorite} favoriteQuestion={favoriteQuestion} chooseAnswer={chooseAnswer} />
       {mode === "practice" && showResult && currentAnswer && <OptionDistribution key={currentQuestion.id} questionId={currentQuestion.id} selectedAnswer={selected} correctAnswer={currentQuestion.answer} />}
       <div className={styles.actions}>{mode === "exam" ? <>
         <button disabled={currentIndex === 0} onClick={() => { setCurrentIndex((value) => value - 1); setSelected(answers[questions[currentIndex - 1].id] || ""); }} className="study-button">上一題</button>

@@ -1,0 +1,19 @@
+.content { min-width: 0; max-width: 100%; overflow-wrap: anywhere; font-size: inherit; line-height: 1.85; }
+.content p { white-space: pre-wrap; margin: 12px 0; }
+.content h1, .content h2, .content h3, .content h4, .content h5, .content h6 { font-size: 1.05em; font-weight: 700; margin: 20px 0 8px; line-height: 1.6; }
+.content strong { font-weight: 700; }
+.content ul, .content ol { padding-left: 1.6em; margin: 12px 0; }
+.content ul { list-style: disc; }
+.content ol { list-style: decimal; }
+.content li { white-space: pre-wrap; margin: 4px 0; }
+.content a { color: var(--primary); text-decoration: underline; text-underline-offset: 3px; }
+.content a:hover { text-decoration-thickness: 2px; }
+.content a:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+.content blockquote { border-left: 3px solid var(--border); padding-left: 16px; margin: 12px 0; color: var(--text-secondary); }
+.content pre { max-width: 100%; overflow-x: auto; white-space: pre-wrap; padding: 12px; background: var(--primary-light); border-radius: 10px; }
+.content code { overflow-wrap: anywhere; }
+.content table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; margin: 12px 0; }
+.content th, .content td { border: 1px solid var(--border); padding: 8px; }
+.content hr { border: 0; border-top: 1px solid var(--border); margin: 16px 0; }
+.content > :first-child { margin-top: 0; }
+.content > :last-child { margin-bottom: 0; }

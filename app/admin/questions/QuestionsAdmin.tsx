@@ -7,6 +7,7 @@ import { needsManualReview, normalizeAnswer, type AdminQuestion, type AnswerInpu
 import type { AnswerPreview } from '@/lib/admin-questions';
 import { formatExamYear } from '@/lib/exam-year';
 import styles from './questions.module.css';
+import OfficialExplanationEditor from './OfficialExplanationEditor';
 
 type Bank = { id: number; name: string; exam_year: number | null; exam_subject: string; visibility: string; total: number; missing_answer: number; missing_explanation: number };
 type Data = { summary: { total: number; missing_answer: number; missing_explanation: number; missing_both: number; invalid: number; answer_null: number; answer_blank: number }; sets: Bank[]; questions: AdminQuestion[]; total: number };
@@ -152,7 +153,12 @@ export default function QuestionsAdmin() {
 
     {single && <section className={styles.card} aria-label="單題編輯"><h2>單題編輯 · ID {single.id} · 第 {single.question_number} 題</h2><p>{formatExamYear(single.exam_year ?? null)}｜{single.subject}｜{single.question_set_name}</p><p className={styles.question}>{single.question}</p>
       {[single.option_a, single.option_b, single.option_c, single.option_d, single.option_e].map((option, index) => option && <p className={styles.question} key={index}>{String.fromCharCode(65 + index)}. {option}</p>)}
-      <p className={!normalizeAnswer(single.answer) ? styles.warningText : undefined}>正確答案：{single.answer?.trim() || '尚未設定'}</p><h3>官方詳解</h3><p className={styles.question}>{single.explanation || '尚未提供'}</p>
+      <p className={!normalizeAnswer(single.answer) ? styles.warningText : undefined}>正確答案：{single.answer?.trim() || '尚未設定'}</p>
+      {data?.sets.find(bank => bank.id === single.question_set_id)?.visibility === 'public' ?
+        <OfficialExplanationEditor key={single.id} questionId={single.id} disabled={busy} onSaved={explanation => {
+          setSingle(current => current?.id === single.id ? { ...current, explanation } : current);
+          setRevision(value => value + 1);
+        }} /> : <><h3>官方詳解</h3><p className={styles.question}>{single.explanation || '尚未提供'}</p></>}
       {needsManualReview(single) ? <p className={styles.warningText}>此題答案格式需要人工確認，V1 不覆蓋此題。</p> : <fieldset disabled={busy}><label className={styles.field}>新的正確答案<select value={singleAnswer} onChange={event => { setSingleAnswer(event.target.value); invalidate(); }}><option value="">請選擇</option>{['A', 'B', 'C', 'D'].map(letter => <option key={letter}>{letter}</option>)}</select></label><button className="study-button" onClick={() => parse({ mode: 'single', question_set_id: single.question_set_id, question_id: single.id, answer: singleAnswer })}>預覽單題修改</button></fieldset>}
       <button className="study-button" disabled={busy} onClick={() => { setSingle(null); invalidate(); }}>關閉單題</button>
     </section>}

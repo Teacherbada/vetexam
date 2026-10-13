@@ -4,6 +4,7 @@ import { useRef, useState } from 'react';
 import type { PublicQuestion } from '@/lib/public-questions';
 import { formatExamYear } from '@/lib/exam-year';
 import OptionDistribution from '@/components/questions/OptionDistribution';
+import OfficialExplanation from '@/components/questions/OfficialExplanation';
 import { saveProgress } from '@/data/progress';
 import { saveWrongQuestion } from '@/data/wrongAnswers';
 import { addDailyProgress } from '@/data/tasksProgress';
@@ -70,7 +71,7 @@ export default function QuestionDetail({ question, shareUrl }: { question: Publi
       {pending && <p role="status">正在送出作答…</p>}{error && <p role="alert">{error}</p>}
       {result?.available && <>
         <section className={styles.explanation} aria-label="作答結果"><h2>作答結果</h2><p role="status" className={result.correct ? styles.correctText : styles.wrongText}>{result.correct ? '答對' : '答錯'} · 你的答案：{selected} · 正確答案：{result.answer}</p>
-          <h2>VetExam 官方解析</h2><p className={styles.explanationText}>{result.explanation?.trim() || '目前尚未建立官方解析。'}</p>
+          <h2>官方解析</h2>{result.explanation?.trim() ? <OfficialExplanation content={result.explanation} /> : <p className={styles.explanationText}>目前尚未建立官方解析。</p>}
         </section>
         <OptionDistribution questionId={question.id} selectedAnswer={selected} correctAnswer={result.answer!} expanded />
       </>}
