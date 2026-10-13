@@ -24,7 +24,9 @@ export async function GET(request:Request,context:RouteContext){
       if(questionSet.owner_id!==userId)return NextResponse.json({error:"你沒有權限使用這個私人題庫。",code:"FORBIDDEN"},{status:403});
     }
     await sql`ALTER TABLE questions ADD COLUMN IF NOT EXISTS option_e TEXT`;
-    const questions=await sql`SELECT id,question_set_id,question_number,subject,question,option_a,option_b,option_c,option_d,option_e,answer,explanation,image_data_url,created_at FROM questions WHERE question_set_id=${questionSetId} ORDER BY question_number ASC`;
+    const questions=await sql`SELECT id,question_set_id,question_number,subject,question,option_a,option_b,option_c,option_d,option_e,answer,
+      CASE WHEN ${questionSet.visibility}='private' OR to_jsonb(q)->>'explanation_status'='published' THEN explanation ELSE '' END AS explanation,
+      image_data_url,created_at FROM questions q WHERE question_set_id=${questionSetId} ORDER BY question_number ASC`;
     const formattedQuestions=questions.map((question:any)=>({id:Number(question.id),questionNumber:Number(question.question_number),subject:question.subject??"",question:question.question??"",options:[question.option_a??"",question.option_b??"",question.option_c??"",question.option_d??"",...(question.option_e? [question.option_e] : [])],answer:question.answer??"",explanation:question.explanation??"",imageDataUrl:question.image_data_url??null}));
     return NextResponse.json({success:true,questionSet:{id:Number(questionSet.id),name:questionSet.name,filename:questionSet.filename,totalQuestions:Number(questionSet.total_questions),visibility:questionSet.visibility,ownerId:questionSet.owner_id},questions:formattedQuestions});
   }catch(error){console.error("Questions API error:",error);return NextResponse.json({error:"無法取得題目",detail:error instanceof Error?error.message:"未知錯誤"},{status:500});}

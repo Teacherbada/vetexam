@@ -7,6 +7,7 @@ import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { fixture, service, load } from './helpers/official-explanation-fixture.mjs';
 
+const payload = value => ({ id: value.id, explanation: value.explanation, revision: value.revision });
 const url = 'http://localhost/api/admin/questions/explanation';
 const req = (method, body, user = 'fixture-admin', extra = {}) => new Request(url + (method === 'GET' ? '?id=1' : ''), {
   method, headers: { 'content-type': 'application/json', ...(user ? { 'x-fixture-user': user } : {}), ...extra },
@@ -20,23 +21,23 @@ test('real SQL: add, reload, edit, retry, conflict, rollback; preserve all other
     const before = await f.sql.query('SELECT * FROM questions ORDER BY id', []);
     const first = await service.readExplanation(f.sql.query, 1);
     assert.equal(first.explanation, '');
-    const saved = await f.save({ ...first, explanation: markdown });
+    const saved = await f.save({ ...payload(first), explanation: markdown });
     assert.equal((await service.readExplanation(f.sql.query, 1)).explanation, markdown);
-    assert.deepEqual(await f.save({ ...first, explanation: markdown }), saved, 'retry is idempotent');
-    await assert.rejects(f.save({ ...first, explanation: 'stale update' }), { status: 409 });
+    assert.deepEqual(await f.save({ ...payload(first), explanation: markdown }), saved, 'retry is idempotent');
+    await assert.rejects(f.save({ ...payload(first), explanation: 'stale update' }), { status: 409 });
     const second = await service.readExplanation(f.sql.query, 2);
     assert.equal(second.explanation, '既有解析不能遺失');
-    await f.save({ ...second, explanation: second.explanation + '\n\n' + markdown });
+    await f.save({ ...payload(second), explanation: second.explanation + '\n\n' + markdown });
     await assert.rejects(f.db.transaction(async tx => {
-      await service.saveExplanation(tx, { ...saved, explanation: 'should rollback' }); throw Error('rollback test');
+      await service.saveExplanation(tx, { ...payload(saved), explanation: 'should rollback' }); throw Error('rollback test');
     }), /rollback test/);
     assert.equal((await service.readExplanation(f.sql.query, 1)).explanation, markdown);
     for (const id of [3, 4, 999]) {
       await assert.rejects(service.readExplanation(f.sql.query, id), { status: 404 });
-      await assert.rejects(f.save({ ...saved, id }), { status: 404 });
+      await assert.rejects(f.save({ ...payload(saved), id }), { status: 404 });
     }
     const after = await f.sql.query('SELECT * FROM questions ORDER BY id', []);
-    const strip = rows => rows.map(value => { const row = { ...value }; delete row.explanation; return row; });
+    const strip = rows => rows.map(value => { const row = { ...value }; delete row.explanation; delete row.explanation_status; delete row.explanation_version; return row; });
     assert.deepEqual(strip(before), strip(after));
     assert.deepEqual(after.slice(2), before.slice(2));
     assert.deepEqual(await f.sql.query('SELECT * FROM question_answer_stats', []), [{ id: 1, question_id: 1, selected_answer: 'A' }]);
@@ -54,16 +55,16 @@ test('real guard and API: admin only, narrow payload, body limits, CSRF, conflic
     const response = await f.route.GET(req('GET'));
     assert.equal(response.headers.get('cache-control'), 'private, no-store');
     const saved = await response.json();
-    assert.deepEqual(Object.keys(saved).sort(), ['explanation', 'id', 'revision']);
+    assert.deepEqual(Object.keys(saved).sort(), ['explanation', 'id', 'revision', 'status']);
     for (const bad of [{ answer: 'A' }, { question: 'overwrite' }, { userId: 'member' }, { kind: 'ai' }, { explanation: '' }, { explanation: '  \n' }, { explanation: 'x'.repeat(20001) }, { explanation: '\0' }, { id: -1 }, { id: '1' }, { revision: 'bad' }]) {
-      assert.equal((await f.route.PATCH(req('PATCH', { ...saved, explanation: markdown, ...bad }))).status, 400);
+      assert.equal((await f.route.PATCH(req('PATCH', { ...payload(saved), explanation: markdown, ...bad }))).status, 400);
     }
-    assert.equal((await f.route.PATCH(req('PATCH', { ...saved, explanation: markdown }, 'fixture-admin', { origin: 'https://evil.test' }))).status, 403);
-    assert.equal((await f.route.PATCH(req('PATCH', { ...saved, explanation: markdown }, 'fixture-admin', { 'sec-fetch-site': 'cross-site' }))).status, 403);
-    assert.equal((await f.route.PATCH(req('PATCH', { ...saved, explanation: markdown }, 'fixture-admin', { 'content-type': 'text/plain' }))).status, 415);
-    assert.equal((await f.route.PATCH(req('PATCH', { ...saved, explanation: '中'.repeat(22000) }))).status, 413);
-    assert.equal((await f.route.PATCH(req('PATCH', { ...saved, explanation: '中'.repeat(20000) }))).status, 200);
-    const stale = await f.route.PATCH(req('PATCH', { ...saved, explanation: markdown }));
+    assert.equal((await f.route.PATCH(req('PATCH', { ...payload(saved), explanation: markdown }, 'fixture-admin', { origin: 'https://evil.test' }))).status, 403);
+    assert.equal((await f.route.PATCH(req('PATCH', { ...payload(saved), explanation: markdown }, 'fixture-admin', { 'sec-fetch-site': 'cross-site' }))).status, 403);
+    assert.equal((await f.route.PATCH(req('PATCH', { ...payload(saved), explanation: markdown }, 'fixture-admin', { 'content-type': 'text/plain' }))).status, 415);
+    assert.equal((await f.route.PATCH(req('PATCH', { ...payload(saved), explanation: '中'.repeat(22000) }))).status, 413);
+    assert.equal((await f.route.PATCH(req('PATCH', { ...payload(saved), explanation: '中'.repeat(20000) }))).status, 200);
+    const stale = await f.route.PATCH(req('PATCH', { ...payload(saved), explanation: markdown }));
     assert.equal(stale.status, 409); assert.match((await stale.json()).error, /草稿/);
   } finally { await f.close(); }
 });
@@ -81,7 +82,7 @@ test('shared Markdown preview/display: Chinese, English, lists, links, safe HTML
   }).default;
   const props = { currentQuestion: { id: 1, options: ['a','b','c','d'], answer: 'C', question: '題目', explanation: markdown }, selected: '', answered: false, isFavorite: false, favoriteQuestion() {}, chooseAnswer() {}, officialExplanation: true };
   assert(!renderToStaticMarkup(React.createElement(Card, { ...props, showResult: false })).includes('核心考點'));
-  assert(renderToStaticMarkup(React.createElement(Card, { ...props, showResult: true })).includes('<h2>官方解析</h2>'));
+  assert(renderToStaticMarkup(React.createElement(Card, { ...props, showResult: true })).includes('<h2>VetExam 精選解析</h2>'));
   assert(renderToStaticMarkup(React.createElement(Card, { ...props, showResult: true, currentQuestion: { ...props.currentQuestion, explanation: '' } })).includes('目前沒有提供解析。'));
   const legacy = renderToStaticMarkup(React.createElement(Card, { ...props, officialExplanation: false, showResult: true }));
   assert(legacy.includes('### 核心考點')); assert(!legacy.includes('<h3>核心考點</h3>'));

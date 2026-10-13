@@ -128,7 +128,7 @@ function QuestionsContent() {
       <h3 className={styles.question}>{question.question}</h3>
       {question.imageDataUrl && <ImageViewer src={question.imageDataUrl} alt={`第 ${question.questionNumber} 題圖片`} />}
       {question.options.map((option, optionIndex) => <p key={optionIndex} className={styles.explanationText}>{String.fromCharCode(65 + optionIndex)}. {option}</p>)}
-      <section className={styles.explanation}><p className={!usableAnswer(question) ? undefined : answers[question.id] === usableAnswer(question) ? styles.correctText : styles.wrongText}>{!usableAnswer(question) ? "本題正確答案尚未設定，不計入作答統計。" : !answers[question.id] ? "未作答" : answers[question.id] === usableAnswer(question) ? "✓ 正確" : "✗ 錯誤"}</p><p>你的答案：{answers[question.id] || "未作答"} · 正確答案：{usableAnswer(question) || "尚未設定"}</p>{question.explanation?.trim() && <><h2>官方解析</h2><OfficialExplanation content={question.explanation} /></>}</section>
+      <section className={styles.explanation}><p className={!usableAnswer(question) ? undefined : answers[question.id] === usableAnswer(question) ? styles.correctText : styles.wrongText}>{!usableAnswer(question) ? "本題正確答案尚未設定，不計入作答統計。" : !answers[question.id] ? "未作答" : answers[question.id] === usableAnswer(question) ? "✓ 正確" : "✗ 錯誤"}</p><p>你的答案：{answers[question.id] || "未作答"} · 正確答案：{usableAnswer(question) || "尚未設定"}</p>{question.explanation?.trim() && <><h2>VetExam 精選解析</h2><OfficialExplanation content={question.explanation} /></>}</section>
       {usableAnswer(question) && <OptionDistribution questionId={question.id} selectedAnswer={answers[question.id] || ""} correctAnswer={question.answer} />}
     </article>)}</div></main>;
 

@@ -11,7 +11,7 @@ const dir = new URL('../app/official-explanation-test-fixture/', import.meta.url
 const artifacts = new URL('../.tmp/official-explanation-artifacts/', import.meta.url);
 const base = 'http://127.0.0.1:3127';
 let created = false, server, browser, page, log = '';
-const text = '### 核心考點\n\n**正確答案：C**\n中文與 pharmacokinetics\n第二行\n\n- 重點一\n- 重點二\n\n1. 順序一\n2. 順序二\n\n[參考資料](https://example.test/reference)\n\nhttps://example.test/direct\n\n' + '長篇中文醫學說明。'.repeat(40);
+const text = '| 名詞 | 說明 |\n| --- | --- |\n| PK | pharmacokinetics |\n\n### 核心考點\n\n**正確答案：C**\n中文與 pharmacokinetics\n第二行\n\n- 重點一\n- 重點二\n\n1. 順序一\n2. 順序二\n\n[參考資料](https://example.test/reference)\n\nhttps://example.test/direct\n\n' + '長篇中文醫學說明。'.repeat(40);
 try {
   await mkdir(dir); created = true;
   await writeFile(new URL('page.tsx', dir), `import Admin from '../admin/questions/QuestionsAdmin';
@@ -54,10 +54,10 @@ export default async function Page({searchParams}:{searchParams:Promise<{mode?:s
       assert.equal(url.searchParams.get('scope'), 'public');
       const rows = await f.sql.query("SELECT * FROM questions WHERE question_set_id=1 AND kind='exam' ORDER BY id", []);
       return route.fulfill({ json: { questions: rows.map(q => ({ id: q.id, questionSetId: 1, questionNumber: q.question_number, subject: q.subject, question: q.question,
-        options: [q.option_a,q.option_b,q.option_c,q.option_d], answer: q.answer, explanation: q.explanation || '', examYear: 2026, questionSetName: '測試國考題庫' })) } });
+        options: [q.option_a,q.option_b,q.option_c,q.option_d], answer: q.answer, explanation: q.explanation_status === 'published' ? q.explanation || '' : '', examYear: 2026, questionSetName: '測試國考題庫' })) } });
     }
     if (path === '/api/stats/answers') {
-      return route.fulfill({ json: url.searchParams.has('reveal') ? { available: true, answer: 'C', correct: true, explanation: (await service.readExplanation(f.sql.query, 1)).explanation } : { available: true } });
+      return route.fulfill({ json: url.searchParams.has('reveal') ? { available: true, answer: 'C', correct: true, explanation: (await service.readExplanation(f.sql.query, 1)).status === 'published' ? (await service.readExplanation(f.sql.query, 1)).explanation : '' } : { available: true } });
     }
     if (path.startsWith('/api/auth/')) return route.fulfill({ json: null });
     if (path === '/api/admin/status') return route.fulfill({ json: { isAdmin: false } });
@@ -67,41 +67,60 @@ export default async function Page({searchParams}:{searchParams:Promise<{mode?:s
   await page.goto(base + '/official-explanation-test-fixture');
   const open = async id => {
     await page.getByRole('row').filter({ hasText: `#${id}` }).getByRole('button', { name: '查看／編輯' }).click();
-    await page.getByLabel('官方解析內容', { exact: true }).waitFor();
+    await page.getByLabel('精選解析內容', { exact: true }).waitFor();
     await page.waitForFunction(() => !document.querySelector('textarea[rows="16"]')?.disabled);
   };
   await open(1);
-  assert.equal(await page.getByLabel('官方解析內容', { exact: true }).inputValue(), '');
-  await page.getByLabel('官方解析內容', { exact: true }).fill(text);
-  const editor = page.getByRole('region', { name: '官方解析編輯', exact: true });
+  assert.equal(await page.getByLabel('精選解析內容', { exact: true }).inputValue(), '');
+  await page.getByLabel('精選解析內容', { exact: true }).fill(text);
+  const editor = page.getByRole('region', { name: '精選解析編輯', exact: true });
   await editor.getByRole('button', { name: '預覽', exact: true }).click();
   await editor.getByRole('heading', { name: '核心考點', exact: true }).waitFor();
-  assert.equal(await editor.locator('strong').innerText(), '正確答案：C');
+  assert.equal(await editor.locator('strong').last().innerText(), '正確答案：C'); assert.equal(await editor.locator('table').count(), 1);
   assert.equal(await editor.locator('ul li').count(), 2); assert.equal(await editor.locator('ol li').count(), 2);
   assert.equal(await editor.getByRole('link', { name: '參考資料' }).getAttribute('href'), 'https://example.test/reference');
-  const save = editor.getByRole('button', { name: '儲存官方解析', exact: true });
+  const save = editor.getByRole('button', { name: '儲存草稿', exact: true });
   await save.evaluate(button => { button.click(); button.click(); });
-  await editor.getByRole('status').filter({ hasText: '官方解析已儲存' }).waitFor(); assert.equal(writes, 1);
+  await editor.getByRole('status').filter({ hasText: '草稿已儲存' }).waitFor(); assert.equal(writes, 1);
+  assert.equal((await service.readExplanation(f.sql.query, 1)).status, 'draft');
+  const published = editor.getByRole('button', { name: '發布解析', exact: true });
+  assert(await published.isDisabled());
+  await editor.getByLabel(/我已人工核對/).check(); await published.click();
+  await editor.getByRole('status').filter({ hasText: '已人工確認並發布解析' }).waitFor();
+  assert.equal((await service.readExplanation(f.sql.query, 1)).status, 'published');
+  await editor.getByRole('button', { name: '取消發布', exact: true }).click();
+  await editor.getByRole('status').filter({ hasText: '已取消發布' }).waitFor();
+  const hidden = await page.evaluate(async () => (await (await fetch('/api/quiz?scope=public')).json()).questions);
+  assert.equal(hidden.find(q => q.id === 1).explanation, '');
+  assert.equal((await service.readExplanation(f.sql.query, 1)).explanation, text);
   console.log('PASS admin initial add/preview/double submit');
   await page.reload(); await open(1);
-  assert.equal(await page.getByLabel('官方解析內容', { exact: true }).inputValue(), text);
+  assert.equal(await page.getByLabel('精選解析內容', { exact: true }).inputValue(), text);
   await open(2);
-  assert.equal(await page.getByLabel('官方解析內容', { exact: true }).inputValue(), '既有解析不能遺失');
-  await page.getByLabel('官方解析內容', { exact: true }).fill('既有解析不能遺失\n\n補充段落');
-  await save.click(); await editor.getByRole('status').filter({ hasText: '官方解析已儲存' }).waitFor();
+  assert.equal(await page.getByLabel('精選解析內容', { exact: true }).inputValue(), '既有解析不能遺失');
+  await page.getByLabel('精選解析內容', { exact: true }).fill('既有解析不能遺失\n\n補充段落');
+  await save.click(); await editor.getByRole('status').filter({ hasText: '草稿已儲存' }).waitFor();
   await open(1);
   failSave = true;
-  await page.getByLabel('官方解析內容', { exact: true }).fill(text + '\n尚未存入草稿');
+  await page.getByLabel('精選解析內容', { exact: true }).fill(text + '\n尚未存入草稿');
   await save.click(); await editor.getByRole('alert').filter({ hasText: '測試暫時儲存失敗' }).waitFor();
-  assert((await page.getByLabel('官方解析內容', { exact: true }).inputValue()).endsWith('尚未存入草稿'));
+  assert((await page.getByLabel('精選解析內容', { exact: true }).inputValue()).endsWith('尚未存入草稿'));
   failSave = false;
   const current = await service.readExplanation(f.sql.query, 1);
-  await f.save({ ...current, explanation: text + '\n另一視窗的修改' });
+  await f.save({ id: current.id, revision: current.revision, action: 'draft', explanation: text + '\n另一視窗的修改' });
   await save.click(); await editor.getByRole('alert').filter({ hasText: '其他操作更新' }).waitFor();
-  assert((await page.getByLabel('官方解析內容', { exact: true }).inputValue()).endsWith('尚未存入草稿'));
+  assert((await page.getByLabel('精選解析內容', { exact: true }).inputValue()).endsWith('尚未存入草稿'));
   await editor.getByRole('button', { name: '重新載入解析' }).click();
-  await page.getByLabel('官方解析內容', { exact: true }).waitFor();
-  assert((await page.getByLabel('官方解析內容', { exact: true }).inputValue()).endsWith('另一視窗的修改'));
+  await page.getByLabel('精選解析內容', { exact: true }).waitFor();
+  assert((await page.getByLabel('精選解析內容', { exact: true }).inputValue()).endsWith('另一視窗的修改'));
+  await editor.getByLabel(/我已人工核對/).check(); await published.click();
+  await editor.getByRole('status').filter({ hasText: '已人工確認並發布解析' }).waitFor();
+  await page.getByLabel('精選解析狀態', { exact: true }).selectOption('published');
+  await page.getByRole('button', { name: '搜尋題目', exact: true }).click();
+  await page.getByText(/共 1 題/).waitFor();
+  await page.getByLabel('精選解析狀態', { exact: true }).selectOption('all');
+  await page.getByRole('button', { name: '搜尋題目', exact: true }).click();
+  await page.getByText(/共 4 題/).waitFor();
   await mkdir(artifacts, { recursive: true });
   await editor.getByRole('button', { name: '預覽', exact: true }).click();
   for (const width of [320, 375, 768, 1280]) {
@@ -111,7 +130,7 @@ export default async function Page({searchParams}:{searchParams:Promise<{mode?:s
   }
   await page.getByRole('button', { name: '關閉單題' }).click();
   await page.getByRole('row').filter({ hasText: '#3' }).getByRole('button', { name: '查看／編輯' }).click();
-  assert.equal(await page.getByRole('region', { name: '官方解析編輯', exact: true }).count(), 0);
+  assert.equal(await page.getByRole('region', { name: '精選解析編輯', exact: true }).count(), 0);
   for (const mode of ['practice', 'exam']) {
     await page.goto(base + `/questions?started=1&mode=${mode}`);
     await page.getByRole('heading', { name: '本機測試題目一', exact: true }).waitFor();

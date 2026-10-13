@@ -3,6 +3,7 @@ import type { PoolClient } from 'pg';
 import { recordFirstAnswers } from './question-stats';
 import { legacyAnsweredIds } from './question-state';
 import { recordMemory } from './question-memory-service';
+import { publicLegacyExplanations } from './featured-explanation-legacy';
 
 // All history queries are scoped before aggregation. Existing coach snapshots stay authoritative.
 export const HISTORY_SQL = `
@@ -46,7 +47,8 @@ export async function readLearning(client: PoolClient, userId: string) {
       SELECT question_id,created_at AS answered_at,selected_answer FROM question_answer_stats WHERE user_id=$1 AND NOT is_correct
       UNION ALL SELECT question_id,answered_at,selected_answer FROM (${HISTORY_SQL}) h WHERE NOT is_correct
     ) answers GROUP BY question_id
-  ) SELECT q.id, q.subject, q.question, q.answer, q.explanation,
+  ) SELECT q.id, q.subject, q.question, q.answer,
+    CASE WHEN to_jsonb(q)->>'explanation_status'='published' THEN q.explanation ELSE '' END AS explanation,
     jsonb_build_array(q.option_a,q.option_b,q.option_c,q.option_d) AS options,
     COALESCE(r.favorite,FALSE) AS favorite,
     (r.wrong IS TRUE OR w.question_id IS NOT NULL AND (r.wrong IS DISTINCT FROM FALSE OR w.last_wrong > r.wrong_updated_at)) AS wrong,
@@ -57,7 +59,7 @@ export async function readLearning(client: PoolClient, userId: string) {
     LEFT JOIN wrong w ON w.question_id=q.id
     WHERE qs.visibility='public' AND (r.favorite OR r.wrong IS TRUE OR w.question_id IS NOT NULL AND (r.wrong IS DISTINCT FROM FALSE OR w.last_wrong > r.wrong_updated_at))`, [userId]);
   const { rows: imports } = await client.query('SELECT payload FROM learning_imports WHERE user_id=$1', [userId]);
-  return { owner: userId, progress, history, favorites: review.filter(r => r.favorite), wrongQuestions: review.filter(r => r.wrong), legacy: imports.map(r => r.payload) };
+  return { owner: userId, progress, history, favorites: review.filter(r => r.favorite), wrongQuestions: review.filter(r => r.wrong), legacy: await publicLegacyExplanations(client, imports.map(r => r.payload)) };
 }
 
 export async function recordPractice(client: PoolClient, userId: string, answers: { question_id: number; selected_answer: string; event_id: string; answered_at?: string }[], mode: 'practice' | 'exam') {

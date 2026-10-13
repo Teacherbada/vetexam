@@ -19,7 +19,7 @@ async function settings(client: PoolClient, userId: string) {
 async function items(client: PoolClient, userId: string, taskId: string): Promise<StoredItem[]> {
   const { rows } = await client.query(`SELECT l.position,l.session_id,l.item_position,l.source,l.follow_up_id,
     i.source_question_id AS id,i.subject,i.chapter,i.question,i.options,i.image,i.answer_key,i.selected_answer,i.is_correct,
-    COALESCE(q.explanation,'') AS explanation FROM daily_task_items l
+    CASE WHEN to_jsonb(q)->>'explanation_status'='published' THEN COALESCE(q.explanation,'') ELSE '' END AS explanation FROM daily_task_items l
     JOIN diagnostic_items i ON i.session_id=l.session_id AND i.position=l.item_position
     LEFT JOIN questions q ON q.id=i.question_id AND EXISTS(SELECT 1 FROM question_sets qs WHERE qs.id=q.question_set_id AND qs.visibility='public') WHERE l.task_id=$1 AND l.user_id=$2 ORDER BY l.position`,[taskId,userId]);
   return rows;

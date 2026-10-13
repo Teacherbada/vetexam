@@ -7,7 +7,8 @@ import { recordFirstAnswers, type AnswerSubmission } from './question-stats';
 // The caller owns the transaction, including the admin correction lock.
 export async function answerPublicQuestion(client: PoolClient, userId: string | null, submission: AnswerSubmission) {
   await client.query('LOCK TABLE question_answer_stats IN ROW EXCLUSIVE MODE');
-  const { rows } = await client.query(`SELECT q.answer, q.explanation,
+  const { rows } = await client.query(`SELECT q.answer,
+    CASE WHEN to_jsonb(q)->>'explanation_status'='published' THEN q.explanation ELSE '' END AS explanation,
     q.option_a, q.option_b, q.option_c, q.option_d, q.option_e
     FROM questions q JOIN question_sets qs ON qs.id = q.question_set_id
     WHERE q.id = $1 AND qs.visibility = 'public'`, [submission.question_id]);

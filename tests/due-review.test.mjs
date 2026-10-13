@@ -8,7 +8,7 @@ import { loadMemoryModule as load, memoryService as memory } from './memory-test
 
 const rules = load('lib/due-review.ts');
 const service = load('lib/due-review-service.ts', { './due-review': rules, './question-memory-service': memory });
-const learning = load('lib/learning-service.ts', { './question-memory-service': memory, './question-stats': load('lib/question-stats.ts'), './question-state': load('lib/question-state.ts') });
+const learning = load('lib/learning-service.ts', { './question-memory-service': memory, './question-stats': load('lib/question-stats.ts'), './question-state': load('lib/question-state.ts'), './featured-explanation-legacy': load('lib/featured-explanation-legacy.ts') });
 const now = new Date('2026-09-25T15:59:59.000Z');
 
 test('Taipei midnight and rolling seven-day boundaries; strict bounded limits', () => {

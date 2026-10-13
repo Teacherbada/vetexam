@@ -12,6 +12,7 @@ export type AdminQuestion = {
   question: string; option_a: string; option_b: string; option_c: string; option_d: string;
   option_e: string | null; answer: string | null; explanation: string;
   exam_year?: number | null; question_set_name?: string;
+  explanation_status?: 'unwritten' | 'draft' | 'published' | null;
 };
 export const normalizeAnswer = (value: string | null | undefined) => (value ?? '').trim().toUpperCase();
 export const validId = (value: unknown): value is number => typeof value === 'number' && Number.isInteger(value) && value > 0 && value <= 2147483647;

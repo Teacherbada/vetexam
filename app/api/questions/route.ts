@@ -47,7 +47,7 @@ export async function GET(request: Request) {
             q.option_c,
             q.option_d,
             q.answer,
-            q.explanation
+            CASE WHEN qs.visibility='private' OR to_jsonb(q)->>'explanation_status'='published' THEN q.explanation ELSE '' END AS explanation
           FROM questions q
           INNER JOIN question_sets qs
             ON qs.id = q.question_set_id
@@ -76,7 +76,7 @@ export async function GET(request: Request) {
             q.option_c,
             q.option_d,
             q.answer,
-            q.explanation
+            CASE WHEN to_jsonb(q)->>'explanation_status'='published' THEN q.explanation ELSE '' END AS explanation
           FROM questions q
           INNER JOIN question_sets qs
             ON qs.id = q.question_set_id

@@ -64,7 +64,10 @@ export async function GET(request: Request) {
         const chapterFilter = group.chapter ? sql`q.chapter = ${group.chapter}` : sql`TRUE`;
         const ordering = random ? sql`RANDOM()` : sql`qs.exam_year ASC NULLS LAST, q.question_number ASC, q.question_set_id ASC, q.id ASC`;
         return sql`
-          SELECT q.*, qs.exam_year, qs.name AS question_set_name
+          SELECT q.id,q.question_set_id,q.question_number,q.subject,q.question,
+            q.option_a,q.option_b,q.option_c,q.option_d,q.option_e,q.answer,q.image_data_url,
+            CASE WHEN to_jsonb(q)->>'explanation_status'='published' THEN q.explanation ELSE '' END AS explanation,
+            qs.exam_year, qs.name AS question_set_name
           FROM questions q JOIN question_sets qs ON qs.id = q.question_set_id
           WHERE qs.visibility = 'public' AND ${subjectFilter} AND ${yearFilter} AND ${chapterFilter} AND ${stateFilter}
           ORDER BY ${ordering} LIMIT ${group.count === "all" ? null : Number(group.count)}
@@ -110,7 +113,8 @@ export async function GET(request: Request) {
 
     const rows = await sql`
       SELECT q.id, q.question_set_id, q.question_number, q.subject, q.question,
-             q.option_a, q.option_b, q.option_c, q.option_d, q.answer, q.explanation, q.image_data_url,
+             q.option_a, q.option_b, q.option_c, q.option_d, q.answer,
+             CASE WHEN qs.visibility='private' OR to_jsonb(q)->>'explanation_status'='published' THEN q.explanation ELSE '' END AS explanation, q.image_data_url,
              qs.exam_year, qs.name AS question_set_name
       FROM questions q
       INNER JOIN question_sets qs ON qs.id = q.question_set_id

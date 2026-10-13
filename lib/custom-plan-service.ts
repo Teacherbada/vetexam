@@ -60,7 +60,7 @@ export async function readCustomPlan(client: PoolClient, userId: string): Promis
     FROM custom_daily_tasks t JOIN diagnostic_items i ON i.session_id=t.session_id WHERE t.plan_id=$1 GROUP BY t.id ORDER BY t.local_date DESC LIMIT 14`, [plan.id])).rows;
   const result = { ...base, history, plan: { id: plan.id, config: plan.config, status: plan.status, started: plan.started, completedAt: plan.completed_at, estimate: summary } };
   if (!task) return result;
-  const rows = (await client.query(`SELECT i.*,COALESCE(q.explanation,'') AS explanation FROM diagnostic_items i
+  const rows = (await client.query(`SELECT i.*,CASE WHEN to_jsonb(q)->>'explanation_status'='published' THEN COALESCE(q.explanation,'') ELSE '' END AS explanation FROM diagnostic_items i
     LEFT JOIN questions q ON q.id=i.question_id AND EXISTS(SELECT 1 FROM question_sets qs WHERE qs.id=q.question_set_id AND qs.visibility='public') WHERE i.session_id=$1 ORDER BY i.position`, [task.session_id])).rows;
   const current = rows.find(row => row.selected_answer === null), completed = rows.length > 0 && !current;
   const receipts = rows.filter(row => row.selected_answer !== null).map(row => ({ eventId: `${task.session_id}:${row.position}`, id: row.source_question_id,

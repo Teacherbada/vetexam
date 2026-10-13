@@ -71,7 +71,7 @@ export default function QuestionDetail({ question, shareUrl }: { question: Publi
       {pending && <p role="status">正在送出作答…</p>}{error && <p role="alert">{error}</p>}
       {result?.available && <>
         <section className={styles.explanation} aria-label="作答結果"><h2>作答結果</h2><p role="status" className={result.correct ? styles.correctText : styles.wrongText}>{result.correct ? '答對' : '答錯'} · 你的答案：{selected} · 正確答案：{result.answer}</p>
-          <h2>官方解析</h2>{result.explanation?.trim() ? <OfficialExplanation content={result.explanation} /> : <p className={styles.explanationText}>目前尚未建立官方解析。</p>}
+          <h2>VetExam 精選解析</h2>{result.explanation?.trim() ? <OfficialExplanation content={result.explanation} /> : <p className={styles.explanationText}>目前尚未建立官方解析。</p>}
         </section>
         <OptionDistribution questionId={question.id} selectedAnswer={selected} correctAnswer={result.answer!} expanded />
       </>}

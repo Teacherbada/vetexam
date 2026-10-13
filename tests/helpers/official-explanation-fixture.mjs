@@ -37,6 +37,15 @@ export async function fixture() {
       (4,1,'ai',4,'獸醫病理學','錯誤題型測試','甲','乙','丙','丁',NULL,'D','不可更新');
     INSERT INTO question_answer_stats VALUES (1,1,'A');
     INSERT INTO ai_questions VALUES ('1','{"explanation":"獸醫練功房原解析"}');`);
+  await db.exec(readFileSync(new URL('../../migrations/20261014_featured_explanations.sql', import.meta.url), 'utf8'));
+  await db.exec(`ALTER TABLE question_sets ADD COLUMN owner_id text DEFAULT 'member';
+    ALTER TABLE question_sets ADD COLUMN filename text DEFAULT 'fixture';
+    ALTER TABLE question_sets ADD COLUMN total_questions int DEFAULT 2;
+    ALTER TABLE question_sets ADD COLUMN file_hash text;
+    ALTER TABLE question_sets ADD COLUMN created_at timestamptz DEFAULT now();
+    ALTER TABLE questions ADD COLUMN chapter text;
+    ALTER TABLE questions ADD COLUMN image_data_url text;
+    ALTER TABLE questions ADD COLUMN created_at timestamptz DEFAULT now();`);
   const sql = { query: async (text, values) => (await db.query(text, values)).rows };
   // Exercise the real guard; only its external auth/session and Neon transport are replaced.
   process.env.ADMIN_USER_ID = 'fixture-admin';

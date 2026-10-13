@@ -20,10 +20,15 @@ export async function GET(request: Request) {
     const setId = integer('question_set_id'), id = integer('id'), number = integer('number'), year = integer('year');
     const page = integer('page') ?? 1;
     const quality = p.get('quality') ?? 'all';
+    const explanationStatus = p.get('explanation_status') ?? 'all';
+    if (!['all','unwritten','draft','published'].includes(explanationStatus)) throw new QuestionAdminError('無效的解析狀態');
+    const statusSql = `CASE WHEN qs.visibility<>'public' OR q.kind<>'exam' THEN NULL
+      WHEN NULLIF(BTRIM(q.explanation),'') IS NULL THEN 'unwritten'
+      WHEN to_jsonb(q)->>'explanation_status'='published' THEN 'published' ELSE 'draft' END`;
     if (!['all', 'missing_answer', 'has_answer', 'missing_explanation', 'has_explanation', 'invalid'].includes(quality)) throw new QuestionAdminError('無效篩選');
     const keyword = (p.get('keyword') ?? '').trim(), subject = (p.get('subject') ?? '').trim();
     if (keyword.length > 200 || subject.length > 100) throw new QuestionAdminError('搜尋文字過長');
-    const values = [setId, id, number, year, subject, keyword, quality];
+    const values = [setId, id, number, year, subject, keyword, quality, explanationStatus];
     const where = `($1::int IS NULL OR q.question_set_id=$1) AND ($2::int IS NULL OR q.id=$2)
       AND ($3::int IS NULL OR q.question_number=$3) AND ($4::int IS NULL OR qs.exam_year=$4)
       AND ($5::text='' OR q.subject=$5) AND ($6::text='' OR STRPOS(LOWER(q.question),LOWER($6))>0)
@@ -32,7 +37,8 @@ export async function GET(request: Request) {
         OR ($7='has_answer' AND NULLIF(BTRIM(q.answer),'') IS NOT NULL)
         OR ($7='missing_explanation' AND NULLIF(BTRIM(q.explanation),'') IS NULL)
         OR ($7='has_explanation' AND NULLIF(BTRIM(q.explanation),'') IS NOT NULL)
-        OR ($7='invalid' AND NULLIF(BTRIM(q.answer),'') IS NOT NULL AND UPPER(BTRIM(q.answer)) !~ '^[A-D]$'))`;
+        OR ($7='invalid' AND NULLIF(BTRIM(q.answer),'') IS NOT NULL AND UPPER(BTRIM(q.answer)) !~ '^[A-D]$'))
+      AND ($8='all' OR (${statusSql})=$8)`;
     // Every query is behind the existing session-based admin guard.
     const [summary, sets, count, questions] = await Promise.all([
       sql.query(`SELECT COUNT(*)::int AS total,
@@ -44,13 +50,15 @@ export async function GET(request: Request) {
         COUNT(*) FILTER (WHERE NULLIF(BTRIM(answer),'') IS NOT NULL AND UPPER(BTRIM(answer)) !~ '^[A-D]$')::int AS invalid FROM questions`, []),
       sql.query(`SELECT qs.id,qs.name,qs.exam_year,qs.exam_subject,qs.visibility,COUNT(q.id)::int AS total,
         COUNT(q.id) FILTER (WHERE NULLIF(BTRIM(q.answer),'') IS NULL)::int AS missing_answer,
-        COUNT(q.id) FILTER (WHERE NULLIF(BTRIM(q.explanation),'') IS NULL)::int AS missing_explanation
+        COUNT(q.id) FILTER (WHERE NULLIF(BTRIM(q.explanation),'') IS NULL)::int AS missing_explanation,
+        COUNT(q.id) FILTER (WHERE qs.visibility='public' AND q.kind='exam')::int AS explanation_total,
+        COUNT(q.id) FILTER (WHERE (${statusSql})='published')::int AS published_explanations
         FROM question_sets qs LEFT JOIN questions q ON q.question_set_id=qs.id
         GROUP BY qs.id ORDER BY qs.exam_year DESC NULLS LAST,qs.id DESC`, []),
       sql.query(`SELECT COUNT(*)::int AS total FROM questions q JOIN question_sets qs ON qs.id=q.question_set_id WHERE ${where}`, values),
-      sql.query(`SELECT q.id,q.question_set_id,q.question_number,q.subject,q.question,q.option_a,q.option_b,q.option_c,q.option_d,q.option_e,q.answer,q.explanation,qs.exam_year,qs.name AS question_set_name
+      sql.query(`SELECT q.id,q.question_set_id,q.question_number,q.subject,q.question,q.option_a,q.option_b,q.option_c,q.option_d,q.option_e,q.answer,q.explanation,qs.exam_year,qs.name AS question_set_name,(${statusSql}) AS explanation_status
         FROM questions q JOIN question_sets qs ON qs.id=q.question_set_id WHERE ${where}
-        ORDER BY q.question_set_id,q.question_number,q.id LIMIT 100 OFFSET $8`, [...values, (page - 1) * 100]),
+        ORDER BY q.question_set_id,q.question_number,q.id LIMIT 100 OFFSET $9`, [...values, (page - 1) * 100]),
     ]);
     // The keyboard editor requests the complete, bounded set separately from search pagination.
     const editor = p.get('editor') === '1';

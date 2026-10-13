@@ -29,7 +29,8 @@ export async function readDueReview(client: PoolClient, userId: string, limit = 
     (a.card.last_review?.getTime() ?? 0) - (b.card.last_review?.getTime() ?? 0) || a.card.question_id - b.card.question_id);
   const ids = ranked.slice(0, limit).map(({ card }) => card.question_id);
   const { rows } = ids.length ? await client.query(`SELECT q.id,q.question_set_id,q.question_number,q.subject,q.question,
-    q.option_a,q.option_b,q.option_c,q.option_d,q.option_e,UPPER(BTRIM(q.answer)) AS answer,q.explanation,q.image_data_url,
+    q.option_a,q.option_b,q.option_c,q.option_d,q.option_e,UPPER(BTRIM(q.answer)) AS answer,
+    CASE WHEN to_jsonb(q)->>'explanation_status'='published' THEN q.explanation ELSE '' END AS explanation,q.image_data_url,
     qs.exam_year,qs.name AS question_set_name ${eligible} AND m.due <= $2 AND q.id=ANY($3::integer[])`, [userId, now, ids]) : { rows: [] };
   const questions = new Map(rows.map(q => [q.id, {
     id: q.id, questionSetId: q.question_set_id, questionNumber: q.question_number,
