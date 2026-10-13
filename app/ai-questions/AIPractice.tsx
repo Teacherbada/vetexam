@@ -42,21 +42,21 @@ export default function AIPractice() {
   function advance() { setIndex(i => i + 1); setResult(null); setSelected(''); setError(''); attempt.current = null; }
   return <main className={styles.page}><div className={styles.container}>
     <nav className={styles.actions}><Link href="/subjects" className="study-button">歷屆國考題</Link><Link href="/" className="study-button">首頁</Link></nav>
-    <header className="my-6"><h1 className="text-2xl font-semibold">AI 試題</h1><p>{AI_NOTICE}</p><p className="mt-2 text-sm">AI 練習紀錄獨立保存，不計入國考模擬成績、排行榜、弱點分析或教練選題。</p></header>
+    <header className="my-6"><h1 className="text-2xl font-semibold">獸醫練功房</h1><p>{AI_NOTICE}</p><p className="mt-2 text-sm">題目依管理員提供的教材內容，由 AI 輔助生成。練功紀錄獨立保存，不計入國考模擬成績、排行榜、弱點分析或教練選題。</p></header>
     <section className={styles.card}><h2 className="mb-4 font-semibold">選擇科目與章節</h2>
       <fieldset disabled={busy || started}>
         <label className={adminStyles.field}>科目<select aria-label="科目" value={subject} onChange={e => { setSubject(e.target.value); setChapter(''); }}>{EXAM_SUBJECTS.map(s => <option key={s}>{s}</option>)}</select></label>
         <label className={adminStyles.field}>章節<select aria-label="章節" value={chapter} onChange={e => setChapter(e.target.value)}><option value="">全部章節</option>{chapterGroups(subject).flatMap(g => g.chapters).map(c => <option key={c}>{c}</option>)}</select></label>
       </fieldset>
-      <div className={styles.actions}>{!started ? <button className="study-button" disabled={busy} onClick={() => void load()}>開始 AI 練習</button> :
+      <div className={styles.actions}>{!started ? <button className="study-button" disabled={busy} onClick={() => void load()}>開始練功</button> :
         <button className="study-button" disabled={busy} onClick={() => { setStarted(false); setFinished(false); setQuestions([]); setResult(null); setError(''); setScore({answered:0,correct:0}); }}>重新選擇科目</button>}
-        <p>本輪 AI 練習：已答 {score.answered} 題／答對 {score.correct} 題</p></div>
+        <p>本輪練功：已答 {score.answered} 題／答對 {score.correct} 題</p></div>
     </section>
     {busy && <p role="status">處理中…</p>}{error && <p className="my-4" role="alert">{error}</p>}
-    {started && !q && <p className={styles.state}>此分類目前沒有已審核發布的 AI 試題。</p>}
-    {finished && <section className={styles.card + ' mt-6'} aria-label="AI 測驗結果"><h2 className="font-semibold">測驗結果</h2><p>AI 試題｜非歷屆國考題</p><p>已提交 {score.answered} 題，答對 {score.correct} 題，正確率 {score.answered ? Math.round(score.correct / score.answered * 100) : 0}%。</p><p>此結果僅供 AI 題練習，不計入國考成績、弱點分析或排行榜。</p></section>}
+    {started && !q && <p className={styles.state}>獸醫練功房此分類目前沒有已審核發布的題目。</p>}
+    {finished && <section className={styles.card + ' mt-6'} aria-label="獸醫練功房測驗結果"><h2 className="font-semibold">測驗結果</h2><p>教材衍生題｜非歷屆國考題</p><p>已提交 {score.answered} 題，答對 {score.correct} 題，正確率 {score.answered ? Math.round(score.correct / score.answered * 100) : 0}%。</p><p>此結果僅供獸醫練功房練習，不計入國考成績、弱點分析或排行榜。</p></section>}
     {q && <article className={styles.card + ' mt-6'} key={q.id}>
-      <p className={styles.meta}>AI 試題｜非歷屆國考題</p><p>{q.subject}／{q.chapter}</p>
+      <p className={styles.meta}>教材衍生題｜非歷屆國考題</p><p>{q.subject}／{q.chapter}</p>
       <p className={styles.progressLabel}>本頁第 {index + 1}／{questions.length} 題</p>
       <h2 className={styles.question}>{q.question}</h2>
       <div className={styles.options} role="group" aria-label="答案選項">{q.options.map((o,i) => {

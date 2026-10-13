@@ -1,7 +1,7 @@
 import { EXAM_SUBJECTS, validChapter } from '@/data/exam-chapters';
 
 export const AI_METHOD = '依管理員提供資料由 AI 生成，再由管理員審核';
-export const AI_NOTICE = '依管理員提供的教材由 AI 生成，經人工審核後發布；不代表官方命題。';
+export const AI_NOTICE = '本題庫由網站自動生成題目，供觀念練習與自我測驗使用，非歷屆國考題。';
 export type AISource = { title: string; edition: string; chapter: string; printedPages: string; pdfPages: string; excerpt: string; url: string };
 export type AIQuestionInput = { subject: string; chapter: string; question: string; options: string[]; answer: string; explanation: string; optionExplanations: string[]; source: AISource; generationMethod: string };
 export type AIPreviewRow = { index: number; question: AIQuestionInput | null; errors: string[]; warnings: string[] };

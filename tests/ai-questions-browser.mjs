@@ -81,8 +81,8 @@ try {
   const before=await page.evaluate(()=>JSON.stringify({...localStorage}));
   await page.getByLabel('科目',{exact:true}).selectOption('獸醫公共衛生學');
   await page.getByLabel('章節',{exact:true}).selectOption('獸醫流行病學');
-  await page.getByRole('button',{name:'開始 AI 練習',exact:true}).click();
-  await page.getByText('AI 試題｜非歷屆國考題',{exact:true}).waitFor();
+  await page.getByRole('button',{name:'開始練功',exact:true}).click();
+  await page.getByText('教材衍生題｜非歷屆國考題',{exact:true}).waitFor();
   assert.equal(await page.getByText('教材來源',{exact:true}).count(),0);
   await page.getByRole('group',{name:'答案選項'}).getByRole('button').first().evaluate(el=>{el.click();el.click();});
   assert.equal(answers,0);
@@ -95,8 +95,8 @@ try {
   for(const width of [320,375,768,1280]) {await page.setViewportSize({width,height:900});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'practice overflow '+width);if(width===375)await page.screenshot({path:new URL('practice-375.png',artifacts).pathname.replace(/^\/([A-Za-z]:)/,'$1'),fullPage:true});}
   await page.getByRole('button',{name:'下一題',exact:true}).click();await page.getByRole('heading',{name:'第二題 AI 練習',exact:true}).waitFor();
   await page.getByRole('group',{name:'答案選項'}).getByRole('button').first().click();assert.equal(answers,1);await page.getByRole('button',{name:'提交答案',exact:true}).click();await page.getByRole('button',{name:'查看測驗結果',exact:true}).click();
-  await page.getByRole('region',{name:'AI 測驗結果'}).getByText('AI 試題｜非歷屆國考題',{exact:true}).waitFor();assert.equal(answers,2);assert.equal(await page.evaluate(()=>JSON.stringify({...localStorage})),before);
-  emptyBank=true;await page.getByRole('button',{name:'重新選擇科目'}).click();await page.getByRole('button',{name:'開始 AI 練習',exact:true}).click();await page.getByText('此分類目前沒有已審核發布的 AI 試題。',{exact:true}).waitFor();assert.equal(await page.getByRole('group',{name:'答案選項'}).count(),0);
+  await page.getByRole('region',{name:'獸醫練功房測驗結果'}).getByText('教材衍生題｜非歷屆國考題',{exact:true}).waitFor();assert.equal(answers,2);assert.equal(await page.evaluate(()=>JSON.stringify({...localStorage})),before);
+  emptyBank=true;await page.getByRole('button',{name:'重新選擇科目'}).click();await page.getByRole('button',{name:'開始練功',exact:true}).click();await page.getByText('獸醫練功房此分類目前沒有已審核發布的題目。',{exact:true}).waitFor();assert.equal(await page.getByRole('group',{name:'答案選項'}).count(),0);
   // Existing practice and image question regression through the real quiz component.
   const image='data:image/svg+xml;base64,'+Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><rect width="80" height="80" fill="green"/></svg>').toString('base64');
   await page.route('**/api/quiz?**',route=>route.fulfill({json:{questions:[{id:991,questionSetId:1,questionNumber:1,subject:'獸醫病理學',question:'既有國考圖片題驗收',options:['a','b','c','d'],answer:'A',explanation:'既有解析',examYear:2026,questionSetName:'fixture',imageUrl:image,imageDataUrl:image,hasImage:true}]}}));
@@ -107,7 +107,7 @@ try {
   await page.getByRole('group',{name:'答案選項',exact:true}).getByRole('button').first().click();
   await page.getByText('既有解析',{exact:true}).waitFor();
   await page.route('**/api/quiz?*settings*',route=>route.fulfill({json:{availability:[],chapterAvailability:[]}}));
-  await page.goto(base+'/');await page.locator('.study-banks').getByRole('link',{name:/AI 試題/}).waitFor();assert.equal(await page.locator('.study-banks').getByRole('link',{name:/AI 試題/}).getAttribute('href'),'/ai-questions');
+  await page.goto(base+'/');await page.locator('.study-banks').getByRole('link',{name:/獸醫練功房/}).waitFor();assert.equal(await page.locator('.study-banks').getByRole('link',{name:/獸醫練功房/}).getAttribute('href'),'/ai-questions');
   for(const width of [320,375,768,1280]){await page.setViewportSize({width,height:900});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'home overflow '+width);}
   assert.deepEqual(errors,[]);
   console.log('PASS real anonymous guards; JSON file+invalid preview+explicit subset; double-submit; publish/edit/re-review; stored answer/explanation/source; AI storage isolation; 320/375/768/1280px; existing exam/image practice.');
