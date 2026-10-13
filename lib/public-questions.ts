@@ -5,6 +5,8 @@ import { searchQuery, SEARCH_PAGE_SIZE, type SearchFilters } from './question-se
 
 export type PublicQuestion = { id: number; questionSetId: number; questionNumber: number; subject: string; examYear: number | null; question: string; options: string[]; hasAnswer: boolean };
 export type SearchResult = { id: number; question_number: number; subject: string; exam_year: number | null; summary: string };
+// Match usableAnswer's String.trim() without exposing the answer key.
+const answerWhitespace = "\u0009\u000a\u000b\u000c\u000d \u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff";
 function database() {
   if (!process.env.DATABASE_URL) throw new Error('Database unavailable');
   return neon(process.env.DATABASE_URL);
@@ -20,9 +22,9 @@ export const getPublicQuestion = cache(async (id: string): Promise<PublicQuestio
   if (!/^[1-9]\d*$/.test(id) || Number(id) > 2147483647) return null;
   const rows = await database()`SELECT q.id, q.question_set_id, q.question_number, q.subject,
     qs.exam_year, q.question, q.option_a, q.option_b, q.option_c, q.option_d, q.option_e,
-    COALESCE(UPPER(BTRIM(q.answer)) ~ '^[A-E]$' AND
-      NULLIF(BTRIM(CASE UPPER(BTRIM(q.answer)) WHEN 'A' THEN q.option_a WHEN 'B' THEN q.option_b
-      WHEN 'C' THEN q.option_c WHEN 'D' THEN q.option_d WHEN 'E' THEN q.option_e END), '') IS NOT NULL, false) AS has_answer
+    COALESCE(UPPER(BTRIM(q.answer, ${answerWhitespace})) ~ '^[A-E]$' AND
+      NULLIF(BTRIM(CASE UPPER(BTRIM(q.answer, ${answerWhitespace})) WHEN 'A' THEN q.option_a WHEN 'B' THEN q.option_b
+      WHEN 'C' THEN q.option_c WHEN 'D' THEN q.option_d WHEN 'E' THEN q.option_e END, ${answerWhitespace}), '') IS NOT NULL, false) AS has_answer
     FROM questions q JOIN question_sets qs ON qs.id = q.question_set_id
     WHERE q.id = ${Number(id)} AND qs.visibility = 'public' LIMIT 1`;
   if (!rows[0]) return null;

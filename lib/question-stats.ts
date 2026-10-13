@@ -26,19 +26,22 @@ export function parseAnswerSubmissions(body: unknown): AnswerSubmission[] | null
   return result;
 }
 
+// Fixed SQL literal matching JavaScript String.trim(); never interpolate user input here.
+export const ANSWER_WHITESPACE_SQL = String.raw`U&'\0009\000a\000b\000c\000d\0020\00a0\1680\2000\2001\2002\2003\2004\2005\2006\2007\2008\2009\200a\2028\2029\202f\205f\3000\feff'`;
+
 export const INSERT_FIRST_ANSWERS_SQL = `
   INSERT INTO question_answer_stats (user_id, question_id, is_correct, selected_answer)
-  SELECT $1, q.id, UPPER(BTRIM(q.answer)) = submitted.selected_answer, submitted.selected_answer
+  SELECT $1, q.id, UPPER(BTRIM(q.answer, ${ANSWER_WHITESPACE_SQL})) = submitted.selected_answer, submitted.selected_answer
   FROM jsonb_to_recordset($2::jsonb) AS submitted(question_id integer, selected_answer text)
   JOIN questions q ON q.id = submitted.question_id
   JOIN question_sets qs ON qs.id = q.question_set_id
-  WHERE qs.visibility = 'public' AND UPPER(BTRIM(q.answer)) ~ '^[A-E]$'
-    AND NULLIF(BTRIM(CASE UPPER(BTRIM(q.answer))
+  WHERE qs.visibility = 'public' AND UPPER(BTRIM(q.answer, ${ANSWER_WHITESPACE_SQL})) ~ '^[A-E]$'
+    AND NULLIF(BTRIM(CASE UPPER(BTRIM(q.answer, ${ANSWER_WHITESPACE_SQL}))
       WHEN 'A' THEN q.option_a WHEN 'B' THEN q.option_b WHEN 'C' THEN q.option_c
-      WHEN 'D' THEN q.option_d WHEN 'E' THEN q.option_e END), '') IS NOT NULL
+      WHEN 'D' THEN q.option_d WHEN 'E' THEN q.option_e END, ${ANSWER_WHITESPACE_SQL}), '') IS NOT NULL
     AND NULLIF(BTRIM(CASE submitted.selected_answer
       WHEN 'A' THEN q.option_a WHEN 'B' THEN q.option_b WHEN 'C' THEN q.option_c
-      WHEN 'D' THEN q.option_d WHEN 'E' THEN q.option_e END), '') IS NOT NULL
+      WHEN 'D' THEN q.option_d WHEN 'E' THEN q.option_e END, ${ANSWER_WHITESPACE_SQL}), '') IS NOT NULL
   ORDER BY q.id
   ON CONFLICT (user_id, question_id) DO NOTHING
   RETURNING id
