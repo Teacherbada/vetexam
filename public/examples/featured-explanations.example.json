@@ -1,0 +1,10 @@
+{
+  "explanations": [
+    {
+      "questionId": 123,
+      "expectedAnswer": "C",
+      "explanation": "### 核心考點\n\n此為格式範例，請將 questionId、答案及本段全文替換為已核對的實際題目資料。\n\n### 選項解析\n\n- A：請填寫核對後的理由。\n- B：請填寫核對後的理由。\n- C：請填寫支持正確答案的理由。\n- D：請填寫核對後的理由。",
+      "sourceReferences": []
+    }
+  ]
+}

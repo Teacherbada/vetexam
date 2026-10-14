@@ -8,7 +8,7 @@ export function adminError(error: unknown) {
   console.error('Admin question operation failed');
   return adminJson({ error: '題目維護暫時無法完成，請重新預覽後重試' }, 503);
 }
-export async function readAdminBody(request: Request): Promise<Record<string, unknown>> {
+export async function readAdminBody(request: Request, maxBytes = 65536): Promise<Record<string, unknown>> {
   const origin = request.headers.get('origin');
   if ((origin && origin !== new URL(request.url).origin) || request.headers.get('sec-fetch-site') === 'cross-site') throw new QuestionAdminError('不允許此來源', 403);
   if (!request.headers.get('content-type')?.startsWith('application/json')) throw new QuestionAdminError('請使用 JSON 格式', 415);
@@ -19,7 +19,7 @@ export async function readAdminBody(request: Request): Promise<Record<string, un
     const { done, value } = await reader.read();
     if (done) break;
     size += value.byteLength;
-    if (size > 65536) { await reader.cancel(); throw new QuestionAdminError('答案資料過大', 413); }
+    if (size > maxBytes) { await reader.cancel(); throw new QuestionAdminError('JSON 資料過大', 413); }
     chunks.push(value);
   }
   try {
