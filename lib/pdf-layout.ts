@@ -1,4 +1,5 @@
 /** PDF coordinates are viewport points, with a top-left origin (rotation included). */
+import { serializeAnswer, usableAnswer } from './question-answer';
 export type PdfLine = { text: string; x: number; top: number; bottom: number };
 export type PdfRegion = { id: string; page: number; x: number; y: number; width: number; height: number; source: 'raster' | 'drawing' | 'rendered'; ambiguous?: boolean };
 export type PdfPage = { page: number; width: number; height: number; lines: PdfLine[]; images: PdfRegion[]; warning?: string };
@@ -34,7 +35,7 @@ export function assessQuestion(q: Pick<PdfQuestion, 'questionNumber' | 'question
   if (q.question.trim().length < 2 || q.question.length > 6000) penalize('題幹長度異常', 30);
   if (q.options.length < 4 || q.options.length > 5 || q.options.some(o => !o.trim())) penalize('缺選項', 25);
   if (!q.answer) penalize('沒答案', 20);
-  else if (!/^[A-E]$/.test(q.answer) || !q.options[q.answer.charCodeAt(0) - 65]?.trim()) penalize('答案不在選項內', 25);
+  else if (!usableAnswer(q)) penalize('答案不在選項內', 25);
   for (const [code, points] of [['題號不連續', 10], ['選項順序異常', 15], ['圖片不確定', 20], ['parser 警告', 30], ['跨頁', 5]] as const) if (warnings.includes(code)) score -= points;
   return { confidence: Math.max(0, score), warnings };
 }
@@ -61,8 +62,8 @@ export function parsePdfLayout(input: PdfPage[]): PdfQuestion[] {
   for (const q of questions) {
     q.rawText = bodies.get(q.id)!.join('\n');
     let content = q.rawText;
-    const answers = [...content.matchAll(/^\s*(?:答案|正確答案|Answer)\s*[:：]\s*([A-EＡ-Ｅ])\s*$/gim)];
-    if (answers.length === 1) q.answer = label(answers[0][1].toUpperCase());
+    const answers = [...content.matchAll(/^\s*(?:答案|正確答案|Answer)\s*[:：]\s*([A-EＡ-Ｅ](?:[,、，/ \t]+[A-EＡ-Ｅ])*)\s*$/gim)];
+    if (answers.length === 1) q.answer = serializeAnswer(answers[0][1].normalize('NFKC'), true);
     else if (answers.length > 1) q.warnings.push('parser 警告');
     content = content.replace(/^\s*(?:答案|正確答案|Answer)\s*[:：].*$/gim, '');
     const matches = [...content.matchAll(OPTION)].filter(m => !/^[A-EＡ-Ｅ]\s*圖/.test(content.slice((m.index ?? 0) + m[0].length)));

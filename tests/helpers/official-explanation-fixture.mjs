@@ -12,6 +12,8 @@ export function load(path, mocks = {}) {
   new Function('require', 'exports', code)(name => {
     if (name === 'server-only' || name.endsWith('.css')) return {};
     if (name in mocks) return mocks[name];
+    if (name === './question-answer' || name === '@/lib/question-answer') return load('lib/question-answer.ts');
+    if (name === './exam-year' || name === '@/lib/exam-year') return load('lib/exam-year.ts');
     if (name.startsWith('node:') || name.startsWith('react')) return require(name);
     throw Error('Unexpected import ' + name);
   }, exports);
@@ -38,6 +40,8 @@ export async function fixture() {
     INSERT INTO question_answer_stats VALUES (1,1,'A');
     INSERT INTO ai_questions VALUES ('1','{"explanation":"獸醫練功房原解析"}');`);
   await db.exec(readFileSync(new URL('../../migrations/20261014_featured_explanations.sql', import.meta.url), 'utf8'));
+  await db.exec('CREATE TABLE diagnostic_items(answer_key text CONSTRAINT diagnostic_items_answer_key_check CHECK(answer_key IN (\'A\',\'B\',\'C\',\'D\',\'E\')))');
+  await db.exec(readFileSync(new URL('../../migrations/20261014_multiple_official_answers.sql', import.meta.url), 'utf8'));
   await db.exec(`ALTER TABLE question_sets ADD COLUMN owner_id text DEFAULT 'member';
     ALTER TABLE question_sets ADD COLUMN filename text DEFAULT 'fixture';
     ALTER TABLE question_sets ADD COLUMN total_questions int DEFAULT 2;

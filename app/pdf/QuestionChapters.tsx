@@ -1,5 +1,6 @@
 'use client';
 
+import { formatAnswer } from '@/lib/question-answer';
 import { useEffect, useRef, useState } from 'react';
 import { EXAM_SUBJECTS } from '@/data/exam-chapters';
 import type { ChapterQueue } from '@/lib/admin-question-chapters';
@@ -77,7 +78,7 @@ export default function QuestionChapters({ banks, importedSetId, importedSubject
           <p className="mt-2 break-words text-sm text-[#6F7873]">{current.subject} · {formatExamYear(current.exam_year)} · {current.question_set_name} · {current.visibility === 'public' ? '公開' : '私人'}</p>
           <p className="mt-4 whitespace-pre-wrap break-words text-lg font-semibold">{current.question}</p>
           {[current.option_a, current.option_b, current.option_c, current.option_d, current.option_e].map((option, index) => (index < 4 || option) && <p className="mt-3 whitespace-pre-wrap break-words" key={index}>{String.fromCharCode(65 + index)}. {option || '（未提供）'}</p>)}
-          <p className="mt-4 whitespace-pre-wrap break-words text-sm">正確答案：{current.answer || '尚未設定'}</p>
+          <p className="mt-4 whitespace-pre-wrap break-words text-sm">正確答案：{formatAnswer(current.answer) || '尚未設定'}</p>
           {current.explanation && <details className="mt-3"><summary className="cursor-pointer text-sm">查看既有解析</summary><p className="mt-2 whitespace-pre-wrap break-words">{current.explanation}</p></details>}
           <p className="my-4 break-words text-sm text-[#6F7873]">目前章節：{current.chapter || '未分類'}</p>
           <ChapterPicker key={current.id} subject={current.subject} value={chapter} onChange={setChapter} emptyLabel="請選擇章節" allowEmpty={false} />

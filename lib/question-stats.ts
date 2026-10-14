@@ -28,14 +28,12 @@ export function parseAnswerSubmissions(body: unknown): AnswerSubmission[] | null
 
 export const INSERT_FIRST_ANSWERS_SQL = `
   INSERT INTO question_answer_stats (user_id, question_id, is_correct, selected_answer)
-  SELECT $1, q.id, UPPER(BTRIM(q.answer)) = submitted.selected_answer, submitted.selected_answer
+  SELECT $1, q.id, submitted.selected_answer = ANY(vetexam_answer_keys(q.answer)), submitted.selected_answer
   FROM jsonb_to_recordset($2::jsonb) AS submitted(question_id integer, selected_answer text)
   JOIN questions q ON q.id = submitted.question_id
   JOIN question_sets qs ON qs.id = q.question_set_id
-  WHERE qs.visibility = 'public' AND UPPER(BTRIM(q.answer)) ~ '^[A-E]$'
-    AND NULLIF(BTRIM(CASE UPPER(BTRIM(q.answer))
-      WHEN 'A' THEN q.option_a WHEN 'B' THEN q.option_b WHEN 'C' THEN q.option_c
-      WHEN 'D' THEN q.option_d WHEN 'E' THEN q.option_e END), '') IS NOT NULL
+  WHERE qs.visibility = 'public' AND vetexam_has_answer(q.answer,ARRAY[q.option_a,q.option_b,q.option_c,q.option_d,q.option_e])
+
     AND NULLIF(BTRIM(CASE submitted.selected_answer
       WHEN 'A' THEN q.option_a WHEN 'B' THEN q.option_b WHEN 'C' THEN q.option_c
       WHEN 'D' THEN q.option_d WHEN 'E' THEN q.option_e END), '') IS NOT NULL
@@ -58,7 +56,7 @@ export const OPTION_DISTRIBUTION_SQL = `
   LEFT JOIN question_answer_stats s ON s.question_id = q.id
     AND s.selected_answer IS NOT NULL AND s.selected_answer = choices.letter
   WHERE q.id = $1 AND qs.visibility = 'public'
-    AND UPPER(BTRIM(q.answer)) ~ '^[A-E]$'
+    AND vetexam_has_answer(q.answer,ARRAY[q.option_a,q.option_b,q.option_c,q.option_d,q.option_e])
     AND NULLIF(BTRIM(choices.content), '') IS NOT NULL
   GROUP BY choices.letter ORDER BY choices.letter
 `;
@@ -86,7 +84,7 @@ export const MOST_MISSED_SQL = `
     FROM question_answer_stats s
     JOIN questions q ON q.id = s.question_id
     JOIN question_sets qs ON qs.id = q.question_set_id
-    WHERE qs.visibility = 'public' AND UPPER(BTRIM(q.answer)) ~ '^[A-E]$'
+    WHERE qs.visibility = 'public' AND vetexam_has_answer(q.answer,ARRAY[q.option_a,q.option_b,q.option_c,q.option_d,q.option_e])
       AND ($1::text = 'all' OR s.created_at >= CURRENT_TIMESTAMP - INTERVAL '7 days')
       AND ($2::text IS NULL OR q.subject = $2)
       AND ($3::integer IS NULL OR qs.exam_year = $3)
@@ -115,7 +113,7 @@ export async function weeklyMostMissed(query: Query) {
     FROM question_answer_stats s
     JOIN questions q ON q.id = s.question_id
     JOIN question_sets qs ON qs.id = q.question_set_id
-    WHERE qs.visibility = 'public' AND UPPER(BTRIM(q.answer)) ~ '^[A-E]$'
+    WHERE qs.visibility = 'public' AND vetexam_has_answer(q.answer,ARRAY[q.option_a,q.option_b,q.option_c,q.option_d,q.option_e])
       AND s.created_at >= (DATE_TRUNC('week', CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Taipei') AT TIME ZONE 'Asia/Taipei')
       AND s.created_at <= CURRENT_TIMESTAMP
     GROUP BY q.id, qs.exam_year
@@ -131,10 +129,8 @@ export const RANDOM_PUBLIC_CHALLENGE_SQL = `
   FROM questions q JOIN question_sets qs ON qs.id=q.question_set_id
   WHERE qs.visibility='public' AND qs.exam_year IS NOT NULL
     AND NULLIF(BTRIM(q.question),'') IS NOT NULL
-    AND UPPER(BTRIM(q.answer)) ~ '^[A-E]$'
-    AND NULLIF(BTRIM(CASE UPPER(BTRIM(q.answer))
-      WHEN 'A' THEN q.option_a WHEN 'B' THEN q.option_b WHEN 'C' THEN q.option_c
-      WHEN 'D' THEN q.option_d WHEN 'E' THEN q.option_e END),'') IS NOT NULL
+    AND vetexam_has_answer(q.answer,ARRAY[q.option_a,q.option_b,q.option_c,q.option_d,q.option_e])
+
     AND (SELECT COUNT(*) FROM (VALUES(q.option_a),(q.option_b),(q.option_c),(q.option_d),(q.option_e)) AS options(content)
       WHERE NULLIF(BTRIM(content),'') IS NOT NULL) >= 2
   ORDER BY RANDOM() LIMIT 1

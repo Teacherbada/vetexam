@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import { neon } from "@neondatabase/serverless";
 import { auth } from "@/lib/auth";
+import { importedAnswer } from '@/lib/question-answer';
+import { normalizeExamYear } from '@/lib/exam-year';
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type Question = { id: number; question: string; options?: string[]; answer?: string; explanation?: string };
+type Question = { id: number; question: string; options?: string[]; answer?: string | string[]; explanation?: string };
 
 export async function POST(request: Request) {
   try {
@@ -20,11 +22,11 @@ export async function POST(request: Request) {
     const fileHash = typeof body?.fileHash === "string" ? body.fileHash.trim() : "";
     const filename = typeof body?.filename === "string" ? body.filename.trim() : "";
     const examSubject = typeof body?.examSubject === "string" ? body.examSubject.trim() : "";
-    const examYear = Number(body?.examYear);
+    const examYear = normalizeExamYear(body?.examYear);
     const visibility = body?.visibility === "public" ? "public" : "private";
     const questions = Array.isArray(body?.questions) ? body.questions as Question[] : [];
 
-    if (!fileHash || !filename || !examSubject || !Number.isInteger(examYear) || questions.length === 0) {
+    if (!fileHash || !filename || !examSubject || examYear === null || questions.length === 0) {
       return NextResponse.json({ error: "確認資料不完整，無法保存題庫。" }, { status: 400 });
     }
 
@@ -32,6 +34,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "只有管理員可以建立公開國考題庫。", code: "ADMIN_REQUIRED" }, { status: 403 });
     }
 
+    const invalidAnswer = questions.findIndex(q => importedAnswer(q?.answer, Array.isArray(q?.options) ? q.options : [], visibility === 'private') === null);
+    if (invalidAnswer >= 0) return NextResponse.json({ error: `第 ${invalidAnswer + 1} 題答案無效或缺少對應選項。` }, { status: 400 });
     const sql = neon(databaseUrl);
 
     // 二次檢查重複，避免使用者連按確認或同一份 PDF 重複建立。
@@ -68,7 +72,7 @@ export async function POST(request: Request) {
         VALUES (
           ${questionSetId}, ${Number(question.id)}, ${examSubject}, ${question.question ?? ""},
           ${options[0] ?? ""}, ${options[1] ?? ""}, ${options[2] ?? ""}, ${options[3] ?? ""},
-          ${question.answer ?? ""}, ${question.explanation ?? ""}
+          ${importedAnswer(question.answer, options, visibility === 'private')}, ${question.explanation ?? ""}
         )
       `;
     }

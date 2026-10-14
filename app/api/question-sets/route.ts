@@ -3,6 +3,9 @@ import { neon } from "@neondatabase/serverless";
 import { auth } from "@/lib/auth";
 import { validImportChapters } from '@/lib/chapter-classification';
 
+import { importedAnswer } from '@/lib/question-answer';
+import { normalizeExamYear } from '@/lib/exam-year';
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -32,13 +35,13 @@ export async function POST(request: Request) {
     const filename=typeof body?.filename==="string"?body.filename.trim():"";
     const fileHash=typeof body?.fileHash==="string"?body.fileHash.trim():"";
     const examSubject=typeof body?.examSubject==="string"?body.examSubject.trim():"";
-    const examYear=Number(body?.examYear);
+    const examYear=normalizeExamYear(body?.examYear);
     const visibility=body?.visibility==="public"?"public":"private";
     if(!questions.length)return NextResponse.json({error:"沒有可以匯入的題目。"},{status:400});
     if(!filename)return NextResponse.json({error:"缺少 PDF 檔名。"},{status:400});
     if(!examSubject)return NextResponse.json({error:"缺少國考科目。"},{status:400});
     if(!validImportChapters(examSubject,questions))return NextResponse.json({error:"章節不屬於該科官方章節清單。"},{status:400});
-    if(!Number.isInteger(examYear)||examYear<1990||examYear>2100)return NextResponse.json({error:"國考年份無效。"},{status:400});
+    if(examYear===null)return NextResponse.json({error:"國考年份無效。"},{status:400});
     const isAdmin=!!process.env.ADMIN_USER_ID&&process.env.ADMIN_USER_ID===userId;
     if(visibility==="public"&&!isAdmin)return NextResponse.json({error:"目前只有管理員可以建立公開國考題庫。",code:"ADMIN_REQUIRED"},{status:403});
     const sql=neon(databaseUrl);
@@ -46,10 +49,12 @@ export async function POST(request: Request) {
     // Backward-compatible schema upgrade for the optional fifth choice.
     await sql`ALTER TABLE questions ADD COLUMN IF NOT EXISTS option_e TEXT`;
 
+    const invalidAnswer=questions.findIndex((q:any)=>importedAnswer(q?.answer,Array.isArray(q?.options)?q.options:[],visibility==='private')===null);
+    if(invalidAnswer>=0)return NextResponse.json({error:`第 ${invalidAnswer+1} 題答案無效或沒有對應選項。`},{status:400});
     const normalizedQuestions:NormalizedQuestion[]=questions.map((q:any,index:number)=>{
       const options=Array.isArray(q?.options)?q.options:[];
       const imageDataUrl=typeof q?.imageDataUrl==="string"&&q.imageDataUrl.startsWith("data:image/")?q.imageDataUrl:null;
-      return {number:q.questionNumber === undefined ? index+1 : Number(q.questionNumber),subject:examSubject,question:typeof q?.question==="string"?q.question.trim():"",optionA:typeof options[0]==="string"?options[0].trim():"",optionB:typeof options[1]==="string"?options[1].trim():"",optionC:typeof options[2]==="string"?options[2].trim():"",optionD:typeof options[3]==="string"?options[3].trim():"",optionE:typeof options[4]==="string"?options[4].trim():"",answer:typeof q?.answer==="string"?q.answer.trim():"",explanation:typeof q?.explanation==="string"?q.explanation.trim():"",imageDataUrl,chapter:q.chapter||null};
+      return {number:q.questionNumber === undefined ? index+1 : Number(q.questionNumber),subject:examSubject,question:typeof q?.question==="string"?q.question.trim():"",optionA:typeof options[0]==="string"?options[0].trim():"",optionB:typeof options[1]==="string"?options[1].trim():"",optionC:typeof options[2]==="string"?options[2].trim():"",optionD:typeof options[3]==="string"?options[3].trim():"",optionE:typeof options[4]==="string"?options[4].trim():"",answer:importedAnswer(q?.answer,options,visibility==='private')!,explanation:typeof q?.explanation==="string"?q.explanation.trim():"",imageDataUrl,chapter:q.chapter||null};
     });
     const invalid=normalizedQuestions.find(q=>!Number.isInteger(q.number)||q.number<1||q.number>2000||!q.question||!q.optionA||!q.optionB||!q.optionC||!q.optionD);
     if(invalid)return NextResponse.json({error:`第 ${invalid.number} 題資料不完整，請先檢查題目與至少四個選項。`},{status:400});

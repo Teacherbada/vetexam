@@ -7,9 +7,8 @@ const eligible = `FROM question_memory_state m
   JOIN questions q ON q.id=m.question_id
   JOIN question_sets qs ON qs.id=q.question_set_id
   WHERE m.user_id=$1 AND qs.visibility='public'
-  AND UPPER(BTRIM(q.answer)) ~ '^[A-E]$'
-  AND NULLIF(BTRIM(CASE UPPER(BTRIM(q.answer)) WHEN 'A' THEN q.option_a WHEN 'B' THEN q.option_b
-    WHEN 'C' THEN q.option_c WHEN 'D' THEN q.option_d WHEN 'E' THEN q.option_e END),'') IS NOT NULL`;
+  AND vetexam_has_answer(q.answer,ARRAY[q.option_a,q.option_b,q.option_c,q.option_d,q.option_e])
+  `;
 
 export async function readDueReview(client: PoolClient, userId: string, limit = 20, now = new Date()): Promise<DueReview> {
   if (reviewLimit(String(limit)) === null) throw new Error('Invalid review limit');

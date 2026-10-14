@@ -1,5 +1,6 @@
 "use client";
 
+import { OFFICIAL_ANSWER_CHOICES, serializeAnswer } from '@/lib/question-answer';
 import { useState } from "react";
 import { EXAM_SUBJECTS } from "@/data/exam-chapters";
 import ImportClassification from "@/components/questions/ImportClassification";
@@ -119,9 +120,7 @@ export default function ManualQuestionPage() {
 
       if (
         item.answer &&
-        !["A", "B", "C", "D"].includes(
-          item.answer.toUpperCase()
-        )
+        !serializeAnswer(item.answer)
       ) {
         setMessage(
           `第 ${i + 1} 題答案只能是 A、B、C、D。`
@@ -297,10 +296,7 @@ export default function ManualQuestionPage() {
                       <option value="">
                         尚未設定
                       </option>
-                      <option value="A">A</option>
-                      <option value="B">B</option>
-                      <option value="C">C</option>
-                      <option value="D">D</option>
+                      {OFFICIAL_ANSWER_CHOICES.map(choice => <option key={choice.value} value={choice.value}>{choice.label}</option>)}
                     </select>
                   </div>
 

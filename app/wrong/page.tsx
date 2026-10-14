@@ -1,4 +1,5 @@
 "use client";
+import { formatAnswer } from '@/lib/question-answer';
 import { StudyIcon } from "@/components/dashboard/StudyUI";
 import LearningStatus from "@/components/LearningStatus";
 import { reviewItems, subscribeLearning, learningOwner, updateReview } from "@/lib/learning-client";
@@ -105,7 +106,7 @@ export default function WrongPage(){
       {wrongQuestions.map((question, index) => <article key={question.id} className={styles.card}>
         <div className={styles.meta}><SubjectBadge subject={question.subject} /><span className={styles.wrongStatus}><StudyIcon name="wrong" />錯題</span></div>
         <h2 className={styles.question}>{index + 1}. {question.question}</h2>
-        <div className={styles.answers}><p>你的答案 <strong className={styles.incorrect}>{question.userAnswer || "未紀錄"}</strong></p><p>正確答案 <strong className={styles.correct}>{question.answer}</strong></p></div>
+        <div className={styles.answers}><p>你的答案 <strong className={styles.incorrect}>{question.userAnswer || "未紀錄"}</strong></p><p>正確答案 <strong className={styles.correct}>{formatAnswer(question.answer)}</strong></p></div>
         <div className={styles.explanation}><p>解析</p><p>{question.explanation}</p></div>
         <label className={styles.note}>我的筆記<textarea defaultValue={question.note || ""} onBlur={(e) => saveNote(question.id, e.target.value)} placeholder="整理自己的理解、記憶技巧、臨床重點..." aria-label={"第 " + (index + 1) + " 題的筆記"} /></label>
         <div className={styles.footer}><button type="button" onClick={() => removeWrong(question.id)} className={styles.secondary} aria-label={"已掌握，移除第 " + (index + 1) + " 題"}>已掌握，移除錯題</button></div>

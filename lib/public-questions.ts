@@ -20,9 +20,7 @@ export const getPublicQuestion = cache(async (id: string): Promise<PublicQuestio
   if (!/^[1-9]\d*$/.test(id) || Number(id) > 2147483647) return null;
   const rows = await database()`SELECT q.id, q.question_set_id, q.question_number, q.subject,
     qs.exam_year, q.question, q.option_a, q.option_b, q.option_c, q.option_d, q.option_e,
-    COALESCE(UPPER(BTRIM(q.answer)) ~ '^[A-E]$' AND
-      NULLIF(BTRIM(CASE UPPER(BTRIM(q.answer)) WHEN 'A' THEN q.option_a WHEN 'B' THEN q.option_b
-      WHEN 'C' THEN q.option_c WHEN 'D' THEN q.option_d WHEN 'E' THEN q.option_e END), '') IS NOT NULL, false) AS has_answer
+    COALESCE(vetexam_has_answer(q.answer,ARRAY[q.option_a,q.option_b,q.option_c,q.option_d,q.option_e]) , false) AS has_answer
     FROM questions q JOIN question_sets qs ON qs.id = q.question_set_id
     WHERE q.id = ${Number(id)} AND qs.visibility = 'public' LIMIT 1`;
   if (!rows[0]) return null;

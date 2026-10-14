@@ -3,6 +3,8 @@ import { createHash } from "node:crypto";
 import type { PoolClient } from "pg";
 import { validateImportRanges, type ImportBatch, type ImportQuestion } from "./import-batches";
 import { validImportChapters } from './chapter-classification';
+import { serializeAnswer, usableAnswer } from './question-answer';
+import { normalizeExamYear } from './exam-year';
 
 export class ImportError extends Error {
   constructor(message: string, public status = 400) { super(message); }
@@ -15,7 +17,7 @@ export function parseImportBatch(value: unknown): ImportBatch {
     typeof body.filename !== "string" || !body.filename.trim() || body.filename.length > 255 ||
     typeof body.fileHash !== "string" || !/^[0-9a-f]{64}$/i.test(body.fileHash) ||
     typeof body.examSubject !== "string" || !body.examSubject.trim() || body.examSubject.length > 100 ||
-    !Number.isInteger(body.examYear) || body.examYear < 1990 || body.examYear > 2100 ||
+    !normalizeExamYear(body.examYear) ||
     !["public", "private"].includes(body.visibility) || !Array.isArray(body.ranges) || !Array.isArray(body.questions)) throw new ImportError("匯入設定格式錯誤。");
   try { validateImportRanges(body.ranges, body.totalQuestions); }
   catch (error) { throw new ImportError((error as Error).message); }
@@ -26,13 +28,13 @@ export function parseImportBatch(value: unknown): ImportBatch {
   const questions: ImportQuestion[] = body.questions.map((question, index) => {
     if (!question || (question.questionNumber !== undefined && (!Number.isInteger(question.questionNumber) || question.questionNumber < 1 || question.questionNumber > 999)) || typeof question.question !== "string" || !question.question.trim() ||
       !Array.isArray(question.options) || question.options.length < 4 || question.options.length > 5 || question.options.some((option) => typeof option !== "string" || !option.trim()) ||
-      typeof question.answer !== "string" || !/^[A-E]?$/.test(question.answer) || typeof question.explanation !== "string" ||
+      (question.answer !== '' && (!serializeAnswer(question.answer, body.visibility === 'private') || !usableAnswer(question))) || typeof question.explanation !== "string" ||
       (question.imageDataUrl != null && (typeof question.imageDataUrl !== "string" || !/^data:image\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=\r\n]+$/i.test(question.imageDataUrl)))) throw new ImportError(`第 ${range.from + index} 題資料不完整或圖片格式錯誤。`);
-    return { ...(question.questionNumber !== undefined ? {questionNumber:question.questionNumber} : {}), question: question.question.trim(), options: question.options.map((option) => option.trim()), answer: question.answer, explanation: question.explanation, imageDataUrl: question.imageDataUrl || null,
+    return { ...(question.questionNumber !== undefined ? {questionNumber:question.questionNumber} : {}), question: question.question.trim(), options: question.options.map((option) => option.trim()), answer: question.answer === '' ? '' : serializeAnswer(question.answer, body.visibility === 'private')!, explanation: question.explanation, imageDataUrl: question.imageDataUrl || null,
       ...(question.chapter !== undefined ? { chapter: question.chapter || null } : {}) };
   });
   return { importId: body.importId, filename: body.filename.trim(), fileHash: body.fileHash.toLowerCase(), visibility: body.visibility,
-    examSubject: body.examSubject.trim(), examYear: body.examYear, totalQuestions: body.totalQuestions,
+    examSubject: body.examSubject.trim(), examYear: normalizeExamYear(body.examYear)!, totalQuestions: body.totalQuestions,
     ranges: body.ranges.map(({ from, to }) => ({ from, to })), batchIndex: body.batchIndex, questions };
 }
 

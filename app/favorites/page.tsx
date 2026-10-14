@@ -1,4 +1,5 @@
 "use client";
+import { formatAnswer } from '@/lib/question-answer';
 import { StudyIcon } from "@/components/dashboard/StudyUI";
 import LearningStatus from "@/components/LearningStatus";
 
@@ -37,7 +38,7 @@ export default function FavoritesPage(){
         <div className={styles.meta}><SubjectBadge subject={question.subject} /><span className={styles.favoriteStatus}><StudyIcon name="heart" />已收藏</span></div>
         <h2 className={styles.question}>{index + 1}. {question.question}</h2>
         <div className={styles.options}>{question.options.map((option: string, i: number) => <p key={option} className={styles.option}><span>{String.fromCharCode(65 + i)}.</span>{option}</p>)}</div>
-        <div className={styles.explanation}><p>答案：<strong className={styles.correct}>{question.answer}</strong></p><p>解析：{question.explanation}</p></div>
+        <div className={styles.explanation}><p>答案：<strong className={styles.correct}>{formatAnswer(question.answer)}</strong></p><p>解析：{question.explanation}</p></div>
       </article>)}
     </div>}
   </ReviewPage>;

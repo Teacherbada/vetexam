@@ -14,6 +14,8 @@ function load(path, mocks = {}) {
   new Function('require', 'exports', code)(name => {
     if (name === 'server-only') return {};
     if (name in mocks) return mocks[name];
+    if (name === './question-answer' || name === '@/lib/question-answer') return load('lib/question-answer.ts');
+    if (name === './exam-year' || name === '@/lib/exam-year') return load('lib/exam-year.ts');
     if (name.startsWith('node:')) return require(name);
     throw new Error('Unexpected import ' + name);
   }, exports);

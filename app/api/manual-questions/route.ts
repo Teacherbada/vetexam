@@ -5,6 +5,9 @@ import { hasProAccess } from "@/lib/subscription";
 import { EXAM_SUBJECTS } from '@/data/exam-chapters';
 import { validImportChapters } from '@/lib/chapter-classification';
 
+import { importedAnswer } from '@/lib/question-answer';
+import { normalizeExamYear } from '@/lib/exam-year';
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -76,8 +79,8 @@ export async function POST(request: Request) {
     if (body.visibility === 'public' && !isAdmin) return NextResponse.json({ error: '只有管理員可以建立公開國考題庫。' }, { status: 403 });
     const examSubject = typeof body.examSubject === 'string' ? body.examSubject : '';
     if (examSubject && !EXAM_SUBJECTS.includes(examSubject)) return NextResponse.json({ error: '請選擇官方國考科目。' }, { status: 400 });
-    const examYear = body.examYear == null ? null : Number(body.examYear);
-    if (examYear !== null && (!Number.isInteger(examYear) || examYear < 1990 || examYear > 2100)) return NextResponse.json({ error: '國考年份無效。' }, { status: 400 });
+    const examYear = body.examYear == null ? null : normalizeExamYear(body.examYear);
+    if (body.examYear != null && examYear === null) return NextResponse.json({ error: '國考年份無效。' }, { status: 400 });
 
     if (!Array.isArray(questions)) {
       return NextResponse.json(
@@ -144,10 +147,7 @@ export async function POST(request: Request) {
         options.push("");
       }
 
-      const answer =
-        typeof item.answer === "string"
-          ? item.answer.trim().toUpperCase()
-          : "";
+      const answer = importedAnswer(item.answer, options);
 
       const explanation =
         typeof item.explanation === "string"
@@ -176,27 +176,10 @@ export async function POST(request: Request) {
         );
       }
 
-      if (
-        answer &&
-        !["A", "B", "C", "D"].includes(answer)
-      ) {
+      if (answer === null) {
         return NextResponse.json(
           {
             error: `第 ${i + 1} 題答案必須是 A、B、C 或 D。`,
-          },
-          { status: 400 }
-        );
-      }
-
-      if (
-        answer &&
-        !options[
-          "ABCD".indexOf(answer)
-        ]
-      ) {
-        return NextResponse.json(
-          {
-            error: `第 ${i + 1} 題的答案 ${answer} 沒有對應的選項。`,
           },
           { status: 400 }
         );

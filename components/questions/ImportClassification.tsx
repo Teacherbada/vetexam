@@ -1,5 +1,6 @@
 'use client';
 
+import { formatAnswer } from '@/lib/question-answer';
 import { chapterGroups } from '@/data/exam-chapters';
 import { CHAPTER_CONFIDENCE_THRESHOLD, type ClassificationQuestion, type ChapterReview } from '@/lib/chapter-classification';
 import type { useImportClassification } from './useImportClassification';
@@ -21,7 +22,7 @@ export default function ImportClassification({ subject, questions, state, disabl
       <p className="mt-3 whitespace-pre-wrap">{question.question}</p>
       <details className="mt-3"><summary className="cursor-pointer">查看選項、答案與解析</summary>
         {question.options.map((option, i) => <p key={i} className="mt-2 whitespace-pre-wrap">{String.fromCharCode(65 + i)}. {option}</p>)}
-        <p className="mt-2">正確答案：{question.answer || '尚未設定'}</p><p className="mt-2 whitespace-pre-wrap">{question.explanation}</p>
+        <p className="mt-2">正確答案：{formatAnswer(question.answer) || '尚未設定'}</p><p className="mt-2 whitespace-pre-wrap">{question.explanation}</p>
       </details>
       <p className="mt-3">AI 建議：{row.suggestedChapter || '尚未分類'} · 信心：{Math.round(row.confidence * 100)}%</p>
       <p className="mt-2">第二候選：{row.secondChoice || '無'}</p><p className="mt-2">判斷理由：{row.reason}</p>

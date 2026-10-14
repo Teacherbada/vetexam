@@ -1,5 +1,6 @@
 "use client";
 
+import { usableAnswer, isCorrectAnswer, formatAnswer } from '@/lib/question-answer';
 import { useEffect, useRef, useState } from "react";
 import OptionDistribution from "@/components/questions/OptionDistribution";
 import { sendStatistics } from "@/lib/answer-statistics-client";
@@ -39,16 +40,16 @@ export default function WeeklyQuestionDialog({ questionId, onClose, title = '本
     return () => controller.abort();
   }, [questionId, retry]);
 
-  const answer = question?.answer.trim().toUpperCase() ?? "";
-  const hasAnswer = /^[A-E]$/.test(answer) && Boolean(question?.options[answer.charCodeAt(0) - 65]?.trim());
+  const answer = question ? usableAnswer(question) ?? "" : "";
+  const hasAnswer = Boolean(answer);
   function choose(letter: string) {
     if (!question || locked.current) return;
     locked.current = true;
     setSelected(letter);
     if (hasAnswer) {
       addDailyProgress();
-      saveProgress(question.id, letter === answer, question.subject);
-      if (letter !== answer) saveWrongQuestion(question, letter);
+      saveProgress(question.id, isCorrectAnswer(answer, letter), question.subject);
+      if (!isCorrectAnswer(answer, letter)) saveWrongQuestion(question, letter);
       void sendStatistics([{ question_id: question.id, selected_answer: letter }]);
     }
   }
@@ -61,12 +62,12 @@ export default function WeeklyQuestionDialog({ questionId, onClose, title = '本
         <div className={`${styles.options} ${inline ? dialogStyles.options : ""}`} role="group" aria-label={`${title}答案選項`}>{question.options.map((option, index) => {
           if (!option.trim()) return null;
           const letter = String.fromCharCode(65 + index);
-          const correct = Boolean(selected) && hasAnswer && letter === answer;
+          const correct = Boolean(selected) && hasAnswer && isCorrectAnswer(answer, letter);
           const wrong = selected === letter && hasAnswer && !correct;
           return <button key={letter} className={`${styles.option} ${inline ? dialogStyles.option : ""} ${correct ? styles.correct : wrong ? styles.wrong : selected === letter ? styles.selected : ""}`} disabled={Boolean(selected)} aria-pressed={selected === letter} onClick={() => choose(letter)}><span className={`${styles.letter} ${inline ? dialogStyles.letter : ""}`}>{letter}</span><span className={`${styles.optionText} ${inline ? dialogStyles.optionText : ""}`}>{option}</span>{correct && <span className={styles.answerStatus}>正確答案</span>}{selected === letter && <span className={styles.answerStatus}>你的答案</span>}</button>;
         })}</div>
         {selected && <>
-          <section className={styles.explanation} aria-label="答案與解析"><p role="status" className={hasAnswer ? selected === answer ? styles.correctText : styles.wrongText : undefined}>{hasAnswer ? `你的答案：${selected} · 正確答案：${answer}` : "本題尚未提供正確答案，暫不計入作答統計。"}</p><h2>官方解析</h2><p className={styles.explanationText}>{question.explanation || "目前沒有提供解析。"}</p></section>
+          <section className={styles.explanation} aria-label="答案與解析"><p role="status" className={hasAnswer ? isCorrectAnswer(answer, selected) ? styles.correctText : styles.wrongText : undefined}>{hasAnswer ? `你的答案：${selected} · 正確答案：${formatAnswer(answer)}` : "本題尚未提供正確答案，暫不計入作答統計。"}</p><h2>官方解析</h2><p className={styles.explanationText}>{question.explanation || "目前沒有提供解析。"}</p></section>
           <OptionDistribution questionId={question.id} selectedAnswer={selected} correctAnswer={answer} expanded />
         </>}
       </>}

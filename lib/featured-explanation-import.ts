@@ -4,6 +4,7 @@ import type { PoolClient } from 'pg';
 import { QuestionAdminError, checkPreviewToken, issuePreviewToken } from './admin-questions';
 import { validId, normalizeAnswer } from './admin-question-input';
 import { parseExplanation } from './official-explanation';
+import { serializeAnswer, answerKeys } from './question-answer';
 import { IMPORT_FILE_BYTES, type ExplanationImportItem, type ExplanationImportRow, type ImportSelection, type ImportResult, type ImportOutcome } from './featured-explanation-import-input';
 
 type Row = Record<string, unknown>;
@@ -34,13 +35,13 @@ export function parseImport(input: unknown): Entry[] {
   for (const value of input.explanations) if (object(value) && validId(value.questionId)) counts.set(value.questionId, (counts.get(value.questionId) ?? 0) + 1);
   return input.explanations.map((value, index) => {
     const row: ExplanationImportRow = { index, questionId: object(value) && validId(value.questionId) ? value.questionId : null,
-      expectedAnswer: object(value) && typeof value.expectedAnswer === 'string' ? value.expectedAnswer.slice(0, 20) : '',
+      expectedAnswer: object(value) ? serializeAnswer(value.expectedAnswer, true) ?? '' : '',
       answer: '', summary: '', explanation: object(value) && typeof value.explanation === 'string' ? value.explanation.slice(0, 20000) : '', category: 'invalid', reason: '' };
     try {
       if (!object(value) || Object.keys(value).some(key => !['questionId', 'expectedAnswer', 'explanation', 'questionFingerprint', 'sourceReferences'].includes(key))) throw new QuestionAdminError('欄位不合法；僅接受規格中的解析欄位');
       if (!validId(value.questionId)) throw new QuestionAdminError('questionId 必須是有效整數 ID');
       if ((counts.get(value.questionId) ?? 0) > 1) throw new QuestionAdminError('同一檔案含重複 questionId，所有重複項目均拒絕');
-      if (typeof value.expectedAnswer !== 'string' || !/^[A-E]$/.test(value.expectedAnswer)) throw new QuestionAdminError('expectedAnswer 必須為單一大寫 A–E');
+      if (typeof value.expectedAnswer === 'string' ? !/^[A-E]$/.test(value.expectedAnswer) : !Array.isArray(value.expectedAnswer) || !serializeAnswer(value.expectedAnswer)) throw new QuestionAdminError('expectedAnswer 必須是合法答案或答案陣列');
       if (value.questionFingerprint !== undefined && (typeof value.questionFingerprint !== 'string' || !/^[a-f0-9]{64}$/.test(value.questionFingerprint))) throw new QuestionAdminError('questionFingerprint 必須為 64 位小寫 SHA-256');
       parseExplanation({ id: value.questionId, explanation: value.explanation, revision: '0'.repeat(64), action: 'draft' });
       let explanation = value.explanation;
@@ -72,8 +73,8 @@ function assess(entry: Entry, q?: Row): ExplanationImportRow {
   row.summary = String(q.question ?? '').slice(0, 240);
   row.answer = normalizeAnswer(q.answer as string | null);
   row.questionFingerprint = questionFingerprint(q);
-  if (row.answer !== entry.item.expectedAnswer) return { ...row, category: 'answer_mismatch', reason: 'expectedAnswer 與題庫正確答案不一致' };
-  if (!String(q['option_' + row.answer.toLowerCase()] ?? '').trim()) return { ...row, category: 'invalid', reason: '正確答案對應選項為空，請先人工核對題目' };
+  if (row.answer !== serializeAnswer(entry.item.expectedAnswer, true)) return { ...row, category: 'answer_mismatch', reason: 'expectedAnswer 與題庫完整正確答案集合不一致' };
+  if (!answerKeys(row.answer).every(letter => String(q['option_' + letter.toLowerCase()] ?? '').trim())) return { ...row, category: 'invalid', reason: '正確答案對應選項為空，請先人工核對題目' };
   if (entry.item.questionFingerprint && entry.item.questionFingerprint !== row.questionFingerprint) return { ...row, category: 'invalid', reason: '題目指紋不一致，禁止匯入' };
   if ((q.explanation !== null && q.explanation !== '') || q.explanation_status === 'published') {
     const status = q.explanation_status === 'published' ? 'published' : 'draft';

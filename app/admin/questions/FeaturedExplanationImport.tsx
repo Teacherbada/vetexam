@@ -1,6 +1,7 @@
 'use client';
 import { useRef, useState } from 'react';
 import OfficialExplanation from '@/components/questions/OfficialExplanation';
+import { formatAnswer } from '@/lib/question-answer';
 import { IMPORT_FILE_BYTES, importLabels, type ExplanationImportRow, type ImportCategory, type ImportResult } from '@/lib/featured-explanation-import-input';
 import styles from './questions.module.css';
 
@@ -81,7 +82,7 @@ export default function FeaturedExplanationImport({ onImported }: { onImported: 
         {rows.filter(row => filter === 'all' || row.category === filter).map(row => <article className={styles.card} key={row.index} data-import-row={row.index}>
           <label><input type="checkbox" aria-label={`匯入第 ${row.index + 1} 筆`} disabled={busy || Boolean(result) || row.category !== 'ready'} checked={selected.has(row.index)} onChange={event => { setSelected(previous => { const next = new Set(previous); if (event.target.checked) next.add(row.index); else next.delete(row.index); return next; }); setConfirmed(false); }} /> 第 {row.index + 1} 筆 · ID {row.questionId ?? '無效'} · <strong>{importLabels[row.category]}</strong></label>
           <p className={styles.question}>{row.summary || '無可用題目摘要'}</p>
-          <p>檔案答案：{row.expectedAnswer || '未提供'} · 題庫答案：{row.answer || '無可用答案'}</p>
+          <p>檔案答案：{formatAnswer(row.expectedAnswer) || '未提供'} · 題庫答案：{formatAnswer(row.answer) || '無可用答案'}</p>
           {row.reason && <p className={styles.warningText}>{row.reason}</p>}
           {row.questionFingerprint && <details><summary>題目指紋（選填核對用）</summary><p className={styles.question}>{row.questionFingerprint}</p></details>}
           <details><summary>解析預覽</summary><OfficialExplanation content={row.explanation} /></details>

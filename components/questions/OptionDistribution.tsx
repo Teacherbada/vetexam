@@ -1,5 +1,6 @@
 "use client";
 
+import { isCorrectAnswer } from '@/lib/question-answer';
 import { useEffect, useState } from "react";
 import { mostMistaken, type OptionDistributionData } from "@/lib/option-distribution";
 import { waitForAnswerStatistics } from "@/lib/answer-statistics-client";
@@ -39,11 +40,11 @@ function Distribution({ questionId, selectedAnswer, correctAnswer }: Props) {
   return <div className={styles.content}>
     <p className={styles.caption}>依 {data.total} 次有效首次作答選項紀錄統計；不含未記錄選項的舊作答。</p>
     <div className={styles.rows}>{data.options.map((option) => <div key={option.letter} className={styles.row}>
-      <div className={styles.label}><strong>{option.letter}</strong><span className={styles.badges}>{option.letter === selectedAnswer.toUpperCase() && <span>你的答案</span>}{option.letter === correctAnswer.trim().toUpperCase() && <span className={styles.correct}>正確答案</span>}</span><span className={styles.percentage}>{option.percentage}%</span></div>
-      <div className={styles.track} role="progressbar" aria-label={`選項 ${option.letter} 作答比例`} aria-valuenow={option.percentage} aria-valuemin={0} aria-valuemax={100}><span className={option.letter === correctAnswer.trim().toUpperCase() ? styles.correctBar : undefined} style={{ width: `${option.percentage}%` }} /></div>
+      <div className={styles.label}><strong>{option.letter}</strong><span className={styles.badges}>{option.letter === selectedAnswer.toUpperCase() && <span>你的答案</span>}{isCorrectAnswer(correctAnswer, option.letter) && <span className={styles.correct}>正確答案</span>}</span><span className={styles.percentage}>{option.percentage}%</span></div>
+      <div className={styles.track} role="progressbar" aria-label={`選項 ${option.letter} 作答比例`} aria-valuenow={option.percentage} aria-valuemin={0} aria-valuemax={100}><span className={isCorrectAnswer(correctAnswer, option.letter) ? styles.correctBar : undefined} style={{ width: `${option.percentage}%` }} /></div>
     </div>)}</div>
     {mistaken.length > 0 ? <p className={styles.insight}><strong>最常誤選：{mistaken.map((option) => option.letter).join("、")}</strong><span>{mistaken.length > 1 ? `各有 ${mistaken[0].percentage}% 的有效作答者選擇，並列最常誤選。` : `${mistaken[0].percentage}% 的有效作答者選擇 ${mistaken[0].letter}。`}</span></p>
-      : data.options.some((option) => option.letter === correctAnswer.trim().toUpperCase()) && <p className={styles.caption}>目前有效選項紀錄皆為正確答案。</p>}
+      : data.options.some((option) => isCorrectAnswer(correctAnswer, option.letter)) && <p className={styles.caption}>目前有效選項紀錄皆為正確答案。</p>}
   </div>;
 }
 

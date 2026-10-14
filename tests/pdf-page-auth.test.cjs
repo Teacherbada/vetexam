@@ -3,6 +3,11 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const ts = require('typescript');
+function localModule(path) {
+  const context = { exports: {} };
+  vm.runInNewContext(ts.transpileModule(fs.readFileSync(path, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, context);
+  return context.exports;
+}
 
 // Exercise the page's asynchronous auth rendering without a real account or DB.
 function mount() {
@@ -36,6 +41,8 @@ function mount() {
     if (id === '@/lib/auth-client') return { authClient: { useSession: () => session } };
     if (id === '@/components/questions/useImportClassification') return { useImportClassification: () => ({ busy: false, ready: false }) };
     if (id === '@/data/exam-chapters') return { EXAM_SUBJECTS: ['獸醫病理學'] };
+    if (id === '@/lib/exam-year') return localModule('lib/exam-year.ts');
+    if (id === '@/lib/question-answer') return localModule('lib/question-answer.ts');
     if (id.endsWith('.css')) return { default: new Proxy({}, { get: (_, key) => String(key) }) };
     return { default: 'stub', StudyIcon: 'icon' };
   } };

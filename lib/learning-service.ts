@@ -69,11 +69,11 @@ export async function recordPractice(client: PoolClient, userId: string, answers
   // Use the existing validator/writer, including visibility and available-option checks.
   await recordFirstAnswers(async (text, values) => (await client.query(text, values)).rows, userId, answers);
   const inserted = await client.query(`INSERT INTO practice_attempts(user_id,event_id,question_id,selected_answer,is_correct,mode,answered_at)
-    SELECT $1,a.event_id,q.id,a.selected_answer,UPPER(BTRIM(q.answer))=a.selected_answer,$3,COALESCE(a.answered_at,CURRENT_TIMESTAMP)
+    SELECT $1,a.event_id,q.id,a.selected_answer,a.selected_answer = ANY(vetexam_answer_keys(q.answer)),$3,COALESCE(a.answered_at,CURRENT_TIMESTAMP)
     FROM jsonb_to_recordset($2::jsonb) a(event_id uuid,question_id integer,selected_answer text,answered_at timestamptz)
     JOIN questions q ON q.id=a.question_id JOIN question_sets qs ON qs.id=q.question_set_id
-    WHERE qs.visibility='public' AND UPPER(BTRIM(q.answer)) ~ '^[A-E]$'
-    AND NULLIF(BTRIM(CASE UPPER(BTRIM(q.answer)) WHEN 'A' THEN q.option_a WHEN 'B' THEN q.option_b WHEN 'C' THEN q.option_c WHEN 'D' THEN q.option_d WHEN 'E' THEN q.option_e END),'') IS NOT NULL
+    WHERE qs.visibility='public' AND vetexam_has_answer(q.answer,ARRAY[q.option_a,q.option_b,q.option_c,q.option_d,q.option_e])
+
     AND NULLIF(BTRIM(CASE a.selected_answer WHEN 'A' THEN q.option_a WHEN 'B' THEN q.option_b WHEN 'C' THEN q.option_c WHEN 'D' THEN q.option_d WHEN 'E' THEN q.option_e END),'') IS NOT NULL
     ON CONFLICT(user_id,event_id) DO NOTHING RETURNING question_id,is_correct,answered_at,event_id`, [userId, JSON.stringify(answers), mode]);
   await recordMemory(client,userId,inserted.rows);

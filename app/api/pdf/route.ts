@@ -1,3 +1,4 @@
+import { normalizeExamYear } from '@/lib/exam-year';
 import { NextResponse } from "next/server";
 import { createHash } from "crypto";
 import { auth } from "@/lib/auth";
@@ -78,5 +79,3 @@ export async function POST(request: Request) {
     return NextResponse.json({success:true,pendingConfirmation:true,message:`成功辨識 ${questions.length} 題${imageQuestionCount?`，其中 ${imageQuestionCount} 題偵測到圖片`:""}`,fileHash,filename:file.name,visibility,examYear,examSubject,total:questions.length,questions,imagePages:[...imagePages],imageQuestionCount,imageQuestionNumbers:questions.filter(q=>q.hasImage).map(q=>q.id),detectedOptionCount,textLength:text.length,totalPages:pages.length,parserVersion:2,pageWarnings:pages.filter(p=>p.warning).map(p=>({page:p.page,warning:p.warning}))});
   } catch(error) { console.error("PDF parsing error:",error); return NextResponse.json({error:"PDF 解析失敗",detail:error instanceof Error?error.message:"未知錯誤"},{status:500}); }
 }
-
-function normalizeExamYear(value:number){if(!Number.isInteger(value))return null;const year=value>=80&&value<=200?value+1911:value;return year>=1990&&year<=2100?year:null;}

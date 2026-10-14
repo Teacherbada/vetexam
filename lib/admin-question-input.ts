@@ -1,3 +1,4 @@
+import { serializeAnswer, answerKeys } from './question-answer';
 export type AnswerEntry = { question_number: number; answer: string };
 export type AnswerInput = {
   question_set_id: number;
@@ -14,11 +15,11 @@ export type AdminQuestion = {
   exam_year?: number | null; question_set_name?: string;
   explanation_status?: 'unwritten' | 'draft' | 'published' | null;
 };
-export const normalizeAnswer = (value: string | null | undefined) => (value ?? '').trim().toUpperCase();
+export const normalizeAnswer = (value: unknown) => serializeAnswer(value, true) ?? (typeof value === 'string' ? value.trim().toUpperCase() : '');
 export const validId = (value: unknown): value is number => typeof value === 'number' && Number.isInteger(value) && value > 0 && value <= 2147483647;
 export function needsManualReview(question: AdminQuestion) {
   return Boolean(question.option_e?.trim()) ||
-    Boolean(normalizeAnswer(question.answer) && !/^[A-D]$/.test(normalizeAnswer(question.answer))) ||
+    Boolean(normalizeAnswer(question.answer) && !answerKeys(question.answer, false).length) ||
     [question.option_a, question.option_b, question.option_c, question.option_d].some(value => !value?.trim());
 }
 export function parseInput(value: unknown): AnswerInput {
@@ -28,14 +29,14 @@ export function parseInput(value: unknown): AnswerInput {
   if (Object.keys(input).some(key => !['question_set_id', 'mode', 'text', 'answers', 'question_id', 'answer'].includes(key))) throw new Error('不支援的答案欄位');
   if (!['keyboard', 'table', 'sequence', 'single'].includes(String(input.mode))) throw new Error('請選擇輸入模式');
   if (input.mode === 'single') {
-    if (!validId(input.question_id) || typeof input.answer !== 'string' || !/^[A-D]$/.test(normalizeAnswer(input.answer))) throw new Error('單題答案僅允許 A/B/C/D');
+    if (!validId(input.question_id) || !serializeAnswer(input.answer)) throw new Error('答案僅允許 A/B/C/D，可設定多個官方接受答案');
     return { question_set_id: input.question_set_id, mode: 'single', question_id: input.question_id, answer: normalizeAnswer(input.answer) };
   }
   if (input.mode === 'keyboard') {
     if (!Array.isArray(input.answers) || !input.answers.length || input.answers.length > 1000) throw new Error('請輸入 1–1000 題答案');
     const seen = new Set<number>();
     const answers = input.answers.map(row => {
-      if (!row || typeof row !== 'object' || Object.keys(row).some(key => !['question_number', 'answer'].includes(key)) || !validId(row.question_number) || typeof row.answer !== 'string' || !/^[A-D]$/.test(normalizeAnswer(row.answer))) throw new Error('題號或答案無效，答案僅允許 A/B/C/D');
+      if (!row || typeof row !== 'object' || Object.keys(row).some(key => !['question_number', 'answer'].includes(key)) || !validId(row.question_number) || !serializeAnswer(row.answer)) throw new Error('題號或答案無效，答案僅允許 A/B/C/D');
       if (seen.has(row.question_number)) throw new Error(`重複題號：${row.question_number}`);
       seen.add(row.question_number);
       return { question_number: row.question_number, answer: normalizeAnswer(row.answer) };
@@ -63,11 +64,11 @@ export function parseEntries(input: AnswerInput, questions: AdminQuestion[]) {
     const seen = new Set<number>();
     input.text!.split(/\r?\n/).forEach((line, index) => {
       if (!line.trim()) return;
-      const match = /^\s*(\d+)(?:\s*[.、:]\s*|\s+)([A-D])\s*$/i.exec(line);
-      if (!match || !validId(Number(match[1]))) { errors.push(`第 ${index + 1} 行無法解析（格式：1 A）`); return; }
+      const match = /^\s*(\d+)(?:\s*[.、:]\s*|\s+)(.+?)\s*$/i.exec(line);
+      if (!match || !validId(Number(match[1])) || !serializeAnswer(match[2])) { errors.push(`第 ${index + 1} 行無法解析（格式：1 A 或 1 A、B）`); return; }
       const number = Number(match[1]);
       if (seen.has(number)) { errors.push(`第 ${index + 1} 行題號 ${number} 重複`); return; }
-      seen.add(number); entries.push({ question_number: number, answer: match[2].toUpperCase() });
+      seen.add(number); entries.push({ question_number: number, answer: serializeAnswer(match[2])! });
     });
   }
   if (entries.length > 1000) errors.push('每次最多 1000 題');

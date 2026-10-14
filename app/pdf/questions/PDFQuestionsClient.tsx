@@ -1,5 +1,6 @@
 "use client";
 
+import { isCorrectAnswer, formatAnswer } from '@/lib/question-answer';
 import { useEffect, useState } from "react";
 
 type Question = {
@@ -106,7 +107,7 @@ export default function PDFQuestionsClient({ questionSetId }: Props) {
   if (questions.length === 0) return <><main className="min-h-screen bg-gray-50 px-4 py-10"><div className="mx-auto max-w-3xl rounded-2xl bg-white p-8 shadow"><h1 className="mb-4 text-xl font-bold text-gray-900">題庫目前沒有題目</h1><button type="button" onClick={exitQuestions} className="rounded-lg bg-gray-800 px-5 py-2.5 text-white hover:bg-gray-700">返回題庫</button></div></main>{showLoginModal && <LoginRequiredModal onLogin={goToLogin} onRegister={goToRegister} onCancel={exitQuestions} />}</>;
 
   const currentQuestion = questions[currentIndex];
-  const isCorrect = selected !== null && selected === currentQuestion.answer;
+  const isCorrect = selected !== null && isCorrectAnswer(currentQuestion.answer, selected);
 
   return <>
     <main className="min-h-screen bg-gray-50 px-4 py-8">
@@ -133,20 +134,20 @@ export default function PDFQuestionsClient({ questionSetId }: Props) {
           <div className="space-y-3">
             {currentQuestion.options.map((option, index) => {
               const letter = String.fromCharCode(65 + index);
-              const isSelected = selected === option;
-              const isAnswer = currentQuestion.answer === option || currentQuestion.answer === letter;
+              const isSelected = selected === letter;
+              const isAnswer = isCorrectAnswer(currentQuestion.answer, letter);
               let className = "w-full rounded-xl border p-4 text-left transition";
               if (!showResult) className += " border-gray-300 hover:border-blue-500 hover:bg-blue-50";
               else if (isAnswer) className += " border-green-500 bg-green-50";
               else if (isSelected) className += " border-red-500 bg-red-50";
               else className += " border-gray-200 bg-gray-50";
-              return <button key={`${currentQuestion.id}-${index}`} type="button" onClick={() => selectAnswer(option)} disabled={showResult} className={className}><div className="flex gap-3"><span className="font-bold">{letter}.</span><span className="whitespace-pre-wrap">{option}</span></div></button>;
+              return <button key={`${currentQuestion.id}-${index}`} type="button" onClick={() => selectAnswer(letter)} disabled={showResult} className={className}><div className="flex gap-3"><span className="font-bold">{letter}.</span><span className="whitespace-pre-wrap">{option}</span></div></button>;
             })}
           </div>
 
           {showResult && <div className={`mt-6 rounded-xl border p-5 ${isCorrect ? "border-green-300 bg-green-50" : "border-red-300 bg-red-50"}`}>
             <p className={`font-bold ${isCorrect ? "text-green-700" : "text-red-700"}`}>{isCorrect ? "答對了！" : "答錯了！"}</p>
-            <p className="mt-2 text-gray-700">正確答案：<strong>{currentQuestion.answer}</strong></p>
+            <p className="mt-2 text-gray-700">正確答案：<strong>{formatAnswer(currentQuestion.answer)}</strong></p>
             {currentQuestion.explanation && <div className="mt-4"><p className="font-semibold text-gray-900">解析</p><p className="mt-1 whitespace-pre-wrap leading-7 text-gray-700">{currentQuestion.explanation}</p></div>}
           </div>}
 

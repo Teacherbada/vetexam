@@ -66,9 +66,8 @@ export async function diagnosticCandidates(client: PoolClient, userId: string): 
     ) history ON TRUE
     WHERE qs.visibility = 'public' AND q.subject = ANY($2::text[])
       AND NULLIF(BTRIM(q.question), '') IS NOT NULL
-      AND UPPER(BTRIM(q.answer)) ~ '^[A-E]$'
-      AND NULLIF(BTRIM(CASE UPPER(BTRIM(q.answer)) WHEN 'A' THEN q.option_a WHEN 'B' THEN q.option_b
-        WHEN 'C' THEN q.option_c WHEN 'D' THEN q.option_d WHEN 'E' THEN q.option_e END), '') IS NOT NULL
+      AND vetexam_has_answer(q.answer,ARRAY[q.option_a,q.option_b,q.option_c,q.option_d,q.option_e])
+
   `, [userId, EXAM_SUBJECTS]);
   return candidates;
 }
@@ -121,7 +120,7 @@ export async function answerDiagnostic(client: PoolClient, userId: string, submi
   await client.query("LOCK TABLE question_answer_stats IN ROW EXCLUSIVE MODE");
   if (item.question_id !== null) await recordFirstAnswers(async (text, values) => (await client.query(text, values)).rows, userId,
     [{ question_id: item.question_id, selected_answer: submission.answer }]);
-  await client.query(`UPDATE diagnostic_items SET selected_answer = $3, is_correct = (answer_key = $3), answered_at = CURRENT_TIMESTAMP
+  await client.query(`UPDATE diagnostic_items SET selected_answer = $3, is_correct = ($3 = ANY(vetexam_answer_keys(answer_key))), answered_at = CURRENT_TIMESTAMP
     WHERE session_id = $1 AND position = $2 AND selected_answer IS NULL`, [submission.sessionId, item.position, submission.answer]);
   if (rows.filter(row => row.selected_answer === null).length === 1) {
     await client.query("UPDATE diagnostic_sessions SET completed_at = CURRENT_TIMESTAMP WHERE id = $1 AND completed_at IS NULL", [submission.sessionId]);

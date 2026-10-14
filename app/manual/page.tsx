@@ -1,15 +1,14 @@
 "use client";
 
+import { examRocYears } from '@/lib/exam-year';
+import { OFFICIAL_ANSWER_CHOICES } from '@/lib/question-answer';
 import { useState } from "react";
 import { EXAM_SUBJECTS } from "@/data/exam-chapters";
 import ImportClassification from "@/components/questions/ImportClassification";
 import { useImportClassification } from "@/components/questions/useImportClassification";
 
 
-const EXAM_YEARS = Array.from(
-  { length: 10 },
-  (_, index) => new Date().getFullYear() - index
-);
+const EXAM_YEARS = examRocYears().map(year => year + 1911);
 
 type ManualQuestion = {
   question: string;
@@ -270,7 +269,7 @@ export default function ManualPage() {
 
                 {EXAM_YEARS.map((item) => (
                   <option key={item} value={item}>
-                    {item}
+                    民國 {item - 1911} 年
                   </option>
                 ))}
               </select>
@@ -419,10 +418,7 @@ export default function ManualPage() {
                   className="mt-2 w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-gray-900"
                 >
                   <option value="">請選擇答案</option>
-                  <option value="A">A</option>
-                  <option value="B">B</option>
-                  <option value="C">C</option>
-                  <option value="D">D</option>
+                  {OFFICIAL_ANSWER_CHOICES.map(choice => <option key={choice.value} value={choice.value}>{choice.label}</option>)}
                 </select>
               </div>
 

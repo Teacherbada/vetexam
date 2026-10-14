@@ -6,9 +6,9 @@ import ts from 'typescript';
 function load(path, mocks = {}) {
   const exports={};
   const code=ts.transpileModule(readFileSync(new URL('../'+path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
-  new Function('exports','require',code)(exports,name=>{if(name in mocks)return mocks[name];throw new Error('Unexpected import '+name)}); return exports;
+  new Function('exports','require',code)(exports,name=>{if(name in mocks)return mocks[name];if(name==='./question-answer')return load('lib/question-answer.ts');if(name==='@/lib/exam-year')return load('lib/exam-year.ts');throw new Error('Unexpected import '+name)}); return exports;
 }
-const {parsePdfLayout,assessQuestion}=load('lib/pdf-layout.ts');
+const {parsePdfLayout,assessQuestion}=load('lib/pdf-layout.ts',{'./question-answer':load('lib/question-answer.ts')});
 const {textLines,imageRegions}=load('lib/pdf-geometry.ts');
 const line=(text,top)=>({text,top,bottom:top+12,x:40});
 const page=(lines,images=[],number=1)=>({page:number,width:600,height:800,lines,images});

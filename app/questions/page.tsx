@@ -20,7 +20,7 @@ import { formatExamYear } from "@/lib/exam-year";
 import OptionDistribution from "@/components/questions/OptionDistribution";
 import { sendStatistics } from "@/lib/answer-statistics-client";
 import { subscribeLearning } from '@/lib/learning-client';
-import { usableAnswer } from "@/lib/question-answer";
+import { usableAnswer, isCorrectAnswer, formatAnswer } from "@/lib/question-answer";
 
 function QuestionsContent() {
   const searchParams = useSearchParams();
@@ -83,7 +83,7 @@ function QuestionsContent() {
     const correctAnswer = usableAnswer(question);
     if (!correctAnswer) return false;
     addDailyProgress();
-    const correct = answer === correctAnswer;
+    const correct = isCorrectAnswer(correctAnswer, answer);
     saveProgress(question.id, correct, question.subject);
     if (!correct) saveWrongQuestion(question, answer);
     return correct;
@@ -128,7 +128,7 @@ function QuestionsContent() {
       <h3 className={styles.question}>{question.question}</h3>
       {question.imageDataUrl && <ImageViewer src={question.imageDataUrl} alt={`第 ${question.questionNumber} 題圖片`} />}
       {question.options.map((option, optionIndex) => <p key={optionIndex} className={styles.explanationText}>{String.fromCharCode(65 + optionIndex)}. {option}</p>)}
-      <section className={styles.explanation}><p className={!usableAnswer(question) ? undefined : answers[question.id] === usableAnswer(question) ? styles.correctText : styles.wrongText}>{!usableAnswer(question) ? "本題正確答案尚未設定，不計入作答統計。" : !answers[question.id] ? "未作答" : answers[question.id] === usableAnswer(question) ? "✓ 正確" : "✗ 錯誤"}</p><p>你的答案：{answers[question.id] || "未作答"} · 正確答案：{usableAnswer(question) || "尚未設定"}</p>{question.explanation?.trim() && <><h2>VetExam 精選解析</h2><OfficialExplanation content={question.explanation} /></>}</section>
+      <section className={styles.explanation}><p className={!usableAnswer(question) ? undefined : isCorrectAnswer(usableAnswer(question), answers[question.id] || "") ? styles.correctText : styles.wrongText}>{!usableAnswer(question) ? "本題正確答案尚未設定，不計入作答統計。" : !answers[question.id] ? "未作答" : isCorrectAnswer(usableAnswer(question), answers[question.id] || "") ? "✓ 正確" : "✗ 錯誤"}</p><p>你的答案：{answers[question.id] || "未作答"} · 正確答案：{formatAnswer(usableAnswer(question)) || "尚未設定"}</p>{question.explanation?.trim() && <><h2>VetExam 精選解析</h2><OfficialExplanation content={question.explanation} /></>}</section>
       {usableAnswer(question) && <OptionDistribution questionId={question.id} selectedAnswer={answers[question.id] || ""} correctAnswer={question.answer} />}
     </article>)}</div></main>;
 

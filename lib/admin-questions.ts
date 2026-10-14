@@ -86,7 +86,7 @@ export async function applyAnswers(client: PoolClient, input: AnswerInput, token
   await client.query(`UPDATE questions q SET answer=v.answer
     FROM jsonb_to_recordset($1::jsonb) AS v(id integer,answer text)
     WHERE q.id=v.id AND q.question_set_id=$2`, [payload, input.question_set_id]);
-  await client.query(`UPDATE question_answer_stats s SET is_correct=(s.selected_answer=v.answer),updated_at=CURRENT_TIMESTAMP
+  await client.query(`UPDATE question_answer_stats s SET is_correct=(s.selected_answer=ANY(vetexam_answer_keys(v.answer))),updated_at=CURRENT_TIMESTAMP
     FROM jsonb_to_recordset($1::jsonb) AS v(id integer,answer text)
     WHERE s.question_id=v.id AND s.selected_answer ~ '^[A-D]$'`, [payload]);
   await client.query(`DELETE FROM question_answer_stats s USING jsonb_to_recordset($1::jsonb) AS v(id integer,answer text)

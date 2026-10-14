@@ -1,6 +1,6 @@
 import 'server-only';
 import type { PoolClient } from 'pg';
-import { usableAnswer } from './question-answer';
+import { usableAnswer, isCorrectAnswer } from './question-answer';
 import { recordFirstAnswers, type AnswerSubmission } from './question-stats';
 
 // Uses the same validity rules and first-answer writer as the existing quiz.
@@ -20,5 +20,5 @@ export async function answerPublicQuestion(client: PoolClient, userId: string | 
   if (!options[submission.selected_answer.charCodeAt(0) - 65]?.trim()) return { status: 400, body: { error: '請選擇有效選項' } };
   if (userId) await recordFirstAnswers(async (text, values) => (await client.query(text, values)).rows, userId, [submission]);
   return { status: 200, body: { available: true, selected_answer: submission.selected_answer,
-    answer, correct: submission.selected_answer === answer, explanation: row.explanation ?? '' } };
+    answer, correct: isCorrectAnswer(answer, submission.selected_answer), explanation: row.explanation ?? '' } };
 }

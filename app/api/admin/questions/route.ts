@@ -37,7 +37,7 @@ export async function GET(request: Request) {
         OR ($7='has_answer' AND NULLIF(BTRIM(q.answer),'') IS NOT NULL)
         OR ($7='missing_explanation' AND NULLIF(BTRIM(q.explanation),'') IS NULL)
         OR ($7='has_explanation' AND NULLIF(BTRIM(q.explanation),'') IS NOT NULL)
-        OR ($7='invalid' AND NULLIF(BTRIM(q.answer),'') IS NOT NULL AND UPPER(BTRIM(q.answer)) !~ '^[A-D]$'))
+        OR ($7='invalid' AND NULLIF(BTRIM(q.answer),'') IS NOT NULL AND (cardinality(vetexam_answer_keys(q.answer))=0 OR 'E'=ANY(vetexam_answer_keys(q.answer)))))
       AND ($8='all' OR (${statusSql})=$8)`;
     // Every query is behind the existing session-based admin guard.
     const [summary, sets, count, questions] = await Promise.all([
@@ -47,7 +47,7 @@ export async function GET(request: Request) {
         COUNT(*) FILTER (WHERE NULLIF(BTRIM(answer),'') IS NULL)::int AS missing_answer,
         COUNT(*) FILTER (WHERE NULLIF(BTRIM(explanation),'') IS NULL)::int AS missing_explanation,
         COUNT(*) FILTER (WHERE NULLIF(BTRIM(answer),'') IS NULL AND NULLIF(BTRIM(explanation),'') IS NULL)::int AS missing_both,
-        COUNT(*) FILTER (WHERE NULLIF(BTRIM(answer),'') IS NOT NULL AND UPPER(BTRIM(answer)) !~ '^[A-D]$')::int AS invalid FROM questions`, []),
+        COUNT(*) FILTER (WHERE NULLIF(BTRIM(answer),'') IS NOT NULL AND (cardinality(vetexam_answer_keys(answer))=0 OR 'E'=ANY(vetexam_answer_keys(answer))))::int AS invalid FROM questions`, []),
       sql.query(`SELECT qs.id,qs.name,qs.exam_year,qs.exam_subject,qs.visibility,COUNT(q.id)::int AS total,
         COUNT(q.id) FILTER (WHERE NULLIF(BTRIM(q.answer),'') IS NULL)::int AS missing_answer,
         COUNT(q.id) FILTER (WHERE NULLIF(BTRIM(q.explanation),'') IS NULL)::int AS missing_explanation,

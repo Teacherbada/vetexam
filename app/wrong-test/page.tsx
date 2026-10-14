@@ -1,4 +1,5 @@
 "use client";
+import { isCorrectAnswer, formatAnswer } from '@/lib/question-answer';
 import foundation from "@/components/ui/foundation.module.css";
 import styles from "@/app/questions/focus.module.css";
 import { EmptyState } from "@/components/ui/ContentState";
@@ -84,7 +85,7 @@ export default function WrongTestPage(){
     setShowResult(true);
 
 
-    if(selected === answer){
+    if(isCorrectAnswer(answer, selected)){
 
       setScore(score + 1);
 
@@ -257,7 +258,7 @@ export default function WrongTestPage(){
 
 
               aria-pressed={selected === String.fromCharCode(65+index)}
-              className={`${styles.option} ${selected === String.fromCharCode(65+index) ? styles.selected : ""}`}
+              disabled={showResult} className={`${styles.option} ${showResult && isCorrectAnswer(answer, String.fromCharCode(65+index)) ? styles.correct : selected === String.fromCharCode(65+index) ? styles.selected : ""}`}
 
             >
 
@@ -308,14 +309,14 @@ export default function WrongTestPage(){
 
               {
 
-                selected === answer
+                isCorrectAnswer(answer, selected)
 
 
                 ?
 
                 <p className={styles.correctText}>
 
-                  ✓ 答對了
+                  ✓ 答對了　官方答案：{formatAnswer(answer)}
 
                 </p>
 
@@ -328,7 +329,7 @@ export default function WrongTestPage(){
 
                   正確答案：
 
-                  {answer}
+                  {formatAnswer(answer)}
 
                 </p>
 

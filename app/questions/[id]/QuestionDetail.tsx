@@ -1,4 +1,5 @@
 'use client';
+import { isCorrectAnswer, formatAnswer } from '@/lib/question-answer';
 import Link from 'next/link';
 import { useRef, useState } from 'react';
 import type { PublicQuestion } from '@/lib/public-questions';
@@ -64,13 +65,13 @@ export default function QuestionDetail({ question, shareUrl }: { question: Publi
       <div className={styles.options} role="group" aria-label="答案選項">{question.options.map((option, index) => {
         if (!option.trim()) return null;
         const letter = String.fromCharCode(65 + index);
-        const correct = result?.available && result.answer === letter;
+        const correct = result?.available && isCorrectAnswer(result.answer, letter);
         const wrong = result?.available && selected === letter && !correct;
         return <button key={letter} disabled={pending || Boolean(result) || missing} aria-pressed={selected === letter} onClick={() => choose(letter)} className={`${styles.option} ${correct ? styles.correct : wrong ? styles.wrong : selected === letter ? styles.selected : ''}`}><span className={styles.letter}>{letter}</span><span className={styles.optionText}>{option}</span>{correct && <span className={styles.answerStatus}>正確答案</span>}{selected === letter && <span className={styles.answerStatus}>你的答案</span>}</button>;
       })}</div>
       {pending && <p role="status">正在送出作答…</p>}{error && <p role="alert">{error}</p>}
       {result?.available && <>
-        <section className={styles.explanation} aria-label="作答結果"><h2>作答結果</h2><p role="status" className={result.correct ? styles.correctText : styles.wrongText}>{result.correct ? '答對' : '答錯'} · 你的答案：{selected} · 正確答案：{result.answer}</p>
+        <section className={styles.explanation} aria-label="作答結果"><h2>作答結果</h2><p role="status" className={result.correct ? styles.correctText : styles.wrongText}>{result.correct ? '答對' : '答錯'} · 你的答案：{selected} · 正確答案：{formatAnswer(result.answer)}</p>
           <h2>VetExam 精選解析</h2>{result.explanation?.trim() ? <OfficialExplanation content={result.explanation} /> : <p className={styles.explanationText}>目前尚未建立官方解析。</p>}
         </section>
         <OptionDistribution questionId={question.id} selectedAnswer={selected} correctAnswer={result.answer!} expanded />
