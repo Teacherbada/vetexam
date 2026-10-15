@@ -1,4 +1,5 @@
 'use client';
+import Link from 'next/link';
 import { OFFICIAL_ANSWER_CHOICES, serializeAnswer, formatAnswer } from '@/lib/question-answer';
 import AdminShell, { TableRegion } from "@/components/ui/AdminShell";
 import { LoadingState, EmptyState } from "@/components/ui/ContentState";
@@ -112,6 +113,7 @@ export default function QuestionsAdmin() {
   const statsCount = (preview?.summary.recalculate ?? 0) + (preview?.summary.remove ?? 0);
 
   return <AdminShell title="題目維護中心" current="/admin/questions" description="檢查答案品質，預覽確認後再套用。">
+    <Link href="/admin/questions/proofread" className="study-button">題庫校對工作台 · 編輯題幹、選項與圖片</Link>
     {error && <div className={styles.warning} role="alert">{error}<button className="study-button" onClick={() => { setError(''); setLoading(true); setRevision(value => value + 1); }}>重新讀取</button></div>}
     {notice && <p className={styles.success} role="status">{notice}</p>}
     <FeaturedExplanationImport onImported={() => setRevision(value => value + 1)} />

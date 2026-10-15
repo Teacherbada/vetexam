@@ -35,6 +35,7 @@ function Distribution({ questionId, selectedAnswer, correctAnswer }: Props) {
 
   if (error) return <div className={styles.content} role="status"><p>暫時無法取得作答分布。</p><button className={styles.retry} onClick={() => { setError(false); setRetry((value) => value + 1); }}>重新載入</button></div>;
   if (!data) return <p className={styles.content} role="status">正在整理作答分布…</p>;
+  if (data.historyNotice) return <p className={styles.content}>本題內容或答案曾經校對修正。歷史選項紀錄可能屬於舊版本，暫不以目前選項解讀舊作答分布。</p>;
   if (!data.sufficient) return <p className={styles.content} role="status">選項統計資料正在累積中。<small>累積 {data.min_attempts} 次有效選項紀錄後顯示。</small></p>;
   const mistaken = mostMistaken(data.options, correctAnswer);
   return <div className={styles.content}>

@@ -11,7 +11,7 @@ export function answerKeys(value: unknown, allowLegacyE = true): string[] {
   const valid = allowLegacyE ? /^[A-E]$/ : /^[A-D]$/;
   if (!entries.length || entries.some(item => typeof item !== 'string' || !valid.test(item))) return [];
   const keys = [...new Set(entries as string[])].sort();
-  return keys.includes('E') && keys.length > 1 ? [] : keys;
+  return keys;
 }
 export function serializeAnswer(value: unknown, allowLegacyE = false): string | null {
   const keys = answerKeys(value, allowLegacyE);

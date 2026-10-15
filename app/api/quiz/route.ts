@@ -83,7 +83,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ questions: unique.map((q) => ({
         id: Number(q.id), questionSetId: Number(q.question_set_id), questionNumber: Number(q.question_number),
         subject: q.subject ?? "", question: q.question ?? "",
-        options: [q.option_a ?? "", q.option_b ?? "", q.option_c ?? "", q.option_d ?? "", ...(questionId !== null && q.option_e?.trim() ? [q.option_e] : [])],
+        options: [q.option_a ?? "", q.option_b ?? "", q.option_c ?? "", q.option_d ?? "", ...(q.option_e?.trim() ? [q.option_e] : [])],
         answer: q.answer ?? "", explanation: q.explanation ?? "",
         imageDataUrl: q.image_data_url ?? null,
         examYear: q.exam_year == null ? null : Number(q.exam_year), questionSetName: q.question_set_name ?? "",

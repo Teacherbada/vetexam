@@ -16,7 +16,8 @@ export async function GET(request: Request) {
     const sql = neon(process.env.DATABASE_URL);
     const result = await optionDistribution((text, values) => sql.query(text, values), questionId);
     if (!result) return NextResponse.json({ error: "找不到公開題目" }, { status: 404 });
-    return NextResponse.json(result, { headers: { "Cache-Control": "no-store" } });
+    const [proof] = await sql.query('SELECT history_notice FROM question_proofreading WHERE question_id=$1',[questionId]);
+    return NextResponse.json({ ...result, ...(proof?.history_notice ? { historyNotice: true } : {}) }, { headers: { "Cache-Control": "no-store" } });
   } catch {
     console.error("Option distribution read failed");
     return NextResponse.json({ error: "暫時無法取得作答分布。" }, { status: 503 });

@@ -14,6 +14,7 @@ export async function GET(request: Request) {
       LEFT JOIN question_answer_stats s ON s.question_id=q.id
       WHERE q.id=${id} AND qs.visibility='public' GROUP BY q.id`;
     if (!rows.length) return Response.json({ error: '找不到公開題目' }, { status: 404 });
-    return Response.json(questionDifficulty(rows[0].total,rows[0].correct), { headers: { 'Cache-Control':'no-store' } });
+    const [proof] = await sql`SELECT history_notice FROM question_proofreading WHERE question_id=${id}`;
+    return Response.json({ ...questionDifficulty(rows[0].total,rows[0].correct), ...(proof?.history_notice ? { historyNotice: true } : {}) }, { headers: { 'Cache-Control':'no-store' } });
   } catch { return Response.json({ error: '難度統計暫時無法讀取' }, { status: 503 }); }
 }

@@ -49,7 +49,7 @@ export async function readLearning(client: PoolClient, userId: string) {
     ) answers GROUP BY question_id
   ) SELECT q.id, q.subject, q.question, q.answer,
     CASE WHEN to_jsonb(q)->>'explanation_status'='published' THEN q.explanation ELSE '' END AS explanation,
-    jsonb_build_array(q.option_a,q.option_b,q.option_c,q.option_d) AS options,
+    jsonb_build_array(q.option_a,q.option_b,q.option_c,q.option_d) || CASE WHEN NULLIF(BTRIM(q.option_e),'') IS NOT NULL THEN jsonb_build_array(q.option_e) ELSE '[]'::jsonb END AS options,
     COALESCE(r.favorite,FALSE) AS favorite,
     (r.wrong IS TRUE OR w.question_id IS NOT NULL AND (r.wrong IS DISTINCT FROM FALSE OR w.last_wrong > r.wrong_updated_at)) AS wrong,
     w.user_answer AS "userAnswer",

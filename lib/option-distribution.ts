@@ -2,6 +2,7 @@ import { answerKeys } from './question-answer';
 export type OptionCount = { letter: string; count: number; percentage: number };
 export type OptionDistributionData = {
   total: number; sufficient: boolean; min_attempts: number; options: OptionCount[];
+  historyNotice?: boolean;
 };
 
 // The answer key comes from the existing quiz result, never the public stats API.
