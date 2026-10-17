@@ -1,0 +1,115 @@
+VetExam 國考解析協作：Phase 1／2 操作與後續設計
+
+歷史階段紀錄：目前 Phase 3 已接續實作；新版匯入、收據、來源綁定、發布與撤回的現況
+及 migration／回復方式，以 EXPLANATION_HANDOFF_PHASE3.txt 為準。以下保留 Phase 1／2 交付時紀錄。
+
+基準與範圍
+本次基於 main 4144b763315e19a56e2e07d05e895ff8f485a80e。
+只新增管理員未解析題匯出、新版解析結構驗證及既有匯入介面的預覽。
+沒有 migration、沒有 AI API、沒有網路文獻查詢、沒有正式資料寫入。
+新版格式的 action=import 一律回覆 409，預覽不回傳匯入 token。
+這是刻意保留的 Phase 3 安全界線，不表示完整協作發布系統已完成。
+
+第一批 10 題
+1. 在經審核的測試／預覽環境，以管理員登入 /admin/questions。
+2. 展開「匯出未解析國考題（ChatGPT 協作）」，選擇公開國考題庫。
+   預設 10 題；可選 1–20 題。起始 ID 是資料庫 ID，不是卷內題號。
+3. 「讀取匯出預覽」只讀取 q.kind=exam、public 題庫、解析 NULL 或空字串、draft 的題目。
+   空白但非空字串解析不視為可覆蓋空資料，與舊匯入器一致。沒有題目時顯示空狀態。
+4. 下載交接 JSON 與每一張原圖。assets 以內容識別碼去重，questions[].images 保留原始順序。
+   圖片不放 base64 到 JSON，不新增公開儲存空間；下載需管理員登入。
+   Dot 可在已授權的管理員 session 依 assets[].downloadUrl 下載檔案，保存 assets[].filename。
+   不要把 session/cookie/API 金鑰交給 ChatGPT。應上傳已下載的圖片與 JSON，不能只貼受保護網址。
+   若下載回覆 409，表示來源變動，應重新匯出。400/404 圖片錯誤需人工核對，不可略過當作無圖。
+5. 將原圖、JSON、public/examples/explanation-handoff.schema.json 提供給 ChatGPT。
+   要求逐字保留 questionId、questionFingerprint、sourceFingerprint、officialAnswers（回填 expectedAnswers）。
+   使用 question.options 中所有實際存在的 A–E 選項，不自行補成固定四選一。
+   文件中的 officialAnswers 是資料庫目前記載，不代表本系統已另行查核官方公告。
+6. ChatGPT 依 Schema 產出 formatVersion=vetexam-explanations-v1。
+   核心考點、逐項解析、答案理由、速記、延伸知識、引用與疑義都獨立保留。
+   文獻需 title/url/version/applicableYears/supports/statement/verificationStatus。
+   supports 指向實際解析區塊；至少一筆引用支持 correctAnswerReason。
+   不知道文獻版本填 null，適用民國年份未知填 unknown，不要猜測。
+   無法取得依據時標記 doubts；缺引用會阻擋校驗，不能為了通過而編造文獻。
+   reviewStatus 僅允許 pending_review，verificationStatus 僅允許 unverified。
+   範例檔全為合成內容、假 ID/指紋及 example.org 網址，不能用作真實解析。
+7. 在既有「批次匯入精選解析」上傳新版 JSON，點「上傳並驗證預覽」。
+   系統將合法欄位轉為 Markdown，再交由既有 parseImport/previewImport 核對題目與完整答案。
+   新版顯示「校驗通過（僅預覽）」，不提供勾選寫入、發布或舊格式下載捷徑。
+   管理員逐題核對來源內容與圖像。此階段不應移除格式標記繞過檢查、或手工降級成舊格式匯入。
+
+API 與格式
+GET /api/admin/questions/explanation/export?questionSetId=123&limit=10&afterId=0
+回傳：formatVersion/exportedAt/questions/assets/nextAfterId/notice。
+下一批使用 nextAfterId；滿批才回傳游標，下一頁可能為空。這不是工作鎖或持久化批次收據。
+題目包含原始 exam_year 與衍生 rocYear；既有西元及民國儲存皆不改寫。
+examSession 永遠 unknown：目前沒有可靠梯次欄位，不能從檔名推測。
+sources 的官方試題來源、答案來源與更正版本目前永遠 unknown。
+importFilename/importFileHash 僅是匯入檔資訊，不能冒充官方公告。
+questionFingerprint 沿用 vetexam-exam-question-v1 精確指紋，包括原始題幹、五選項、答案與合成圖。
+sourceFingerprint 是 vetexam-source-snapshot-v1 SHA-256，另涵蓋題庫科目、名稱、匯入檔 metadata、校對版本及所有原圖。
+sourceFingerprint 是資料庫快照比對值，不是官方文件版本或可信文獻證明。
+資產 id 為序列化完整 data URL 的 SHA-256；不是下載二進位檔的雜湊值。
+
+GET /api/admin/questions/explanation/export?questionId=...&image=0&sourceFingerprint=...
+回傳原圖 bytes，attachment + private,no-store + nosniff。沒有公開 image endpoint。
+最多八張 PNG/JPEG/WebP，沿用校對工作台保存的多原圖；若多圖 metadata 不對應目前合成圖，使用實際題目圖，避免交付過期圖片。
+資料庫單次快照總圖片文字讀取上限 32 MiB，超限不傳輸大圖欄位並回覆 413；每張 data URL 最多 3,800,000 字元。
+不抓取外部 URL、SVG 或私人教材連結。舊資料若為這些格式，明確拒絕，交由人工處理。
+
+POST /api/admin/questions/explanation/import
+沿用 action/input/selected 外層協定。新版僅允許 action=preview。
+舊格式保留 1–50 題；新版 1–20 題。JSON 2 MiB，上傳 HTTP body 3 MiB，轉換 Markdown 20,000 字元。
+完整資料型別：lib/explanation-handoff-input.ts。
+正式回傳 Schema：public/examples/explanation-handoff.schema.json（draft-07）。
+範例：public/examples/explanation-handoff.example.json。
+HTTP/HTTPS 網址只驗證格式，不下載、不查核其主張。所有欄位拒絕額外屬性。
+同批重複 ID 全拒絕、其他合法項目仍可預覽。原題及來源版本變動、答案不一致、漏選項會阻擋。
+新版預覽使用一個有界來源快照查詢及既有批次預覽查詢，不逐題查詢、不取得寫入鎖。
+原匯入器只補上 A–E 答案陣列支援，其他儲存、交易及舊格式流程不改動。
+
+尚未解決的界線
+- 沒有可靠來源版本資料，無法辨識外部官方公告已更正但資料庫尚未更新的情況。
+- 有效完整答案集合不代表來源已核實；也無法從一般 A/B 答案自動識別未記載的官方疑義或特殊合選。
+  未知／特殊原始答案、所有選項皆接受、及回傳 doubts 均要求人工處理。正常複數正解仍按「任一答案皆可」核對。
+- 原有發布機制僅綁定解析 revision，尚未把來源與題目版本持久化綁定。新版因此不開放寫入／發布。
+- 沒有持久化匯出工作佇列：兩位管理員可匯出相同未解析題，需協調分工與游標。
+- 權限保護的是下載前；下載檔含完整題目與答案，管理員須自行控制檔案分享。
+- 未做正式內容的醫學正確性驗證，圖片能下載不代表模型已正確理解。需人工逐圖核對。
+
+Phase 3 最小設計（尚未實作／未執行 migration）
+1. 新增解析專用 sidecar 版本綁定與匯入收據，沿用 questions.explanation/explanation_status/explanation_version。
+   綁定 questionId/questionFingerprint/sourceFingerprint/expectedAnswers/structured JSON/review status。
+   不在解析 API 接受題幹、選項、圖片或答案寫入。
+2. 收據保存 actor、requestId、canonical payloadHash、逐筆成功/略過/失敗、解析前後版本。
+   UNIQUE(actor,requestId)；相同識別碼不同 payload 拒絕，網路中斷重試回傳已提交收據。
+   更新草稿及寫入收據須同交易；題目 ID 排序鎖定並核對題庫可見性，避免死鎖及跨題覆蓋。
+3. 管理員明確確認後才由既有匯入器寫入 draft。全部重新查 DB，核對完整答案集合、所有圖片與來源快照。
+   預設不覆蓋既有草稿；已發布解析禁止批次覆蓋。單筆拒絕有理由；資料庫失敗整筆交易回滾。
+4. 發布前再次鎖定並核對題目與來源版本、疑義處理及人工來源核對結果。
+   同時納入所有發布路徑：單題編輯器、校對工作台，以及 public read 的版本有效性保護。
+   舊解析原文與狀態保留；不能自動把舊資料當作新格式已審核或刪除。需要另行確認遷移策略。
+5. 解析撤回只改解析公開狀態，保留內容、來源綁定與審核歷程；再次發布需重新核對。
+   若需要回復解析內容版本，只回復解析欄位且檢查目前題目版本，不呼叫題目校對的整題 restore。
+6. 官方來源資料需先確立可靠的人工輸入／公告記錄流程，才增加最小相容 metadata。
+   migration 先在隔離資料庫試跑，保留備份與 rollback；正式庫僅執行經核准的 additive 變更。
+
+Phase 4 後續驗收計畫
+先用隔離 PostgreSQL 與合成題，不對正式題目測寫：
+- 單選、A/B 複數正解、A/E、五選項；無圖、單圖、多圖去重與原圖順序。
+- 每個題目欄位、合成圖／分圖、原始來源 hash、更正答案在匯出、預覽、寫入、發布四個時間點變更。
+- 特殊合選／全給分／官方疑義、漏引用、偽造查證狀態均阻擋發布。
+- 同一 requestId 重送與不同 payload 衝突；不同 requestId 併發寫同題，最多成功一次。
+- 寫入中斷、commit 後回覆遺失、DB 中途錯誤：無部分假成功，收據與版本一致。
+- draft→publish→withdraw→re-review，來源變動後不能發布舊版；撤回不影響題目／答案／圖片。
+- 一般會員不能下載管理員交接檔、原圖、收據或草稿。
+- 舊匯入器、題目維護、刷題答案揭露、統計、獸醫練功房及手機管理介面回歸。
+此次先執行 Phase 1/2 所需合成測試與原匯入器回歸；不宣稱 Phase 3 發布安全機制已通過。
+
+執行驗證
+PGLITE_MODULE 指向本機 @electric-sql/pglite/dist/index.js；PLAYWRIGHT_MODULE 指向本機 playwright/index.mjs。
+node --test tests/explanation-handoff.test.mjs tests/featured-explanation-import.test.mjs
+node tests/featured-explanation-import-browser.mjs
+瀏覽器測試在臨時 fixture 頁掛載真實管理元件，所有 API 都導向記憶體 PostgreSQL，結束刪除 fixture 頁。
+建置使用 dummy DATABASE_URL 與測試用 BETTER_AUTH_SECRET，不載入正式 .env。
+npm run build；npx tsc --noEmit；相關檔案 ESLint；git diff --check。

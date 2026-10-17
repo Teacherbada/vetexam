@@ -7,7 +7,7 @@ import { service } from './helpers/official-explanation-fixture.mjs';
 test('20 new explanations: preview is read-only, import drafts, reload, replay is harmless; other fields/statistics/AI unchanged', async () => {
   const f=await importFixture();
   try {
-    const before=(await f.db.query("SELECT jsonb_agg(to_jsonb(q)-'explanation'-'explanation_status'-'explanation_version' ORDER BY id) AS data FROM questions q")).rows;
+    const before=(await f.db.query("SELECT jsonb_agg(to_jsonb(q)-'explanation'-'explanation_status'-'explanation_version'-'explanation_binding' ORDER BY id) AS data FROM questions q")).rows;
     const stats=await f.sql.query('SELECT * FROM question_answer_stats',[]), ai=await f.sql.query('SELECT * FROM ai_questions',[]);
     const input={explanations:Array.from({length:20},(_,i)=>item(i+10, i===0?{sourceReferences:['https://example.test/source']}:{}))};
     const preview=await f.call({action:'preview',input}); assert.equal(preview.status,200);
@@ -18,10 +18,10 @@ test('20 new explanations: preview is read-only, import drafts, reload, replay i
     assert.deepEqual([result.data.success,result.data.failed,result.data.skipped],[20,0,0]);
     for(let id=10;id<30;id++) {const loaded=await service.readExplanation(f.sql.query,id);assert.equal(loaded.status,'draft'); assert.match(loaded.explanation,/pharmacokinetics/);}
     assert.match((await service.readExplanation(f.sql.query,10)).explanation,/### 參考資料\n- <https:\/\/example.test\/source>/);
-    const replay=await f.call(request);assert.deepEqual([replay.data.success,replay.data.failed,replay.data.skipped],[0,0,20]);
+    const replay=await f.call(request);assert.deepEqual([replay.data.success,replay.data.failed,replay.data.skipped],[20,0,0]);assert.equal(replay.data.replayed,true);
     const repeat=await f.call({action:'preview',input});assert(repeat.data.rows.every(r=>r.category==='existing'));
     assert.equal((await f.sql.query('SELECT explanation_version FROM questions WHERE id=10',[]))[0].explanation_version,1);
-    assert.deepEqual((await f.db.query("SELECT jsonb_agg(to_jsonb(q)-'explanation'-'explanation_status'-'explanation_version' ORDER BY id) AS data FROM questions q")).rows,before);
+    assert.deepEqual((await f.db.query("SELECT jsonb_agg(to_jsonb(q)-'explanation'-'explanation_status'-'explanation_version'-'explanation_binding' ORDER BY id) AS data FROM questions q")).rows,before);
     assert.deepEqual(await f.sql.query('SELECT * FROM question_answer_stats',[]),stats);
     assert.deepEqual(await f.sql.query('SELECT * FROM ai_questions',[]),ai);
   } finally {await f.close();}
@@ -118,8 +118,8 @@ test('maximum batch and simultaneous duplicate submissions only update each row 
     const request={action:'import',input,selected:selections(p)};
     const results=await Promise.all([f.call(request),f.call(request)]);
     assert(results.every(r=>r.status===200));
-    assert.equal(results.reduce((sum,r)=>sum+r.data.success,0),50);
-    assert.equal(results.reduce((sum,r)=>sum+r.data.skipped,0),50);
+    assert.equal(results.filter(r=>!r.data.replayed).reduce((sum,r)=>sum+r.data.success,0),50);
+    assert.equal(results.filter(r=>r.data.replayed).length,1);
     const versions=await f.sql.query('SELECT explanation_version FROM questions WHERE id BETWEEN 10 AND 59',[]);
     assert(versions.every(r=>r.explanation_version===1));
   }finally{await f.close();}

@@ -1,0 +1,49 @@
+{
+  "formatVersion": "vetexam-explanations-v1",
+  "explanations": [
+    {
+      "questionId": 10,
+      "questionFingerprint": "0000000000000000000000000000000000000000000000000000000000000000",
+      "sourceFingerprint": "0000000000000000000000000000000000000000000000000000000000000000",
+      "expectedAnswers": [
+        "A",
+        "E"
+      ],
+      "explanationVersion": "1.0",
+      "coreConcept": "合成範例：請替換為原題測試的核心觀念。此範例不是正式獸醫解析。",
+      "optionExplanations": {
+        "A": "合成範例 A：說明此選項與來源的關係。",
+        "B": "合成範例 B：逐項獨立說明。",
+        "C": "合成範例 C：逐項獨立說明。",
+        "D": "合成範例 D：逐項獨立說明。",
+        "E": "合成範例 E：五個選項的題目不可省略 E。"
+      },
+      "correctAnswerReason": "合成範例：完整解釋題庫接受 A、E 的原因，不修改官方答案。",
+      "examMemory": "合成範例：整理便於複習的重點。",
+      "extendedKnowledge": "合成範例：僅填有來源支持的延伸內容，未確認部分標示疑義。",
+      "references": [
+        {
+          "title": "格式示範引用（非真實文獻）",
+          "url": "https://example.org/reference",
+          "version": null,
+          "applicableYears": "unknown",
+          "supports": [
+            "correctAnswerReason",
+            "coreConcept",
+            "optionExplanations.A",
+            "optionExplanations.E"
+          ],
+          "statement": "合成範例：請以真實文獻對應敘述取代；網址存在不表示內容經查核。",
+          "verificationStatus": "unverified"
+        }
+      ],
+      "doubts": [
+        {
+          "code": "missing_reference",
+          "detail": "這是合成格式範例。請從匯出檔複製 ID、指紋、完整答案，並補入真實查核資料；範例不可發布。"
+        }
+      ],
+      "reviewStatus": "pending_review"
+    }
+  ]
+}

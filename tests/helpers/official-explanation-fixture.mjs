@@ -51,6 +51,8 @@ export async function fixture() {
     ALTER TABLE questions ADD COLUMN chapter text;
     ALTER TABLE questions ADD COLUMN image_data_url text;
     ALTER TABLE questions ADD COLUMN created_at timestamptz DEFAULT now();`);
+  await db.exec(readFileSync(new URL('../../migrations/20261014_question_proofreading.sql',import.meta.url),'utf8'));
+  await db.exec(readFileSync(new URL('../../migrations/20261018_explanation_handoff_safety.sql',import.meta.url),'utf8'));
   const sql = { query: async (text, values) => (await db.query(text, values)).rows };
   // Exercise the real guard; only its external auth/session and Neon transport are replaced.
   process.env.ADMIN_USER_ID = 'fixture-admin';

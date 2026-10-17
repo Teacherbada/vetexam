@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import OfficialExplanation from '@/components/questions/OfficialExplanation';
 import styles from './questions.module.css';
 
-type Saved = { id: number; explanation: string; revision: string; status: 'unwritten' | 'draft' | 'published' };
+type Saved = { id: number; explanation: string; revision: string; status: 'unwritten' | 'draft' | 'published';sourceChanged?:boolean };
 async function request(url: string, options?: RequestInit): Promise<Saved> {
   const response = await fetch(url, { ...options, cache: 'no-store' });
   const data = await response.json();
@@ -22,13 +22,14 @@ export default function OfficialExplanationEditor({ questionId, disabled, onSave
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [reviewed, setReviewed] = useState(false);
+  const [sourceReviewed,setSourceReviewed]=useState(false);
   const [reload, setReload] = useState(0);
   const operation = useRef(false);
   const dirty = saved !== null && draft !== saved.explanation;
   useEffect(() => {
     const controller = new AbortController();
     request(`/api/admin/questions/explanation?id=${questionId}`, { signal: controller.signal })
-      .then(result => { setReviewed(false); setSaved(result); setDraft(result.explanation); setLoading(false); })
+      .then(result => { setReviewed(false);setSourceReviewed(false); setSaved(result); setDraft(result.explanation); setLoading(false); })
       .catch(e => { if (!controller.signal.aborted) { setError(e.message); setLoading(false); } });
     return () => controller.abort();
   }, [questionId, reload]);
@@ -45,9 +46,9 @@ export default function OfficialExplanationEditor({ questionId, disabled, onSave
     try {
       const result = await request('/api/admin/questions/explanation', {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: questionId, explanation: draft, revision: saved.revision, action, ...(action === 'publish' ? { confirmReview: reviewed } : {}) }),
+        body: JSON.stringify({ id: questionId, explanation: draft, revision: saved.revision, action, confirmSourceReview:sourceReviewed, ...(action === 'publish' ? { confirmReview: reviewed } : {}) }),
       });
-      setSaved(result); setDraft(result.explanation); setReviewed(false);
+      setSaved(result); setDraft(result.explanation); setReviewed(false);setSourceReviewed(false);
       setNotice(action === 'publish' ? '已人工確認並發布解析' : action === 'unpublish' ? '已取消發布，內容保留為草稿' : '草稿已儲存，考生無法閱讀'); onSaved(result.explanation, result.status);
     } catch (e) { setError(e instanceof Error ? e.message : '儲存失敗，草稿已保留'); }
     finally { operation.current = false; setSaving(false); }
@@ -65,9 +66,10 @@ export default function OfficialExplanationEditor({ questionId, disabled, onSave
         <label className={styles.field}>精選解析內容<textarea aria-label="精選解析內容" rows={16} value={draft} disabled={!saved || saving || disabled} onChange={event => { setDraft(event.target.value); setReviewed(false); setNotice(''); }} placeholder={'### 核心考點\n\n在此貼上或編寫解析…'} /></label>}
       <p className={styles.muted} role="status">{saving ? '儲存中…' : notice || (dirty ? '有尚未儲存的變更' : saved?.explanation.trim() ? '已載入儲存的解析' : '尚未提供精選解析')} · {draft.length.toLocaleString()} / 20,000 字元</p>
       <label className={styles.muted}><input type="checkbox" checked={reviewed} disabled={saving || disabled} onChange={event => setReviewed(event.target.checked)} /> 我已人工核對解析及參考資料，確認與題庫答案一致。</label>
+      {saved?.sourceChanged && <div className={styles.warning}><p>題目、圖片或來源版本已變更，舊解析不得直接發布。請核對最新題目、官方答案與來源後，先儲存草稿再發布。</p><label><input type="checkbox" checked={sourceReviewed} disabled={saving||disabled} onChange={event=>setSourceReviewed(event.target.checked)} /> 我已重新核對最新題目與來源，確認本解析適用於目前版本。</label></div>}
       <div className={styles.actions}>
-        <button type="button" className="study-button" disabled={!saved || saving || disabled || (!dirty && saved.status !== 'published') || !draft.trim() || draft.length > 20000} onClick={() => save('draft')}>儲存草稿</button>
-        <button type="button" className="study-button study-button-primary" disabled={!saved || saving || disabled || !reviewed || !draft.trim() || draft.length > 20000 || (!dirty && saved.status === 'published')} onClick={() => save('publish')}>發布解析</button>
+        <button type="button" className="study-button" disabled={!saved || saving || disabled || (!dirty && saved.status !== 'published' && !sourceReviewed) || !draft.trim() || draft.length > 20000} onClick={() => save('draft')}>儲存草稿</button>
+        <button type="button" className="study-button study-button-primary" disabled={!saved || saved.sourceChanged || saving || disabled || !reviewed || !draft.trim() || draft.length > 20000 || (!dirty && saved.status === 'published')} onClick={() => save('publish')}>發布解析</button>
         <button type="button" className="study-button" disabled={!saved || saving || disabled || dirty || saved.status !== 'published'} onClick={() => save('unpublish')}>取消發布</button>
         <button type="button" className="study-button" disabled={saving || disabled} onClick={() => {
           if (dirty && !window.confirm('重新載入會捨棄尚未儲存的草稿。請先複製保留需要的內容，確定重新載入嗎？')) return;

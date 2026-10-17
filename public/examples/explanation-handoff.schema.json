@@ -1,0 +1,257 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "VetExam 國考解析交接 v1",
+  "description": "Phase 1/2 僅校驗預覽。每批 1–20 題，UTF-8 JSON 最多 2 MiB；轉換後 Markdown 最多 20000 個 UTF-16 字元。另須通過資料庫完整答案集合、實際選項、題目及來源指紋核對。ID 不得重複，引用至少一筆 supports 包含 correctAnswerReason。文獻內容未查證，不可自行標記已審核。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "formatVersion",
+    "explanations"
+  ],
+  "properties": {
+    "formatVersion": {
+      "const": "vetexam-explanations-v1"
+    },
+    "explanations": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 20,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "questionId",
+          "questionFingerprint",
+          "sourceFingerprint",
+          "expectedAnswers",
+          "explanationVersion",
+          "coreConcept",
+          "optionExplanations",
+          "correctAnswerReason",
+          "examMemory",
+          "extendedKnowledge",
+          "references",
+          "doubts",
+          "reviewStatus"
+        ],
+        "properties": {
+          "questionId": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "questionFingerprint": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "sourceFingerprint": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "expectedAnswers": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 5,
+            "uniqueItems": true,
+            "items": {
+              "enum": [
+                "A",
+                "B",
+                "C",
+                "D",
+                "E"
+              ]
+            }
+          },
+          "explanationVersion": {
+            "const": "1.0"
+          },
+          "coreConcept": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 6000,
+            "pattern": "^(?=[\\s\\S]*\\S)[^\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f]*$"
+          },
+          "optionExplanations": {
+            "type": "object",
+            "minProperties": 1,
+            "additionalProperties": false,
+            "properties": {
+              "A": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 6000,
+                "pattern": "^(?=[\\s\\S]*\\S)[^\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f]*$"
+              },
+              "B": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 6000,
+                "pattern": "^(?=[\\s\\S]*\\S)[^\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f]*$"
+              },
+              "C": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 6000,
+                "pattern": "^(?=[\\s\\S]*\\S)[^\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f]*$"
+              },
+              "D": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 6000,
+                "pattern": "^(?=[\\s\\S]*\\S)[^\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f]*$"
+              },
+              "E": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 6000,
+                "pattern": "^(?=[\\s\\S]*\\S)[^\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f]*$"
+              }
+            }
+          },
+          "correctAnswerReason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 6000,
+            "pattern": "^(?=[\\s\\S]*\\S)[^\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f]*$"
+          },
+          "examMemory": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 6000,
+            "pattern": "^(?=[\\s\\S]*\\S)[^\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f]*$"
+          },
+          "extendedKnowledge": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 6000,
+            "pattern": "^(?=[\\s\\S]*\\S)[^\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f]*$"
+          },
+          "references": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 10,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "title",
+                "url",
+                "version",
+                "applicableYears",
+                "supports",
+                "statement",
+                "verificationStatus"
+              ],
+              "properties": {
+                "title": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500,
+                  "pattern": "^(?=[\\s\\S]*\\S)[^\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f]*$"
+                },
+                "url": {
+                  "type": "string",
+                  "format": "uri",
+                  "maxLength": 2048,
+                  "pattern": "^[Hh][Tt][Tt][Pp][Ss]?://[^\\s<>\\\\\\u0000-\\u001f\\u007f]+$"
+                },
+                "version": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200,
+                      "pattern": "^(?=[\\s\\S]*\\S)[^\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f]*$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "applicableYears": {
+                  "anyOf": [
+                    {
+                      "const": "unknown"
+                    },
+                    {
+                      "type": "array",
+                      "minItems": 1,
+                      "maxItems": 50,
+                      "items": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 300
+                      }
+                    }
+                  ]
+                },
+                "supports": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 9,
+                  "uniqueItems": true,
+                  "items": {
+                    "enum": [
+                      "coreConcept",
+                      "correctAnswerReason",
+                      "examMemory",
+                      "extendedKnowledge",
+                      "optionExplanations.A",
+                      "optionExplanations.B",
+                      "optionExplanations.C",
+                      "optionExplanations.D",
+                      "optionExplanations.E"
+                    ]
+                  }
+                },
+                "statement": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2000,
+                  "pattern": "^(?=[\\s\\S]*\\S)[^\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f]*$"
+                },
+                "verificationStatus": {
+                  "const": "unverified"
+                }
+              }
+            }
+          },
+          "doubts": {
+            "type": "array",
+            "maxItems": 10,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "code",
+                "detail"
+              ],
+              "properties": {
+                "code": {
+                  "enum": [
+                    "answer_dispute",
+                    "all_credit",
+                    "combined_choice",
+                    "missing_reference",
+                    "image_unclear",
+                    "other"
+                  ]
+                },
+                "detail": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2000,
+                  "pattern": "^(?=[\\s\\S]*\\S)[^\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f]*$"
+                }
+              }
+            }
+          },
+          "reviewStatus": {
+            "const": "pending_review"
+          }
+        }
+      }
+    }
+  }
+}
