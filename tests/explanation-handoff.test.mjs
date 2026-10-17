@@ -52,6 +52,29 @@ test('real admin guard on JSON/images, strict filters, no hidden access or overs
   await f.sql.query('UPDATE questions SET image_data_url=$1 WHERE id=11',['x'.repeat(33*1024*1024)]);assert.equal((await f.get()).status,413);
  }finally{await f.close();}
 });
+
+test('question-number selection stays inside the chosen public exam bank, preserves ID cursors and never writes',async()=>{
+ const f=await fixture();try{
+  await f.db.exec("UPDATE questions SET question_number=110 WHERE id=50; UPDATE questions SET question_number=110 WHERE id IN (3,4)");
+  const before=await snapshot(f);
+  const read=async params=>{const r=await f.get(params);assert.equal(r.status,200);return r.json();};
+  const selected=await read('questionSetId=1&questionNumbers=110,10,11');
+  assert.deepEqual(selected.questions.map(q=>q.questionId),[10,11,50]);
+  assert.deepEqual(selected.questions.map(q=>q.questionNumber),[10,11,110]);
+  assert.equal(selected.assets.length,2);assert.equal(selected.questions[0].options.E,'第五選項');
+  const p=await preview(f,selected.questions.map(item));assert(p.data.rows.every(r=>r.category==='ready'));
+  const page=await read('questionSetId=1&questionNumbers=110,10,11&limit=2');assert.equal(page.nextAfterId,11);
+  assert.deepEqual((await read('questionSetId=1&questionNumbers=110,10,11&limit=2&afterId=11')).questions.map(q=>q.questionId),[50]);
+  assert.equal((await read('questionSetId=1&questionNumbers=2,999')).questions.length,0,'existing explanation and absent number are not substituted');
+  assert.equal((await read('questionSetId=2&questionNumbers=110')).questions.length,0,'private bank is never exported');
+  assert.equal((await read('questionSetId=1&questionNumbers=50')).questions.length,0,'question number is not question ID');
+  for(const value of ['', '0', '-1','1.5','1e1','10,10','10,010','10,','10,,11','10;11','2147483648',Array.from({length:21},(_,i)=>i+1).join(','),'1'.repeat(241)]){
+   const response=await f.get('questionSetId=1&questionNumbers='+encodeURIComponent(value));assert.equal(response.status,400,value);
+  }
+  for(const params of ['questionSetId=1&questionNumbers=10&questionNumbers=11','questionSetId=1&questionSetId=2'])assert.equal((await f.get(params)).status,400);
+  assert.deepEqual(await snapshot(f),before);
+ }finally{await f.close();}
+});
 test('single, multiple and E answers preview via existing converter; preview stays read-only',async()=>{
  const f=await fixture();try{
   const before=await snapshot(f),data=await (await f.get()).json(),items=data.questions.filter(q=>![12,13,14].includes(q.questionId)).map(item);

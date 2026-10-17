@@ -14,6 +14,10 @@ try{
   await f.db.exec(`UPDATE questions SET option_e='第五選項',answer='["C","E"]' WHERE id=60`);
   const png='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aB9sAAAAASUVORK5CYII=';
   await f.sql.query('UPDATE questions SET image_data_url=$1 WHERE id IN (60,61)',[png]);
+  await f.db.exec(`INSERT INTO question_sets(id,name,exam_year,exam_subject,visibility) VALUES
+    (3,'另一年度國考',2025,'獸醫病理學','public'),(4,'另一科國考',2026,'獸醫藥理學','public');
+    INSERT INTO questions(id,question_set_id,question_number,question,option_a,option_b,option_c,option_d,answer)
+    VALUES (80,3,60,'Other year','A','B','C','D','A'),(81,4,60,'Other subject','A','B','C','D','A');`);
   const exportRoute=load('app/api/admin/questions/explanation/export/route.ts',{'@/lib/admin':{requireAdmin:async()=>({sql:f.sql})},'@/lib/admin-question-http':http,'@/lib/explanation-handoff':handoff});
   await mkdir(dir);created=true;
   await writeFile(new URL('page.tsx',dir),"import Admin from '../admin/questions/QuestionsAdmin'; export default function Page(){return <Admin/>;}");
@@ -41,10 +45,19 @@ try{
   await page.goto(base+'/explanation-import-test-fixture');
   await page.getByText('匯出未解析國考題（ChatGPT 協作）',{exact:true}).click();
   const exportPanel=page.getByRole('region',{name:'未解析題目匯出'});
-  await exportPanel.getByLabel('匯出題庫',{exact:true}).selectOption('1');await exportPanel.getByLabel('從此題目 ID 之後',{exact:true}).fill('59');
+  const bank=exportPanel.getByLabel('匯出題庫',{exact:true}),year=exportPanel.getByLabel('匯出年份',{exact:true}),subject=exportPanel.getByLabel('匯出科目',{exact:true});
+  assert.equal(await bank.locator('option').count(),4,'only public exam banks');
+  await year.selectOption('114');assert.equal(await bank.locator('option').count(),2);await bank.selectOption('3');
+  await subject.selectOption('獸醫藥理學');assert.equal(await bank.inputValue(),'');assert(await exportPanel.getByRole('button',{name:'讀取匯出預覽'}).isDisabled());
+  await exportPanel.getByText('此年份與科目沒有可選的公開國考題庫，請調整篩選。').waitFor();
+  await year.selectOption('115');await subject.selectOption('獸醫病理學');assert.equal(await bank.locator('option').count(),2);await bank.selectOption('1');
+  const numbers=exportPanel.getByLabel('指定題號（選填）',{exact:true});await numbers.fill('60,60');
+  await exportPanel.getByRole('button',{name:'讀取匯出預覽'}).click();await exportPanel.getByRole('alert').filter({hasText:'不重複'}).waitFor();assert.equal(writes,0);
+  await numbers.fill('999');await exportPanel.getByRole('button',{name:'讀取匯出預覽'}).click();await exportPanel.getByText('沒有符合條件的未解析國考題，未自動補入其他題庫。').waitFor();
+  await numbers.fill('60、61，62,63,64,65,66,67,68,69');
   await exportPanel.getByRole('button',{name:'讀取匯出預覽'}).click();await exportPanel.getByRole('status').filter({hasText:'共 10 題'}).waitFor();
   const downloadPromise=page.waitForEvent('download');await exportPanel.getByRole('button',{name:'下載題目交接 JSON'}).click();const downloaded=await downloadPromise;
-  const exported=JSON.parse(await readFile(await downloaded.path(),'utf8'));assert.equal(exported.questions.length,10);assert.equal(exported.assets.length,1);assert.equal(writes,0);
+  const exported=JSON.parse(await readFile(await downloaded.path(),'utf8'));assert.deepEqual(exported.questions.map(q=>q.questionId),Array.from({length:10},(_,i)=>60+i));assert(exported.questions.every(q=>q.rocYear===115&&q.examSubject==='獸醫病理學'));assert.equal(exported.assets.length,1);assert.equal(writes,0);
   const imageDownload=page.waitForEvent('download');await exportPanel.getByRole('button',{name:/下載原圖/}).click();const downloadedImage=await imageDownload;
   assert.deepEqual(await readFile(await downloadedImage.path()),Buffer.from(png.split(',')[1],'base64'));
   await mkdir(artifacts,{recursive:true});
