@@ -1,0 +1,24 @@
+.card { border-color: var(--primary); }
+.heading, .actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.heading p { margin: 0 0 6px; font-size: 13px; }
+.heading h2 { margin-bottom: 0; }
+.body { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin: 18px 0; min-height: 156px; }
+.progress { min-width: 0; }
+.progress p { margin: 8px 0; }
+.count { font-size: 17px; }
+.count strong { color: var(--primary); }
+.tasks { display: grid; gap: 8px; align-content: start; }
+.task { display: flex; justify-content: space-between; align-items: center; gap: 10px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-button); padding: 10px 14px; }
+.task > span:last-child { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.task:hover { background: var(--ui-success-bg); }
+.task:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+.actions > span { font-size: 13px; }
+@media (max-width: 640px) {
+ .body { grid-template-columns: 1fr; gap: 8px; margin: 12px 0; min-height: 244px; }
+ .heading { align-items: flex-start; }
+ .heading > a { font-size: 13px; }
+ .tasks { gap: 6px; }
+ .task { padding: 8px 12px; }
+ .count { font-size: 15px; }
+ .actions { gap: 8px; }
+}
