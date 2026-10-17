@@ -31,8 +31,8 @@ function readLayout(): Layout {
   } catch { return defaults; }
 }
 
-export default function HomeLayout({ hero, visual, illustration, introduction, children }: {
-  hero: ReactNode; visual: ReactNode; illustration: ReactNode; introduction: ReactNode; children: Record<Id, ReactNode>;
+export default function HomeLayout({ hero, visual, illustration, introduction, coach, children }: {
+  hero: ReactNode; visual: ReactNode; illustration: ReactNode; introduction: ReactNode; coach?: ReactNode; children: Record<Id, ReactNode>;
 }) {
   const [layout, setLayout] = useState(defaults);
   const [editing, setEditing] = useState(false);
@@ -99,6 +99,7 @@ export default function HomeLayout({ hero, visual, illustration, introduction, c
     {editing && notice && <div className="study-layout-notice" role="status">已隱藏「{widgets[notice].label}」<button className="study-text-link" type="button" onClick={() => restore(notice)}>復原</button></div>}
     <span className="study-layout-announcement" role="status">{announcement}</span>
     <div className="study-welcome">{hero}{illustration}</div>
+    {coach}
     <div className="study-hero-status-group">{visual}</div>
     {visible.some(id => widgets[id].size === 'third') && <div className="study-today-heading"><p>照自己的步調，完成今天的一小步</p><h2>今天的學習</h2></div>}
     <div ref={grid} className="study-widget-grid">
