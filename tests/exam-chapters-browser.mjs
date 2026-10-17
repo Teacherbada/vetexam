@@ -21,14 +21,15 @@ try {
   await page.goto(base + '/subjects');
   await page.getByRole('button', { name: '選擇獸醫病理學，設定練習' }).click();
   await page.getByText('符合條件共有 4 題', { exact: true }).waitFor();
-  const picker = page.locator('details');
+  const picker = page.locator('details').filter({has: page.locator('summary', {hasText: /^章節：/})});
   await picker.locator('summary').click();
   await picker.getByText('通論', { exact: true }).waitFor();
   await picker.getByText('各論', { exact: true }).waitFor();
   assert.equal(await picker.getByRole('button').count(), 17);
   await picker.getByRole('button', { name: '腫瘤', exact: true }).click();
   await page.getByText('符合條件共有 2 題', { exact: true }).waitFor();
-  await page.getByRole('button', { name: '民國 110 年（西元 2021）', exact: true }).click();
+  await page.getByRole('group', {name: '考試年份（可多選）'}).locator('summary').click();
+  await page.getByRole('button', { name: '民國 110 年', exact: true }).click();
   await page.getByText('符合條件共有 0 題', { exact: true }).waitFor();
   await page.getByRole('button', { name: '全部年份', exact: true }).click();
   await picker.getByRole('button', { name: '全部章節', exact: true }).click();

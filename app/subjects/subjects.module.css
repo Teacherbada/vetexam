@@ -82,6 +82,16 @@
 .dialog a[class*="text-white"] { background: #3f725f; }
 .dialog a[class*="bg-gray-300"] { background: var(--ui-neutral-bg); color: var(--ui-neutral); }
 .dialog summary { font-weight: 600; }
+.yearPicker { margin-top: 4px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-input); background: white; }
+.yearPicker > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; padding: 10px 12px; cursor: pointer; list-style: none; }
+.yearPicker > summary::-webkit-details-marker { display: none; }
+.yearPicker > summary:focus-visible { outline: 3px solid #3F725F; outline-offset: 3px; border-radius: var(--ui-radius-input); }
+.yearPicker > summary > svg { flex-shrink: 0; transform: rotate(90deg); }
+.yearPicker[open] > summary > svg { transform: rotate(-90deg); }
+.yearSelection { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.yearSelection small { display: block; color: var(--text-secondary); font-size: var(--ui-caption); font-weight: 400; }
+.yearList { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px; border-top: 1px solid var(--ui-border); max-height: min(280px,40dvh); overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.yearList > button { flex: 1 0 100px; min-height: 44px; }
 @media(max-width:429px) { .dialog { padding: 20px 16px; } .dialog section > div[class*="grid-cols-2"] { grid-template-columns: minmax(0,1fr); } }
 @media (max-width: 1000px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 700px) { .grid { grid-template-columns: 1fr; gap: 14px; } }
