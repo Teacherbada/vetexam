@@ -15,8 +15,9 @@ export default function FeaturedExplanationImport({ onImported }: { onImported: 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState<ImportResult | null>(null);
+  const [handoffPreview, setHandoffPreview] = useState(false);
   const operation = useRef(false);
-  function reset() { setRows([]); setSelected(new Set()); setInput(null); setConfirmed(false); setResult(null); setError(''); setFilter('all'); }
+  function reset() { setRows([]); setSelected(new Set()); setInput(null); setConfirmed(false); setResult(null); setError(''); setFilter('all'); setHandoffPreview(false); }
   async function request(body: unknown) {
     const response = await fetch('/api/admin/questions/explanation/import', {
       method: 'POST', cache: 'no-store', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
@@ -37,12 +38,12 @@ export default function FeaturedExplanationImport({ onImported }: { onImported: 
       try { parsed = JSON.parse((await file.text()).replace(/^\uFEFF/, '')); }
       catch { throw Error('JSON 格式錯誤，請修正檔案後重新上傳'); }
       const data = await request({ action: 'preview', input: parsed });
-      setInput(parsed); setRows(data.rows);
+      setInput(parsed); setRows(data.rows); setHandoffPreview(data.handoffPreview === true);
     } catch (e) { setError(e instanceof Error ? e.message : '預覽失敗'); }
     finally { operation.current = false; setBusy(false); }
   }
   async function apply() {
-    if (!confirmed || !selected.size || operation.current || result) return;
+    if (handoffPreview || !confirmed || !selected.size || operation.current || result) return;
     operation.current = true; setBusy(true); setError('');
     try {
       const data: ImportResult = await request({ action: 'import', input,
@@ -58,9 +59,12 @@ export default function FeaturedExplanationImport({ onImported }: { onImported: 
       <h2>批次匯入精選解析</h2>
       <p className={styles.muted}>每批 1–50 筆、檔案最多 2 MiB；每筆解析含參考網址最多 20,000 字元。僅適用於公開國考題目，既有草稿及已發布解析皆不覆蓋。</p>
       <p className={styles.muted}>questionId 請使用本頁的題目 ID。來源網址會附加至解析末尾；匯入不會核實教材內容，請逐題人工審核後再發布。</p>
+      <p className={styles.muted}>新版 ChatGPT 結構化解析每批最多 20 題，目前只校驗與預覽，未開放寫入；網址格式正確不代表文獻內容已查證。</p>
       <div className={styles.actions}>
         <a className="study-button" href="/examples/featured-explanations.example.json" download>下載 JSON 範例</a>
         <a className="study-button" href="/examples/featured-explanations.schema.json" download>下載 JSON Schema</a>
+        <a className="study-button" href="/examples/explanation-handoff.schema.json" download>下載新版回傳 Schema</a>
+        <a className="study-button" href="/examples/explanation-handoff.example.json" download>下載新版回傳範例</a>
       </div>
       <fieldset disabled={busy}>
         <label className={styles.field}>選擇 JSON 檔案<input aria-label="精選解析 JSON 檔案" type="file" accept=".json,application/json" onChange={event => { reset(); setFile(event.target.files?.[0] ?? null); }} /></label>
@@ -69,25 +73,25 @@ export default function FeaturedExplanationImport({ onImported }: { onImported: 
       {busy && <p role="status">處理中，請稍候…</p>}
       {error && <p className={styles.warning} role="alert">{error}</p>}
       {rows.length > 0 && <>
-        <p>{result ? '本次處理已結束，以下保留匯入前預覽。' : `預覽共 ${rows.length} 筆，尚未寫入。預覽有效 15 分鐘。`}</p>
+        <p>{handoffPreview ? '新版交接僅供內容核對，未寫入。通過項目仍須人工查核，Phase 3 完成前不可匯入或發布。' : result ? '本次處理已結束，以下保留匯入前預覽。' : `預覽共 ${rows.length} 筆，尚未寫入。預覽有效 15 分鐘。`}</p>
         <label className={styles.field}>驗證分類<select aria-label="解析匯入驗證分類" value={filter} onChange={event => setFilter(event.target.value as typeof filter)}>
           <option value="all">全部（{rows.length}）</option>
-          {(Object.keys(importLabels) as ImportCategory[]).map(key => <option key={key} value={key}>{importLabels[key]}（{rows.filter(row => row.category === key).length}）</option>)}
+          {(Object.keys(importLabels) as ImportCategory[]).map(key => <option key={key} value={key}>{handoffPreview && key === 'ready' ? '校驗通過（僅預覽）' : importLabels[key]}（{rows.filter(row => row.category === key).length}）</option>)}
         </select></label>
-        <div className={styles.actions}>
+        {!handoffPreview && <div className={styles.actions}>
           <button className="study-button" disabled={busy || Boolean(result)} onClick={() => { setSelected(new Set(rows.filter(row => row.category === 'ready').map(row => row.index))); setConfirmed(false); }}>勾選全部可匯入</button>
           <button className="study-button" disabled={busy || Boolean(result)} onClick={() => { setSelected(new Set()); setConfirmed(false); }}>取消勾選</button>
           <span>已勾選 {selected.size} 筆</span>
-        </div>
+        </div>}
         {rows.filter(row => filter === 'all' || row.category === filter).map(row => <article className={styles.card} key={row.index} data-import-row={row.index}>
-          <label><input type="checkbox" aria-label={`匯入第 ${row.index + 1} 筆`} disabled={busy || Boolean(result) || row.category !== 'ready'} checked={selected.has(row.index)} onChange={event => { setSelected(previous => { const next = new Set(previous); if (event.target.checked) next.add(row.index); else next.delete(row.index); return next; }); setConfirmed(false); }} /> 第 {row.index + 1} 筆 · ID {row.questionId ?? '無效'} · <strong>{importLabels[row.category]}</strong></label>
+          <label><input type="checkbox" aria-label={`匯入第 ${row.index + 1} 筆`} disabled={handoffPreview || busy || Boolean(result) || row.category !== 'ready'} checked={selected.has(row.index)} onChange={event => { setSelected(previous => { const next = new Set(previous); if (event.target.checked) next.add(row.index); else next.delete(row.index); return next; }); setConfirmed(false); }} /> 第 {row.index + 1} 筆 · ID {row.questionId ?? '無效'} · <strong>{handoffPreview && row.category === 'ready' ? '校驗通過（僅預覽）' : importLabels[row.category]}</strong></label>
           <p className={styles.question}>{row.summary || '無可用題目摘要'}</p>
           <p>檔案答案：{formatAnswer(row.expectedAnswer) || '未提供'} · 題庫答案：{formatAnswer(row.answer) || '無可用答案'}</p>
           {row.reason && <p className={styles.warningText}>{row.reason}</p>}
-          {row.questionFingerprint && <details><summary>題目指紋（選填核對用）</summary><p className={styles.question}>{row.questionFingerprint}</p></details>}
+          {row.questionFingerprint && <details><summary>{handoffPreview ? '題目指紋（新版必填）' : '題目指紋（選填核對用）'}</summary><p className={styles.question}>{row.questionFingerprint}</p></details>}
           <details><summary>解析預覽</summary><OfficialExplanation content={row.explanation} /></details>
         </article>)}
-        {!result && <>
+        {!result && !handoffPreview && <>
           <label><input type="checkbox" checked={confirmed} disabled={busy || !selected.size} onChange={event => setConfirmed(event.target.checked)} /> 我已核對勾選的題目 ID、答案與解析，確認只儲存草稿</label>
           <div className={styles.actions}><button className="study-button study-button-primary" disabled={busy || !confirmed || !selected.size} onClick={apply}>確認匯入並儲存草稿（{selected.size} 筆）</button></div>
         </>}

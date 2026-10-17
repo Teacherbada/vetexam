@@ -41,7 +41,7 @@ export function parseImport(input: unknown): Entry[] {
       if (!object(value) || Object.keys(value).some(key => !['questionId', 'expectedAnswer', 'explanation', 'questionFingerprint', 'sourceReferences'].includes(key))) throw new QuestionAdminError('欄位不合法；僅接受規格中的解析欄位');
       if (!validId(value.questionId)) throw new QuestionAdminError('questionId 必須是有效整數 ID');
       if ((counts.get(value.questionId) ?? 0) > 1) throw new QuestionAdminError('同一檔案含重複 questionId，所有重複項目均拒絕');
-      if (typeof value.expectedAnswer === 'string' ? !/^[A-E]$/.test(value.expectedAnswer) : !Array.isArray(value.expectedAnswer) || !serializeAnswer(value.expectedAnswer)) throw new QuestionAdminError('expectedAnswer 必須是合法答案或答案陣列');
+      if (typeof value.expectedAnswer === 'string' ? !/^[A-E]$/.test(value.expectedAnswer) : !Array.isArray(value.expectedAnswer) || !serializeAnswer(value.expectedAnswer, true)) throw new QuestionAdminError('expectedAnswer 必須是合法答案或答案陣列');
       if (value.questionFingerprint !== undefined && (typeof value.questionFingerprint !== 'string' || !/^[a-f0-9]{64}$/.test(value.questionFingerprint))) throw new QuestionAdminError('questionFingerprint 必須為 64 位小寫 SHA-256');
       parseExplanation({ id: value.questionId, explanation: value.explanation, revision: '0'.repeat(64), action: 'draft' });
       let explanation = value.explanation;

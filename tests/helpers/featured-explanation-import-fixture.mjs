@@ -4,6 +4,12 @@ export const batch = load('lib/featured-explanation-import.ts', {
   './admin-questions': adminService, './admin-question-input': input,
   './official-explanation': service, './featured-explanation-import-input': contract,
 });
+export const handoffContract = load('lib/explanation-handoff-input.ts');
+export const handoff = load('lib/explanation-handoff.ts', {
+  './admin-questions':adminService, './admin-question-input':input,
+  './featured-explanation-import':batch, './featured-explanation-import-input':contract,
+  './explanation-handoff-input':handoffContract,
+});
 export async function importFixture() {
   const f = await fixture();
   process.env.BETTER_AUTH_SECRET = 'local-import-test-secret-only-at-least-32-characters';
@@ -18,6 +24,7 @@ export async function importFixture() {
   const route = load('app/api/admin/questions/explanation/import/route.ts', {
     '@/lib/admin': admin, '@/lib/admin-question-http': http, '@/lib/admin-questions': adminService,
     '@/lib/featured-explanation-import': batch,
+    '@/lib/explanation-handoff': handoff,
     '@/lib/question-transaction': { questionTransaction: run => f.db.transaction(tx => run(tx)) },
   });
   const call = async (body, user = 'fixture-admin', headers = {}) => {

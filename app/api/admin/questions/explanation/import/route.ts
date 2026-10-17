@@ -3,6 +3,7 @@ import { adminError, adminJson, readAdminBody } from '@/lib/admin-question-http'
 import { QuestionAdminError } from '@/lib/admin-questions';
 import { parseImport, previewImport, parseSelections, applyImport } from '@/lib/featured-explanation-import';
 import { questionTransaction } from '@/lib/question-transaction';
+import { previewHandoff } from '@/lib/explanation-handoff';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -13,6 +14,10 @@ export async function POST(request: Request) {
     if (!admin) return adminJson({ error: '僅限管理員使用' }, 403);
     const body = await readAdminBody(request, 3 * 1024 * 1024);
     if (Object.keys(body).some(key => !['action', 'input', 'selected'].includes(key))) throw new QuestionAdminError('匯入操作欄位無效');
+    if (body.input && typeof body.input === 'object' && 'formatVersion' in body.input) {
+      if (body.action !== 'preview') throw new QuestionAdminError('新版解析交接目前僅供校驗預覽；尚未啟用寫入或發布', 409);
+      return adminJson(await previewHandoff((text, values) => admin.sql.query(text, values), body.input, admin.session.user.id));
+    }
     const entries = parseImport(body.input);
     if (body.action === 'preview') return adminJson(await previewImport((text, values) => admin.sql.query(text, values), entries, admin.session.user.id));
     if (body.action !== 'import') throw new QuestionAdminError('匯入操作無效');

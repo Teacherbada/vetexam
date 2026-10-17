@@ -11,6 +11,7 @@ import { formatExamYear } from '@/lib/exam-year';
 import styles from './questions.module.css';
 import OfficialExplanationEditor from './OfficialExplanationEditor';
 import FeaturedExplanationImport from './FeaturedExplanationImport';
+import ExplanationExport from './ExplanationExport';
 
 type Bank = { id: number; name: string; exam_year: number | null; exam_subject: string; visibility: string; total: number; missing_answer: number; missing_explanation: number; explanation_total: number; published_explanations: number };
 type Data = { summary: { total: number; missing_answer: number; missing_explanation: number; missing_both: number; invalid: number; answer_null: number; answer_blank: number }; sets: Bank[]; questions: AdminQuestion[]; total: number };
@@ -117,6 +118,7 @@ export default function QuestionsAdmin() {
     {error && <div className={styles.warning} role="alert">{error}<button className="study-button" onClick={() => { setError(''); setLoading(true); setRevision(value => value + 1); }}>重新讀取</button></div>}
     {notice && <p className={styles.success} role="status">{notice}</p>}
     <FeaturedExplanationImport onImported={() => setRevision(value => value + 1)} />
+    {data && <ExplanationExport banks={data.sets} />}
     {data && <><section className={styles.summary} aria-label="全部題庫資料品質">
       {([['全部題目', data.summary.total], ['缺少正確答案', data.summary.missing_answer], ['缺少官方詳解', data.summary.missing_explanation], ['答案與詳解皆缺少', data.summary.missing_both]] as const).map(([title, count]) => <div className={styles.card} key={title}><p>{title}</p><strong>{count}</strong></div>)}
     </section><p className={styles.muted}>所有公開與私人題庫：NULL {data.summary.answer_null} 題、空白 {data.summary.answer_blank} 題、非 A–D 答案 {data.summary.invalid} 題。</p></>}

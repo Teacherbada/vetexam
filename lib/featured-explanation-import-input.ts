@@ -2,7 +2,7 @@
 export const IMPORT_FILE_BYTES = 2 * 1024 * 1024;
 export type ExplanationImportItem = {
   questionId: number;
-  expectedAnswer: 'A' | 'B' | 'C' | 'D' | 'E' | ('A' | 'B' | 'C' | 'D')[];
+  expectedAnswer: 'A' | 'B' | 'C' | 'D' | 'E' | ('A' | 'B' | 'C' | 'D' | 'E')[];
   explanation: string;
   questionFingerprint?: string;
   sourceReferences?: string[];
