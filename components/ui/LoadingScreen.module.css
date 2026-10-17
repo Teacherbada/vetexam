@@ -1,0 +1,17 @@
+.screen { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: max(24px,env(safe-area-inset-top)) max(24px,env(safe-area-inset-right)) max(24px,env(safe-area-inset-bottom)) max(24px,env(safe-area-inset-left)); background: var(--study-background); color: var(--text-primary); font-family: var(--study-font); text-align: center; outline: none; touch-action: none; opacity: 1; visibility: visible; }
+/* The ready page is interactive immediately; only this non-blocking layer fades. */
+.screen[data-active="false"] { opacity: 0; visibility: hidden; pointer-events: none; transition: opacity 160ms ease-out, visibility 0s 160ms; }
+.content { max-width: 100%; }
+.brand { display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 28px; letter-spacing: -.8px; line-height: 1.4; }
+.brand > span { display: flex; color: var(--primary); }
+.brand svg { width: 33px; height: 33px; }
+.brand strong { font-weight: 700; }
+.subtitle { margin-top: 8px; font-size: 14px; color: var(--text-secondary); line-height: 1.7; }
+.dots { display: flex; justify-content: center; gap: 8px; margin: 28px 0 16px; }
+.dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--primary); animation: breathe 1200ms ease-in-out infinite; }
+.dots i:nth-child(2) { animation-delay: 160ms; }
+.dots i:nth-child(3) { animation-delay: 320ms; }
+.screen[data-active="false"] .dots i { animation: none; }
+.message { font-size: 14px; color: var(--text-secondary); line-height: 1.7; overflow-wrap: anywhere; }
+@keyframes breathe { 0%,100% { opacity: .3; } 50% { opacity: 1; } }
+@media(prefers-reduced-motion:reduce) { .dots i { animation: none; opacity: .65; } .screen[data-active="false"] { transition: none; } }

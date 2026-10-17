@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useState, useTransition, type CSSProperties } from "react";
+import {useRouter} from 'next/navigation';
+import LoadingScreen from '@/components/ui/LoadingScreen';
 import { StudyIcon, type StudyIconName } from "@/components/dashboard/StudyUI";
 import { subjectPalette } from "@/app/analysis/analytics";
 import foundation from "@/components/ui/foundation.module.css";
@@ -29,6 +31,8 @@ const subjectIcons: Record<string, StudyIconName> = {
 };
 
 export default function SubjectsPage() {
+  const router=useRouter();
+  const [isStarting,startNavigation]=useTransition();
   const { data: session } = authClient.useSession();
   const [questionState,setQuestionState] = useState<QuestionState>('all');
   const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
@@ -75,7 +79,7 @@ export default function SubjectsPage() {
   const totalCount = rows.reduce((sum, row) => sum + Math.min(availableCount(row), row.count === "all" ? Infinity : Number(row.count) || 0), 0);
   const invalid = loadingAvailable || !!error || rows.some((r) => r.count !== "all" && (!Number.isInteger(Number(r.count)) || Number(r.count) < 1));
 
-  return <main className={`${foundation.foundation} ${layout.page}`}><div className={layout.container}>
+  return <><LoadingScreen active={isStarting} variant="quiz" /><main className={`${foundation.foundation} ${layout.page}`}><div className={layout.container}>
     <nav className={layout.breadcrumb} aria-label="麵包屑"><Link href="/" aria-label="回首頁"><StudyIcon name="home" />首頁</Link><span aria-hidden="true">/</span><span aria-current="page">選擇科目</span><Link href="/questions/search">題目搜尋</Link><Link href="/ai-questions" className="study-button">獸醫練功房</Link></nav>
     <PageHeader title="選擇科目" description="選擇你想練習的科目，開始今天的刷題。"><Link href="/most-missed" className="study-button"><StudyIcon name="target" />最多人答錯</Link></PageHeader>
     <div className={styles.grid}>{subjects.map((subject) => <button
@@ -116,8 +120,8 @@ export default function SubjectsPage() {
       <section className="mt-7"><h3 className="font-bold">答題模式</h3><div className="mt-3 grid grid-cols-2 gap-3">{[["practice", "練習模式", "選答案後立即顯示解析"], ["exam", "模擬考模式", "交卷後才顯示答案與成績"]].map(([value, label, description]) => <button key={value} aria-pressed={mode === value} onClick={() => setMode(value)} className={"rounded-2xl border p-4 text-left " + (mode === value ? "border-[#5F8F7B] bg-[#E9F2ED]" : "border-gray-200 hover:bg-gray-50")}><b>{label}</b><p className="mt-1 text-sm text-gray-500">{description}</p></button>)}</div></section>
       {error && <p role="alert" className="mt-4 text-red-600">{error}，請關閉設定後再試一次。</p>}
       <div className="mt-7 rounded-2xl bg-gray-50 p-4"><div className="text-sm text-gray-500">本次測驗</div><div className="mt-1 text-2xl font-bold">最多 {totalCount} 題</div>{invalid && <p className="mt-2 text-sm text-red-600">請確認每組題數為至少 1 的整數，並等待年份載入。</p>}</div>
-      <div className="mt-7 flex gap-3"><button onClick={event => event.currentTarget.closest("dialog")?.close()} className="flex-1 rounded-2xl border border-gray-200 px-5 py-3">取消</button><Link href={invalid ? "#" : buildQuizUrl()} onClick={(e) => { if (invalid) e.preventDefault(); else setSelectedSubject(null); }} className={`flex-1 rounded-2xl px-5 py-3 text-center font-bold text-white ${invalid ? "bg-gray-300" : "bg-[#5F8F7B] hover:bg-[#507B69]"}`}>開始刷題 →</Link></div>
+      <div className="mt-7 flex gap-3"><button onClick={event => event.currentTarget.closest("dialog")?.close()} className="flex-1 rounded-2xl border border-gray-200 px-5 py-3">取消</button><Link href={invalid ? "#" : buildQuizUrl()} onClick={e => {if(invalid)e.preventDefault();}} onNavigate={e => {e.preventDefault();setSelectedSubject(null);startNavigation(()=>router.push(buildQuizUrl()));}} className={`flex-1 rounded-2xl px-5 py-3 text-center font-bold text-white ${invalid ? "bg-gray-300" : "bg-[#5F8F7B] hover:bg-[#507B69]"}`}>開始刷題 →</Link></div>
     </div>
   </dialog>}
-  </main>;
+  </main></>;
 }

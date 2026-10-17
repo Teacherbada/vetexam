@@ -22,6 +22,7 @@ import { sendStatistics } from "@/lib/answer-statistics-client";
 import { subscribeLearning } from '@/lib/learning-client';
 import { usableAnswer, isCorrectAnswer, formatAnswer } from "@/lib/question-answer";
 import useQuizActions from './useQuizActions';
+import LoadingScreen from '@/components/ui/LoadingScreen';
 
 function QuestionsContent() {
   const searchParams = useSearchParams();
@@ -85,7 +86,7 @@ function QuestionsContent() {
 
   const currentQuestion = questions[currentIndex];
   if (!started) return <SubjectsPage />;
-  if (loading) return <main className={`${foundation.foundation} ${styles.page}`}><div className={styles.container}><LoadingState label="正在準備你的測驗…" /></div></main>;
+  if (loading) return <><LoadingScreen variant="quiz" /><main className={`${foundation.foundation} ${styles.page}`} aria-busy="true" /></>;
   if (error) return <main className={`${foundation.foundation} ${styles.page}`}><div className={styles.state}><h1 className="text-2xl font-bold text-red-600">無法取得題目</h1><p role="alert" className="mt-4 text-gray-600">{error}</p><button className="study-button mt-4" onClick={() => setAttempt(value => value + 1)}>重新載入</button><div className="mt-6"><Link href="/subjects" className="study-button">回到設定</Link></div></div></main>;
   if (questions.length === 0) return <main className={`${foundation.foundation} ${styles.page}`}><div className={styles.container}><EmptyState title="目前沒有符合條件的題目" description="目前沒有符合這些條件的題目，請調整年份或其他篩選條件。"><Link href="/subjects" className="study-button">回到設定</Link></EmptyState></div></main>;
   if (!currentQuestion) return null;
@@ -152,7 +153,7 @@ function QuestionsContent() {
 
   const isFavorite = favorites.some((item) => item.id === currentQuestion.id);
   const completedCount = Object.keys(answers).length;
-  return <main className={`${foundation.foundation} ${styles.page} ${styles.activeQuiz}`}><div className={styles.container}>
+  return <><LoadingScreen active={false} variant="quiz" /><main className={`${foundation.foundation} ${styles.page} ${styles.activeQuiz}`}><div className={styles.container}>
     <LearningStatus /><header className={styles.topbar}><span><StudyIcon name="paw" />VetExam <small>專心練習，一題一步</small></span><button onClick={exitQuiz} className="study-button">退出測驗</button></header>
     <section key={currentQuestion.id} ref={questionCard} className={styles.card} aria-label="本次練習">
 
@@ -167,7 +168,7 @@ function QuestionsContent() {
         <button onClick={() => submitExam()} className="study-button study-button-primary">交卷</button>
       </> : <><button disabled={currentIndex === 0} onClick={() => goToQuestion(currentIndex - 1)} className={`study-button ${styles.mobileOnly}`}>上一題</button><p>{showResult ? '看懂解析，讓這一題更有收穫。' : '點選答案後即鎖定，並顯示答案與解析。'}</p><button disabled={!showResult} onClick={nextQuestion} className={`study-button study-button-primary ${!showResult ? styles.mobileOnly : ''}`}>{currentIndex < questions.length - 1 ? "下一題" : "完成測驗"}<StudyIcon name="arrow" /></button></>}</div>
     </section>
-  </div></main>;
+  </div></main></>;
 }
 
 export default function QuestionsPage() { return <Suspense fallback={<main className={`${foundation.foundation} ${styles.page}`}><div className={styles.container}><LoadingState label="載入題目中…" /></div></main>}><QuestionsContent /></Suspense>; }

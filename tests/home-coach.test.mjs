@@ -47,6 +47,24 @@ try{
  // The original entire homepage is moved, with only the three integration edits.
  const before=execFileSync('git',['show','0e96151572670bd421289db2bf478335ff7fd4ce:app/page.tsx'],{encoding:'utf8'}).replaceAll('\r\n','\n');
  const after=readFileSync('app/Home.tsx','utf8').replaceAll('\r\n','\n').replace('import HomeCoachCard from "@/components/dashboard/HomeCoachCard";\n','').replace("import type {HomeCoachSummary} from '@/lib/home-coach';\n",'').replace('Home({initialCoach}: {initialCoach:HomeCoachSummary})','Home()').replace(' coach={<HomeCoachCard initial={initialCoach} owner={sessionError ? null : isLoadingUser ? undefined : userId} />}','');
- assert.equal(after,before,'original cards, links, copy and styles preserved byte-for-byte');
+ const withoutLoading=after.replace("import LoadingScreen from '@/components/ui/LoadingScreen';\n",'').replace(`const subscribeHydration = () => () => {};
+const clientReady = () => true;
+const serverReady = () => false;
+
+`,'').replace(`  const sessionState = authClient.useSession();
+  // Auth may resolve before this streamed boundary hydrates; retain its server snapshot.
+  const hydrated = useSyncExternalStore(subscribeHydration, clientReady, serverReady);
+  const session = hydrated ? sessionState.data : null;
+  const isLoadingUser = !hydrated || sessionState.isPending;
+  const sessionError = hydrated ? sessionState.error : null;
+  const refetchSession = sessionState.refetch;`,`  const { data: session, isPending: isLoadingUser, error: sessionError, refetch: refetchSession } = authClient.useSession();`).replace(`  const [hasEnteredHome,setHasEnteredHome] = useState(false);
+  const homePending = isLoadingUser || isLoadingLocalProgress || (!sessionError && isLoadingProgress) || (!availability.data && !availability.error);
+  useEffect(() => {
+    // Only initial readiness gates entry; background refreshes keep the page usable.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (!homePending) setHasEnteredHome(true);
+  }, [homePending]);
+`,'').replace('return (<><LoadingScreen active={!hasEnteredHome && homePending} />','return (').replace('    </div></>\n  );','    </div>\n  );');
+ assert.equal(withoutLoading,before,'original cards, links, copy and styles preserved byte-for-byte beneath the loading layer');
  console.log('PASS home coach: auth/CSRF, isolated owners, 1/2 read queries, diagnostic, stable daily creation, actual receipts, free practice/evidence/idempotency, AI/private exclusion, Taipei rollover, failed bootstrap, unchanged original homepage');
 }finally{await f.close();}
