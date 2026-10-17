@@ -23,6 +23,11 @@ import useHomeMotion from "@/components/dashboard/useHomeMotion";
 import WeeklyMostMissed from "@/components/dashboard/WeeklyMostMissed";
 import HomeCoachCard from "@/components/dashboard/HomeCoachCard";
 import type {HomeCoachSummary} from '@/lib/home-coach';
+import LoadingScreen from '@/components/ui/LoadingScreen';
+
+const subscribeHydration = () => () => {};
+const clientReady = () => true;
+const serverReady = () => false;
 
 export default function Home({initialCoach}: {initialCoach:HomeCoachSummary}) {
   const availability = useHomeAvailability();
@@ -30,7 +35,13 @@ export default function Home({initialCoach}: {initialCoach:HomeCoachSummary}) {
   const [isLoadingLocalProgress, setIsLoadingProgress] = useState(true);
   const [localTodayProgress, setTodayProgress] = useState(0);
   const [localProgress, setProgress] = useState<Record<string, { answered: number[]; correct: number; wrong: number }>>({});
-  const { data: session, isPending: isLoadingUser, error: sessionError, refetch: refetchSession } = authClient.useSession();
+  const sessionState = authClient.useSession();
+  // Auth may resolve before this streamed boundary hydrates; retain its server snapshot.
+  const hydrated = useSyncExternalStore(subscribeHydration, clientReady, serverReady);
+  const session = hydrated ? sessionState.data : null;
+  const isLoadingUser = !hydrated || sessionState.isPending;
+  const sessionError = hydrated ? sessionState.error : null;
+  const refetchSession = sessionState.refetch;
   const authStatus = isLoadingUser ? 'loading' : sessionError ? 'error' : session?.user ? 'authenticated' : 'unauthenticated';
   const user = session?.user ?? null;
   const userId = user?.id ?? null;
@@ -43,6 +54,13 @@ export default function Home({initialCoach}: {initialCoach:HomeCoachSummary}) {
   const todayProgress = user ? matchingAccount?.todayCompleted ?? 0 : identityReady ? localTodayProgress : 0;
   const isLoadingProgress = !identityReady || isLoadingLocalProgress || (!!user && !matchingAccount && summaryStatus !== 'error');
   const summaryError = !!user && !matchingAccount && summaryStatus === 'error';
+  const [hasEnteredHome,setHasEnteredHome] = useState(false);
+  const homePending = isLoadingUser || isLoadingLocalProgress || (!sessionError && isLoadingProgress) || (!availability.data && !availability.error);
+  useEffect(() => {
+    // Only initial readiness gates entry; background refreshes keep the page usable.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (!homePending) setHasEnteredHome(true);
+  }, [homePending]);
   const motionRoot = useHomeMotion(true);
   const [examDate, setExamDate] = useState("2027-07-31");
 
@@ -166,7 +184,7 @@ export default function Home({initialCoach}: {initialCoach:HomeCoachSummary}) {
     if (row && subjects.includes(row.subject) && Number.isSafeInteger(count) && count >= 0) subjectCounts.set(row.subject, (subjectCounts.get(row.subject) ?? 0) + count);
   }
 
-  return (
+  return (<><LoadingScreen active={!hasEnteredHome && homePending} />
     <div className={`study-home ${foundation.foundation} ${styles.home}`} lang="zh-Hant">
       <a className="study-skip" href="#main-content">跳至主要內容</a>
       <header className="study-header">
@@ -253,6 +271,6 @@ export default function Home({initialCoach}: {initialCoach:HomeCoachSummary}) {
             <div className="study-footer-meta"><small>© 2026 VetExam. All rights reserved.</small><Link href="/feedback">聯絡與意見回饋 <StudyIcon name="arrow" /></Link></div>
           </footer>
       </main>
-    </div>
+    </div></>
   );
 }
