@@ -11,7 +11,7 @@ export default function StudyPlanPage() {
   return <div className={styles.background} lang="zh-Hant">
     <main className={`${foundation.foundation} ${styles.page}`}>
       <Link href="/" className="study-text-link"><StudyIcon name="home" />回首頁</Link>
-      <PageHeader title="學習計畫" description="選擇適合你的準備方式，一步一步靠近目標。" />
+      <PageHeader title="學習計畫 · 國考教練" description="知道今天練什麼、為什麼練，以及完成後的下一步。" />
       <ModeSelector />
     </main>
   </div>;

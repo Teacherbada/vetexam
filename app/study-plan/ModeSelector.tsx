@@ -28,6 +28,7 @@ export default function ModeSelector() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [reload, setReload] = useState(0);
+  const [showReinforcement,setShowReinforcement]=useState(false),[showDiagnostic,setShowDiagnostic]=useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -68,8 +69,9 @@ export default function ModeSelector() {
     {state === "ready" && mode === "custom" && <CustomPlan preview />}
     <div className={styles.reviewLink}><Link href="/review" className="study-button">到期複習 <StudyIcon name="arrow" /></Link></div>
 
-    {state === "ready" && mode === "coach" && <><details><summary>目前補強任務與學習建議</summary><Reinforcement preview /></details><details><summary>初始診斷與弱點確認</summary><Diagnostic preview /></details></>}
+    {state === "ready" && mode === "coach" && <><details onToggle={e=>setShowReinforcement(e.currentTarget.open)}><summary>目前補強任務與學習建議</summary>{showReinforcement&&<Reinforcement preview />}</details><details onToggle={e=>setShowDiagnostic(e.currentTarget.open)}><summary>初始診斷與弱點確認</summary>{showDiagnostic&&<Diagnostic preview />}</details></>}
 
+    <details open={mode===null||state!=='ready'}><summary>學習計畫設定與模式</summary>
     <section className={`study-card ${styles.status}`} aria-label="目前學習模式">
       <p role="status">{state === "loading" ? "讀取學習模式中…" : state === "guest" ? "登入後即可儲存你的學習模式。" : state === "error" ? "學習模式暫時無法讀取。" : mode ? `目前模式：${options.find(option => option.mode === mode)?.title}` : "先選擇你的學習模式"}</p>
       {state === "guest" && <Link href="/login" className="study-button">登入帳號</Link>}
@@ -91,7 +93,7 @@ export default function ModeSelector() {
     </div>
     <p role="status">{message}</p>
     {error && <p role="alert">{error}</p>}
-    <p className="study-muted">隨時可以切換模式。切換後會保留作答紀錄、錯題、收藏、既有分析與學習進度。</p>
+    <p className="study-muted">隨時可以切換模式。切換後會保留作答紀錄、錯題、收藏、既有分析與學習進度。</p></details>
     <Link href="/subjects" className="study-text-link">前往國考題庫練習<StudyIcon name="arrow" /></Link>
     <Link href="/notes" className="study-text-link">學習筆記<StudyIcon name="book" /></Link>
   </>;

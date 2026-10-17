@@ -64,7 +64,7 @@ export async function diagnosticCandidates(client: PoolClient, userId: string): 
       JOIN diagnostic_sessions d ON d.id = i.session_id
       WHERE d.user_id = $1 AND i.source_question_id = q.id
     ) history ON TRUE
-    WHERE qs.visibility = 'public' AND q.subject = ANY($2::text[])
+    WHERE qs.visibility = 'public' AND q.kind='exam' AND q.subject = ANY($2::text[])
       AND NULLIF(BTRIM(q.question), '') IS NOT NULL
       AND vetexam_has_answer(q.answer,ARRAY[q.option_a,q.option_b,q.option_c,q.option_d,q.option_e])
 
@@ -76,7 +76,7 @@ export async function createDiagnosticSession(client: PoolClient, userId: string
   const { rows: source } = await client.query(`SELECT q.id, q.subject, q.chapter, q.question, q.answer, q.image_data_url,
     q.option_a, q.option_b, q.option_c, q.option_d, q.option_e
     FROM questions q JOIN question_sets qs ON qs.id = q.question_set_id
-    WHERE q.id = ANY($1::integer[]) AND qs.visibility = 'public' FOR SHARE OF q, qs`, [selected.map(row => row.id)]);
+    WHERE q.id = ANY($1::integer[]) AND qs.visibility = 'public' AND q.kind='exam' FOR SHARE OF q, qs`, [selected.map(row => row.id)]);
   const snapshots = selected.flatMap(candidate => {
     const row = source.find(row => row.id === candidate.id);
     if (!row) return [];

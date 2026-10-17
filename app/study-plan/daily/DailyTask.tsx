@@ -8,16 +8,26 @@ import { syncDailyProgress } from '@/lib/daily-progress-client';
 import { REINFORCEMENT_LABELS, type ReinforcementStatus } from '@/lib/reinforcement';
 import styles from '../diagnostic/diagnostic.module.css';
 import quiz from '@/app/questions/quiz.module.css';
+import CoachToday from './CoachToday';
+import {COACH_GROUPS,type CoachGroup} from '@/lib/coach-daily';
 export default function DailyTask({preview=false}:{preview?:boolean}) {
   const [data,setData]=useState<DailyView|null>(null),[error,setError]=useState(''),[notice,setNotice]=useState('');
   const [busy,setBusy]=useState(false),[guest,setGuest]=useState(false),[selected,setSelected]=useState(''),[target,setTarget]=useState('');
   const [reload,setReload]=useState(0);
+  const [group,setGroup]=useState<CoachGroup|null>(null);
   const locked=useRef(false),heading=useRef<HTMLHeadingElement>(null);
   const endpoint='/api/study-plan/daily';
   function receive(body: DailyView) {
     setData(body);setGuest(false);setSelected('');setTarget(String(body.target));
+    const requested=new URLSearchParams(window.location.search).get('task');
+    setGroup(value=>value??(COACH_GROUPS.includes(requested as CoachGroup)?requested as CoachGroup:body.coach?.groups.find(g=>g.current)?.key??null));
     try {syncDailyProgress(body);} catch {setNotice('作答已儲存至帳號，但此瀏覽器的錯題本或進度暫時無法同步。');}
   }
+  useEffect(()=>{
+    const refresh=()=>{if(document.visibilityState==='visible'&&!locked.current){setData(null);setError('');setReload(n=>n+1);}};
+    window.addEventListener('focus',refresh);document.addEventListener('visibilitychange',refresh);
+    return()=>{window.removeEventListener('focus',refresh);document.removeEventListener('visibilitychange',refresh);};},[]);
+  useEffect(()=>{if(!data?.date)return;const timer=setTimeout(()=>{if(!locked.current){setData(null);setReload(n=>n+1);}},Math.max(1000,new Date(data.date+'T00:00:00+08:00').getTime()+86400000-Date.now()+1000));return()=>clearTimeout(timer);},[data?.date,busy]);
   useEffect(()=>{
     const controller=new AbortController();
     async function load() {
@@ -38,7 +48,8 @@ export default function DailyTask({preview=false}:{preview?:boolean}) {
   async function send(action:'answer'|'target') {
     if(locked.current)return;locked.current=true;setBusy(true);setError('');setNotice('');
     try {
-      const response=await fetch(endpoint,{method:action==='target'?'PATCH':'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(action==='target'?{target:Number(target)}:{taskId:data?.task?.id,position:data?.task?.current?.position,answer:selected})});
+      const active=data?.coach?.groups.find(g=>g.key===group)??data?.coach?.groups.find(g=>g.current);
+      const response=await fetch(endpoint,{method:action==='target'?'PATCH':'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(action==='target'?{target:Number(target)}:{taskId:data?.task?.id,position:active?.current?.position??data?.task?.current?.position,answer:selected})});
       if(response.status===401){setGuest(true);setData(null);return;}
       const body=await response.json();if(!response.ok)throw new Error(body.error);
       receive(body);if(action==='target')setNotice('每日目標已儲存；今天已建立的題目保持不變，新的目標會用於之後建立的任務。');
@@ -51,6 +62,11 @@ export default function DailyTask({preview=false}:{preview?:boolean}) {
   if(!data)return <section className={`study-card ${styles.stack}`}>{error?<><p role="alert">{error}</p>{refresh}</>:<p role="status">準備今日學習中…</p>}</section>;
   if(data.mode!=='coach')return <section className={`study-card ${styles.stack}`}><h2>先選擇國考教練模式</h2><Link href="/study-plan" className="study-button">設定學習模式</Link></section>;
   const task=data.task,current=task?.current;
+  if(data.coach&&(!data.coach.legacy||preview))return <div className={styles.stack} aria-busy={busy}>
+    {error&&<section className="study-card"><p role="alert">{error}</p>{refresh}</section>}{notice&&<p role="status">{notice}</p>}
+    <CoachToday data={data} preview={preview} group={group} busy={busy} selected={selected} onSelect={setSelected} onAnswer={()=>void send('answer')} onGroup={value=>{if(locked.current)return;setGroup(value);setSelected('');window.history.replaceState(null,'','?task='+value);}}/>
+    <details><summary>每日目標與設定</summary><div className={styles.stack}><label htmlFor="coach-target">每日目標（{DAILY_TARGET_MIN}～{DAILY_TARGET_MAX} 題）</label><input id="coach-target" type="number" min={DAILY_TARGET_MIN} max={DAILY_TARGET_MAX} value={target} disabled={busy} onChange={event=>setTarget(event.target.value)}/><button className="study-button" disabled={busy||!validDailyTarget(Number(target))||Number(target)===data.target} onClick={()=>void send('target')}>儲存每日目標</button><p className="study-muted">今天的安排固定保留；新目標用於之後的任務。跨日建立新任務，昨日作答紀錄保留。</p></div></details>
+  </div>;
   return <div className={styles.stack} aria-busy={busy}>
     {error&&<section className={`study-card ${styles.stack}`}><p role="alert">{error}</p>{refresh}</section>}
     {notice&&<p role="status">{notice}</p>}

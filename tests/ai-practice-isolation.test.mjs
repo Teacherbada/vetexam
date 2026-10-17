@@ -8,7 +8,7 @@ import pg from 'pg';
 import nextEnv from '@next/env';
 import {diagnosticTestConnectionString} from './diagnostic-database.mjs';
 const require=createRequire(import.meta.url);
-function load(path,mocks={}){const exports={};new Function('require','exports',ts.transpileModule(readFileSync(new URL('../'+path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText)(name=>{if(name==='server-only')return {};if(name in mocks)return mocks[name];if(name.startsWith('node:'))return require(name);throw Error('Unexpected '+name);},exports);return exports;}
+function load(path,mocks={}){const exports={};new Function('require','exports',ts.transpileModule(readFileSync(new URL('../'+path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText)(name=>{if(name==='server-only')return {};if(name in mocks)return mocks[name];if(name==='./question-answer'||name==='@/lib/question-answer')return load('lib/question-answer.ts');if(name.startsWith('node:'))return require(name);throw Error('Unexpected '+name);},exports);return exports;}
 const taxonomy=load('data/exam-chapters.ts'),input=load('lib/ai-question-input.ts',{'@/data/exam-chapters':taxonomy});
 const signing=load('lib/admin-questions.ts',{'./admin-question-input':load('lib/admin-question-input.ts')});
 const ai=load('lib/ai-question-service.ts',{'./ai-question-input':input,'./admin-questions':signing});

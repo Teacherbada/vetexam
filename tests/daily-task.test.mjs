@@ -7,6 +7,7 @@ import nextEnv from '@next/env';
 import pg from 'pg';
 import { diagnosticTestConnectionString } from './diagnostic-database.mjs';
 import { memoryService } from './memory-test-loader.mjs';
+import {loadCoach} from './helpers/coach-v2-fixture.mjs';
 function load(path,mocks={}) {
   const exports={};new Function('require','exports',ts.transpileModule(readFileSync(new URL('../'+path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText)(name=>{if(name==='server-only')return{};if(name==='../lib/learning-client')return{learningOwner:()=>null};if(Object.hasOwn(mocks,name))return mocks[name];throw new Error('Unexpected import '+name)},exports);return exports;
 }
@@ -20,7 +21,7 @@ const confirmation=load('lib/confirmation-service.ts',{'@/lib/diagnostic-service
 const followRules=load('lib/follow-up.ts',{'../data/exam-chapters':chapters,'./follow-up-config':followConfig});
 const store=load('lib/follow-up-store.ts',{'node:crypto':{randomUUID},'./follow-up-config':followConfig});
 const follow=load('lib/follow-up-service.ts',{'@/lib/diagnostic-service':service,'@/lib/follow-up':followRules,'@/lib/follow-up-store':store,'@/lib/follow-up-config':followConfig});
-const daily=load('lib/daily-task-service.ts',{'node:crypto':{randomUUID},'@/lib/diagnostic-service':service,'@/lib/follow-up-service':follow,'@/lib/confirmation-service':confirmation,'@/lib/daily-task-config':config,'@/lib/daily-task':rules,'@/lib/question-memory-service':memoryService});
+const daily=load('lib/daily-task-service.ts',{'node:crypto':{randomUUID},'@/lib/diagnostic-service':service,'@/lib/follow-up-service':follow,'@/lib/confirmation-service':confirmation,'@/lib/daily-task-config':config,'@/lib/daily-task':rules,'@/lib/question-memory-service':memoryService,'./coach-daily':loadCoach('lib/coach-daily.ts'),'./coach-daily-service':loadCoach('lib/coach-daily-service.ts')});
 const subject=chapters.EXAM_SUBJECTS[0], chapter=chapters.chapterGroups(subject)[0].chapters[0];
 const candidate=(id,extra={})=>({id,subject,chapter:null,last_answered:null,last_seen:null,appearances:0,...extra});
 test('Taipei date switches at local midnight and targets/ratios are bounded',()=>{
@@ -80,10 +81,11 @@ test('PostgreSQL daily persistence, shared follow-up, 12/30 resume, history, nex
       INSERT INTO "user" VALUES('alice'),('bob'),('empty'),('custom');
       CREATE TEMP TABLE study_plans(user_id text PRIMARY KEY,mode text);
       CREATE TEMP TABLE question_sets(id integer PRIMARY KEY,visibility text);
-      CREATE TEMP TABLE questions(id integer PRIMARY KEY,question_set_id integer,subject text,chapter text,question text,answer text,option_a text,option_b text,option_c text,option_d text,option_e text,image_data_url text,explanation text);
+      CREATE TEMP TABLE questions(id integer PRIMARY KEY,question_set_id integer,kind text DEFAULT 'exam',subject text,chapter text,question text,answer text,option_a text,option_b text,option_c text,option_d text,option_e text,image_data_url text,explanation text);
+      CREATE TEMP TABLE practice_attempts(user_id text,question_id integer,is_correct boolean,answered_at timestamptz);
       CREATE TEMP TABLE question_answer_stats(id bigserial,user_id text,question_id integer,is_correct boolean,selected_answer text,created_at timestamptz DEFAULT CURRENT_TIMESTAMP,UNIQUE(user_id,question_id));
       INSERT INTO study_plans VALUES('alice','coach'),('bob','coach'),('empty','coach'),('custom','custom');INSERT INTO question_sets VALUES(1,'public'),(2,'private');`);
-    for(const name of ['20260914_initial_diagnostic.sql','20260915_diagnostic_confirmation.sql','20260916_reinforcement_tasks.sql','20260917_follow_ups.sql','20260918_daily_tasks.sql','20260918_daily_tasks.sql'])await client.query(readFileSync(new URL('../migrations/'+name,import.meta.url),'utf8').replaceAll('CREATE TABLE IF NOT EXISTS','CREATE TEMP TABLE IF NOT EXISTS'));
+    for(const name of ['20260914_initial_diagnostic.sql','20260915_diagnostic_confirmation.sql','20260916_reinforcement_tasks.sql','20260917_follow_ups.sql','20260918_daily_tasks.sql','20260918_daily_tasks.sql','20261017_coach_daily_plan.sql'])await client.query(readFileSync(new URL('../migrations/'+name,import.meta.url),'utf8').replaceAll('CREATE TABLE IF NOT EXISTS','CREATE TEMP TABLE IF NOT EXISTS'));
     const pool=chapters.EXAM_SUBJECTS.flatMap((subject,s)=>Array.from({length:30},(_,n)=>({id:s*100+n+1,subject,chapter:chapters.chapterGroups(subject)[0].chapters[n<15?0:1]})));
     await client.query(`INSERT INTO questions(id,question_set_id,subject,chapter,question,answer,option_a,option_b,explanation)
       SELECT id,1,subject,chapter,'Fixture '||id,'A','A','B','Fixture explanation' FROM jsonb_to_recordset($1::jsonb) AS item(id integer,subject text,chapter text)`,[JSON.stringify(pool)]);
@@ -101,8 +103,8 @@ test('PostgreSQL daily persistence, shared follow-up, 12/30 resume, history, nex
     assert.equal((await daily.ensureDailyTask(client,'alice')).task.id,taskId);
     assert.deepEqual(view.task.summary,[]);assert.equal(view.receipts.length,0);assert.doesNotMatch(JSON.stringify(view.task.current),/source|chapter|subject|answer_key/);
     const links=(await client.query('SELECT * FROM daily_task_items WHERE task_id=$1 ORDER BY position',[taskId])).rows;
-    assert.equal(links.filter(r=>r.source==='follow_up').length,2);assert.equal(links.filter(r=>r.source==='weakness').length,8);assert.equal(links.filter(r=>r.source==='normal').length,20);
-    assert(links.some(r=>r.source==='normal'&&r.source_question_id===530),'persisted due card reaches daily normal selection');
+    assert.equal(links.filter(r=>r.source==='follow_up').length,2);assert.equal(links.filter(r=>r.source==='weakness').length,0);assert.equal(links.filter(r=>r.source==='normal').length,28);
+    assert(view.coach.groups.find(g=>g.key==='review').total>0,'due evidence becomes a persisted review task');
     assert.equal(new Set(links.map(r=>r.source_question_id)).size,30);
     const trackedItems=links.filter(r=>r.source==='follow_up');
     const sessionId=trackedItems[0].session_id;
@@ -126,6 +128,7 @@ test('PostgreSQL daily persistence, shared follow-up, 12/30 resume, history, nex
     view=await daily.setDailyTarget(client,'alice',40);assert.equal(view.target,40);assert.equal(view.task.total,30);assert.equal(view.task.target,30);
     assert.equal((await daily.ensureDailyTask(client,'alice')).task.id,taskId);
     await client.query('SAVEPOINT unique_date');await assert.rejects(client.query('INSERT INTO daily_tasks(id,user_id,local_date,target_count) SELECT $1,user_id,local_date,30 FROM daily_tasks WHERE id=$2',[randomUUID(),taskId]),e=>e.code==='23505');await client.query('ROLLBACK TO SAVEPOINT unique_date');
+    await client.query("INSERT INTO diagnostic_sessions(id,user_id,completed_at) VALUES($1,'bob',CURRENT_TIMESTAMP)",[randomUUID()]);
     await daily.setDailyTarget(client,'bob',6);let yesterday=await daily.ensureDailyTask(client,'bob');
     const oldId=yesterday.task.id,oldIds=(await client.query('SELECT source_question_id FROM daily_task_items WHERE task_id=$1',[oldId])).rows.map(r=>r.source_question_id);
     yesterday=await daily.answerDailyTask(client,'bob',{taskId:oldId,position:yesterday.task.current.position,answer:'B'});

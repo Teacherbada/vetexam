@@ -10,6 +10,8 @@ export function loadMemoryModule(path, mocks = {}) {
     if (name === 'server-only') return {};
     if (Object.hasOwn(mocks,name)) return mocks[name];
     if (name === 'ts-fsrs') return require(name);
+    if (name === './featured-explanation-legacy') return loadMemoryModule('lib/featured-explanation-legacy.ts');
+    if (name === './question-answer' || name === '@/lib/question-answer') return loadMemoryModule('lib/question-answer.ts');
     throw new Error('Unexpected import '+name);
   }, exports);
   return exports;

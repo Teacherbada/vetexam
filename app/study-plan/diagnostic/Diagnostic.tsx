@@ -111,6 +111,7 @@ export default function Diagnostic({ preview = false, confirmation = false }: { 
         <div className={styles.results}>{session.results.map(row => <div key={row.subject}><h3>{row.subject}</h3><p>{row.total ? `${row.correct} / ${row.total}` : "尚無可用題目"}</p><p className="study-muted">{row.insufficient ? "資料不足，暫不判定" : row.suspect ? "目前可能需要進一步確認" : "本次未列為優先確認科目"}</p></div>)}</div>
         <p>這只是初步診斷。VetExam 接下來會針對目前表現較弱的科目進一步確認，避免因題目數不足而誤判。</p>
         <Link href="/study-plan/confirmation" className="study-button study-button-primary">繼續弱點確認<StudyIcon name="arrow" /></Link>
+        <Link href="/study-plan" className="study-button">查看今日教練安排<StudyIcon name="arrow" /></Link>
         <p className="study-muted">透過更多不同題目確認科目與章節表現；資料不足時不判定章節弱點。</p>
         <Link href="/subjects" className="study-text-link">先繼續一般練習<StudyIcon name="arrow" /></Link>
       </section>}

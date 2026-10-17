@@ -1,0 +1,12 @@
+.stack { display: grid; gap: 14px; min-width: 0; overflow-wrap: anywhere; }
+.cards { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: var(--ui-grid-gap,16px); }
+.cards > section { align-content: start; }
+.stack > :is(a,button) { justify-self: start; max-width: 100%; white-space: normal; }
+.stack h2,.stack h3 { font-weight: 600; }
+.stack ul { list-style: disc; padding-left: 22px; }
+.stack button:disabled { opacity: .65; }
+.switcher { display: flex; flex-wrap: wrap; gap: 8px; }
+.switcher button[aria-pressed="true"] { border-color: var(--primary); background: var(--primary-light); }
+.image { max-width: 100%; height: auto; }
+.receipt { border-top: 1px solid var(--border); padding-block: 16px; display: grid; gap: 12px; }
+@media(max-width:800px) { .cards { grid-template-columns: minmax(0,1fr); } }

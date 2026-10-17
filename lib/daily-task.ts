@@ -3,9 +3,10 @@ import type { Candidate } from './diagnostic';
 import { DAILY_TASK_NORMAL_RATIO, DAILY_TASK_WEAKNESS_RATIO, DAILY_TASK_REVIEW_RATIO, MAX_WEAKNESS_RATIO_PER_DAILY_TASK, MAX_CHAPTER_RATIO_PER_DAILY_TASK, DAILY_TASK_RECENT_DAYS, DAILY_TASK_TIME_ZONE, DAILY_TARGET_MIN, DAILY_TARGET_MAX } from './daily-task-config';
 import { FOLLOW_UP_QUESTION_COUNT } from './follow-up-config';
 import type { MemorySignal } from './question-memory-service';
+import type {CoachGroupView,CoachFeedback} from './coach-daily';
 export type DailyCandidate = Candidate & { last_seen: string | null; appearances: number };
 export type DailySource = 'normal' | 'weakness' | 'follow_up';
-export type DailyReceipt = { eventId: string; id: number; subject: string; question: string; options: string[]; answer: string; explanation: string; image: string | null; userAnswer: string; correct: boolean };
+export type DailyReceipt = { eventId: string; position?:number; id: number; subject: string; question: string; options: string[]; answer: string; explanation: string; image: string | null; userAnswer: string; correct: boolean };
 export type DailyView = {
   mode: string | null; owner: string; date: string; target: number;
   active: { subject: string; chapter: string; status: string } | null;
@@ -14,6 +15,7 @@ export type DailyView = {
     current: null | { position: number; question: string; options: string[]; image: string | null };
     summary: { source: DailySource; total: number; correct: number }[]; followUpsCompleted: number };
   receipts: DailyReceipt[];
+  coach?: {diagnostic: null|{answered:number;total:number};groups:CoachGroupView[];feedback:CoachFeedback|null;legacy:boolean;week:{answered:number;correct:number;days:number}};
 };
 export function dailyLocalDate(now = new Date()) {
   return new Intl.DateTimeFormat('en-CA', { timeZone: DAILY_TASK_TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
