@@ -10,6 +10,8 @@ import type { Candidate } from '@/lib/diagnostic';
 import { dailyMemorySignals } from '@/lib/question-memory-service';
 import {COACH_GROUPS,coachQuotas,coachNeedsDiagnostic,selectCoachQuestions,coachGroupViews,coachFeedback,type CoachPlan,type CoachGroup} from './coach-daily';
 import {readCoachEvidence,coachReadiness} from './coach-daily-service';
+import {busyPositions,dueReviews,focusForWeek} from './coach-personalization';
+import {readCoachState} from './coach-personalization-service';
 
 type LinkItem = Candidate & { session_id: string; item_position: number; source: DailySource; follow_up_id: string | null; group?:CoachGroup };
 type StoredItem = LinkItem & { position: number; question: string; options: string[]; image: string | null; answer_key: string; selected_answer: string | null; is_correct: boolean | null; explanation: string };
@@ -60,7 +62,8 @@ export async function readDailyTask(client: PoolClient, userId: string): Promise
     followUpsCompleted = done.rows[0].count;
   }
   const plan=tasks[0].coach_plan as CoachPlan|null;
-  return { ...base, receipts,coach:{diagnostic:null,groups:plan?.version===2?coachGroupViews(plan,rows):[],feedback:completed?coachFeedback(rows):null,legacy:!plan,week}, task:{ id:tasks[0].id,target:tasks[0].target_count,total:rows.length,answered:receipts.length,completed,
+  const compact=plan?.busy?{...coachGroupViews({...plan,groups:[{key:'review',positions:plan.busy.positions,focus:[],repeated:0,reason:'從原計畫優先保留記憶複習、弱點特訓，再補綜合挑戰。正常任務與已完成進度全部保留。'}]},rows)[0],key:'busy' as const,enabled:plan.busy.enabled}:undefined;
+  return { ...base, receipts,coach:{diagnostic:null,groups:plan?.version===2?coachGroupViews(plan,rows):[],busy:compact,feedback:completed?coachFeedback(rows):null,legacy:!plan,week}, task:{ id:tasks[0].id,target:tasks[0].target_count,total:rows.length,answered:receipts.length,completed,
     correct:completed ? receipts.filter(row=>row.correct).length : null,
     current:current ? { position:current.position,question:current.question,options:current.options,image:current.image } : null,
     summary:completed ? (['normal','weakness','follow_up'] as const).map(source => ({ source,total:rows.filter(row=>row.source===source).length,correct:rows.filter(row=>row.source===source && row.is_correct).length })) : [],followUpsCompleted } };
@@ -74,6 +77,7 @@ export async function ensureDailyTask(client: PoolClient, userId: string): Promi
   if (existing.rows.length) return readDailyTask(client,userId);
   const evidence=await readCoachEvidence(client,userId),initial=await coachReadiness(client,userId);
   if(coachNeedsDiagnostic(evidence,initial.completed))return readDailyTask(client,userId);
+  const personal=await readCoachState(client,userId);
   const streams: LinkItem[][] = [];
   const reserved: LinkItem[] = [];
   const quota = coachQuotas(config.target);
@@ -102,7 +106,7 @@ export async function ensureDailyTask(client: PoolClient, userId: string): Promi
     const past = history.rows.find(old=>old.id===row.id);
     const lastSeen = [past?.last_seen,row.last_answered].filter(Boolean).sort((a,b)=>Date.parse(b)-Date.parse(a))[0] ?? null;
     return {...row,last_seen:lastSeen,appearances:past?.appearances ?? 0};
-  }),config.target,reserved.map(r=>r.id),evidence,Date.now(),memory);
+  }),config.target,reserved.map(r=>r.id),evidence,Date.now(),memory,{reviews:dueReviews(personal,config.date),focus:focusForWeek(personal,config.date),deferred:Object.entries(personal.reviews).filter(([,r])=>r.due>config.date).map(([key])=>key)});
   for(const group of COACH_GROUPS){
    const selected=selection.selected.filter(s=>s.group===group).map(s=>s.row);
    if (selected.length) {
@@ -126,6 +130,19 @@ export async function ensureDailyTask(client: PoolClient, userId: string): Promi
 export async function setDailyTarget(client: PoolClient, userId: string, target: number) {
   await planMode(client,userId,true);
   await client.query('UPDATE study_plans SET daily_question_target=$2 WHERE user_id=$1',[userId,target]);
+  return readDailyTask(client,userId);
+}
+export async function setBusyMode(client:PoolClient,userId:string,enabled:boolean) {
+  await planMode(client,userId,true);
+  const config=await settings(client,userId);
+  const {rows:tasks}=await client.query('SELECT id,coach_plan FROM daily_tasks WHERE user_id=$1 AND local_date=$2::date FOR UPDATE',[userId,config.date]);
+  const task=tasks[0],plan=task?.coach_plan as CoachPlan|null;
+  if(!plan||plan.version!==2)throw new DiagnosticError(409,'請先完成初始診斷；原有舊版任務會保留，精簡模式從新建日程開始提供。');
+  if(!plan.busy){const rows=await items(client,userId,task.id);const positions=busyPositions(plan,rows);
+    if(!positions.length)throw new DiagnosticError(409,'今日正常任務已完成，不需要建立精簡任務。');
+    plan.busy={enabled,positions};
+  }else plan.busy.enabled=enabled;
+  await client.query('UPDATE daily_tasks SET coach_plan=$2::jsonb WHERE id=$1',[task.id,JSON.stringify(plan)]);
   return readDailyTask(client,userId);
 }
 export async function answerDailyTask(client: PoolClient, userId: string, submission: { taskId: string; position: number; answer: string }) {

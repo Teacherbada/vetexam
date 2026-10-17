@@ -1,3 +1,4 @@
+import {loadCoach} from './helpers/coach-v2-fixture.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
@@ -15,6 +16,7 @@ function load(path, mocks = {}) {
   new Function('require', 'exports', code)(name => {
     if (name === 'server-only') return {};
     if (Object.hasOwn(mocks, name)) return mocks[name];
+    if(['./coach-personalization-service','./coach-personalization'].includes(name))return loadCoach('lib/'+name.slice(2)+'.ts');
     throw new Error('Unexpected import ' + name);
   }, exports);
   return exports;

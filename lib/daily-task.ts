@@ -15,7 +15,7 @@ export type DailyView = {
     current: null | { position: number; question: string; options: string[]; image: string | null };
     summary: { source: DailySource; total: number; correct: number }[]; followUpsCompleted: number };
   receipts: DailyReceipt[];
-  coach?: {diagnostic: null|{answered:number;total:number};groups:CoachGroupView[];feedback:CoachFeedback|null;legacy:boolean;week:{answered:number;correct:number;days:number}};
+  coach?: {diagnostic: null|{answered:number;total:number};groups:CoachGroupView[];busy?:Omit<CoachGroupView,'key'>&{key:'busy';enabled:boolean};feedback:CoachFeedback|null;legacy:boolean;week:{answered:number;correct:number;days:number}};
 };
 export function dailyLocalDate(now = new Date()) {
   return new Intl.DateTimeFormat('en-CA', { timeZone: DAILY_TASK_TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);

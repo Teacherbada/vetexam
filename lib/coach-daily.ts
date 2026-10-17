@@ -1,12 +1,13 @@
 import {EXAM_SUBJECTS,validChapter} from '../data/exam-chapters';
 import type {DailyCandidate} from './daily-task';
+import type {ChapterReview} from './coach-personalization';
 export const COACH_GROUPS=['weakness','review','challenge'] as const;
 export type CoachGroup=typeof COACH_GROUPS[number];
 export const COACH_NAMES:Record<CoachGroup,string>={weakness:'弱點特訓',review:'記憶複習',challenge:'綜合挑戰'};
 export const COACH_RULES={recentDays:30,avoidDays:7,chapterMinimum:5,subjectMinimum:10,weakAccuracy:0.7,diagnosticMinimum:12,diagnosticSubjects:3,weakRatio:0.35,reviewRatio:0.25} as const;
-export type CoachEvidence={id:number;subject:string;chapter:string|null;correct:boolean;wrong_count:number;last_answered:string;due:string|null;last_review:string|null};
-export type CoachTarget={subject:string;chapter:string|null;count:number;correct:number;repeated:number};
-export type CoachPlan={version:2;asOf:string;evidenceCount:number;groups:{key:CoachGroup;reason:string;positions:number[];focus:string[];repeated:number}[]};
+export type CoachEvidence={id:number;subject:string;chapter:string|null;correct:boolean;previous_correct?:boolean|null;wrong_count:number;last_answered:string;due:string|null;last_review:string|null};
+export type CoachTarget={subject:string;chapter:string|null;count:number;correct:number;repeated:number;declines:number};
+export type CoachPlan={version:2;asOf:string;evidenceCount:number;busy?:{enabled:boolean;positions:number[]};groups:{key:CoachGroup;reason:string;positions:number[];focus:string[];repeated:number}[]};
 export type CoachFeedback={answered:number;correct:number;accuracy:number|null;strong:string[];revisit:string[];comment:string;next:string};
 export type CoachItem={position:number;subject:string;chapter:string|null;selected_answer:string|null;is_correct:boolean|null;question:string;options:string[];image:string|null};
 export type CoachGroupView=CoachPlan['groups'][number]&{total:number;answered:number;completed:boolean;current:{position:number;question:string;options:string[];image:string|null}|null;feedback:CoachFeedback|null};
@@ -15,14 +16,14 @@ const chapter=(r:{subject:string;chapter:string|null})=>r.chapter&&validChapter(
 export function coachTargets(evidence:CoachEvidence[]):CoachTarget[]{
  const groups=new Map<string,CoachTarget>();
  for(const e of evidence){if(!EXAM_SUBJECTS.includes(e.subject))continue;
-  for(const c of [null,...(chapter(e)?[chapter(e)]:[])]){const k=key(e.subject,c),g=groups.get(k)??{subject:e.subject,chapter:c,count:0,correct:0,repeated:0};g.count++;g.correct+=Number(e.correct);g.repeated+=Number(e.wrong_count>=2);groups.set(k,g);}
+  for(const c of [null,...(chapter(e)?[chapter(e)]:[])]){const k=key(e.subject,c),g=groups.get(k)??{subject:e.subject,chapter:c,count:0,correct:0,repeated:0,declines:0};g.count++;g.correct+=Number(e.correct);g.repeated+=Number(e.wrong_count>=2);g.declines+=Number(e.previous_correct===true&&!e.correct);groups.set(k,g);}
  }
  return [...groups.values()].filter(g=>g.count>=(g.chapter?COACH_RULES.chapterMinimum:COACH_RULES.subjectMinimum)&&g.correct/g.count<COACH_RULES.weakAccuracy)
-  .sort((a,b)=>a.correct/a.count-b.correct/b.count||b.repeated-a.repeated||b.count-a.count||a.subject.localeCompare(b.subject));
+  .sort((a,b)=>a.correct/a.count-b.correct/b.count||b.declines-a.declines||b.repeated-a.repeated||b.count-a.count||a.subject.localeCompare(b.subject));
 }
 export function coachNeedsDiagnostic(evidence:CoachEvidence[],initialCompleted:boolean){return !initialCompleted&&(evidence.length<COACH_RULES.diagnosticMinimum||new Set(evidence.map(e=>e.subject)).size<COACH_RULES.diagnosticSubjects);}
 export function coachQuotas(target:number){return {weakness:Math.max(1,Math.floor(target*COACH_RULES.weakRatio)),review:Math.max(1,Math.floor(target*COACH_RULES.reviewRatio))};}
-export function selectCoachQuestions(candidates:DailyCandidate[],target:number,reserved:number[],evidence:CoachEvidence[],now:number,memory:ReadonlyMap<number,{due:string;last_review:string|null}>=new Map()){
+export function selectCoachQuestions(candidates:DailyCandidate[],target:number,reserved:number[],evidence:CoachEvidence[],now:number,memory:ReadonlyMap<number,{due:string;last_review:string|null}>=new Map(),personal:{reviews:ChapterReview[];focus:string|null;deferred?:string[]}={reviews:[],focus:null}){
  const pool=[...new Map(candidates.filter(c=>EXAM_SUBJECTS.includes(c.subject)).map(c=>[c.id,c])).values()];
  const used=new Set(reserved),history=new Map(evidence.map(e=>[e.id,e])),targets=coachTargets(evidence),quota=coachQuotas(target);
  const selected:{row:DailyCandidate;group:CoachGroup}[]=[],reasons:Record<CoachGroup,string>={
@@ -33,23 +34,34 @@ export function selectCoachQuestions(candidates:DailyCandidate[],target:number,r
  const recent=(c:DailyCandidate)=>Number(time(c)>=now-COACH_RULES.avoidDays*86400000);
  const sort=(a:DailyCandidate,b:DailyCandidate)=>recent(a)-recent(b)||time(a)-time(b)||a.appearances-b.appearances||a.id-b.id;
  const take=(rows:DailyCandidate[],count:number,group:CoachGroup)=>{for(const row of rows){if(count<=0||selected.length+reserved.length>=target)break;if(used.has(row.id))continue;used.add(row.id);selected.push({row,group});count--;}};
+ // Due chapter reviews claim their quota before weakness or preference can take it.
+ for(const review of personal.reviews){
+  const available=pool.filter(c=>c.subject===review.subject&&chapter(c)===review.chapter).sort((a,b)=>Number(a.id===review.questionId)-Number(b.id===review.questionId)||sort(a,b));
+  take(available,Math.max(0,quota.review-reserved.length-selected.filter(s=>s.group==='review').length),'review');
+ }
  // Choose a reliable chapter first; expand within the same subject only if necessary.
  const focus=targets.find(t=>t.chapter)??targets[0];
  if(focus){const exact=pool.filter(c=>c.subject===focus.subject&&(!focus.chapter||chapter(c)===focus.chapter)).sort(sort);
-  take(exact,quota.weakness,'weakness');const n=selected.length;
+  take(exact,quota.weakness,'weakness');const n=selected.filter(s=>s.group==='weakness').length;
   if(n<quota.weakness)take(pool.filter(c=>c.subject===focus.subject).sort(sort),quota.weakness-n,'weakness');
-  reasons.weakness=`最近 30 天「${focus.subject}${focus.chapter?'－'+focus.chapter:''}」${focus.count} 道不同題目答對 ${focus.correct} 題，${focus.repeated} 題曾重複答錯。優先加強此範圍；題量不足時補同科其他章節。`;
+  reasons.weakness=`最近 30 天「${focus.subject}${focus.chapter?'－'+focus.chapter:''}」${focus.count} 道不同題目答對 ${focus.correct} 題，${focus.repeated} 題曾重複答錯，${focus.declines} 題由前次答對轉為答錯。優先加強此範圍；題量不足時補同科其他章節。`;
  }
  const due=pool.flatMap(c=>{const m=memory.get(c.id),e=history.get(c.id);return m&&Date.parse(m.due)<=now&&(!e||!m.last_review||Date.parse(e.last_answered)<=Date.parse(m.last_review))?[e??{...c,correct:true,wrong_count:0,last_answered:m.last_review??'',...m}]:[];});
- const wrong=evidence.filter(e=>!e.correct).sort((a,b)=>b.wrong_count-a.wrong_count||Date.parse(b.last_answered)-Date.parse(a.last_answered));
+ const wrong=evidence.filter(e=>!e.correct&&!personal.deferred?.includes(key(e.subject,chapter(e)))).sort((a,b)=>b.wrong_count-a.wrong_count||Date.parse(b.last_answered)-Date.parse(a.last_answered));
  const anchors=[...new Map([...due,...wrong].map(e=>[e.id,e])).values()],anchorIds=new Set(anchors.map(e=>e.id));
  const matching=new Set(anchors.filter(e=>chapter(e)).map(e=>key(e.subject,chapter(e))));
  const reviewPool=pool.filter(c=>anchorIds.has(c.id)||matching.has(key(c.subject,chapter(c))));
  reviewPool.sort((a,b)=>Number(anchorIds.has(a.id))-Number(anchorIds.has(b.id))||sort(a,b));
- take(reviewPool,Math.max(0,quota.review-reserved.length),'review');
+ take(reviewPool,Math.max(0,quota.review-reserved.length-selected.filter(s=>s.group==='review').length),'review');
  if(anchors.length||reserved.length)reasons.review=`依${[reserved.length?'既有到期章節追蹤':'',due.length?'到期記憶':'',wrong.length?'近期錯題':''].filter(Boolean).join('、')}安排。優先選同章節其他題目，題量不足的配額轉為綜合挑戰；目前只比對章節，不推測相同考點。`;
+ if(personal.reviews.length)reasons.review=`目前有 ${personal.reviews.length} 個已到期章節，在可用配額內依到期日與重複錯誤安排間隔複習。先選同章節其他題目，這不代表相同考點；不足時使用原題或減少題數。${personal.reviews.some(r=>r.lapses>0)?'包含延遲確認時再次答錯的章節。':''}`;
  // Balance the remaining quota across subjects, without duplicating IDs in the day.
  const counts=new Map<string,number>();
+ // Preference is a bounded portion of challenge, never replaces due/weakness slots.
+ const focusBudget=Math.floor((target-reserved.length-selected.length)/3);
+ if(personal.focus&&focusBudget>0){take(pool.filter(c=>c.subject===personal.focus).sort(sort),focusBudget,'challenge');
+  counts.set(personal.focus,selected.filter(s=>s.group==='challenge').length);
+  reasons.challenge=`本週優先「${personal.focus}」，額外優先分配約三分之一的綜合挑戰名額，其餘繼續跨科練習。已到期複習與實際弱點優先保留。`;}
  while(selected.length+reserved.length<target){const rest=pool.filter(c=>!used.has(c.id)).sort((a,b)=>recent(a)-recent(b)||(counts.get(a.subject)??0)-(counts.get(b.subject)??0)||sort(a,b));if(!rest.length)break;
   take([rest[0]],1,'challenge');counts.set(rest[0].subject,(counts.get(rest[0].subject)??0)+1);}
  return {selected,reasons,evidenceCount:evidence.length};
@@ -64,6 +76,6 @@ export function coachFeedback(rows:CoachItem[]):CoachFeedback{
   next:revisit.length?`下次先複習「${revisit[0]}」相關教材，再以其他題目確認理解；明日依最新紀錄重新安排。`:'下次繼續跨科練習並檢查到期複習，累積更多證據；明日依最新紀錄重新安排。'};
 }
 export function coachGroupViews(plan:CoachPlan,rows:CoachItem[]):CoachGroupView[]{return plan.groups.map(group=>{
- const own=rows.filter(r=>group.positions.includes(r.position)),pending=own.find(r=>r.selected_answer===null),answered=own.filter(r=>r.selected_answer!==null).length,completed=own.length>0&&!pending;
+ const own=rows.filter(r=>group.positions.includes(r.position)).sort((a,b)=>group.positions.indexOf(a.position)-group.positions.indexOf(b.position)),pending=own.find(r=>r.selected_answer===null),answered=own.filter(r=>r.selected_answer!==null).length,completed=own.length>0&&!pending;
  return {...group,total:own.length,answered,completed,current:pending?{position:pending.position,question:pending.question,options:pending.options,image:pending.image}:null,feedback:completed?coachFeedback(own):null};
 });}

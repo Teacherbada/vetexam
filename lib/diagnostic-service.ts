@@ -6,6 +6,7 @@ import { usableAnswer } from "@/lib/question-answer";
 import { recordFirstAnswers } from "@/lib/question-stats";
 import { DIAGNOSTIC_CONFIG, selectDiagnosticQuestions, summarizeDiagnostic, type Candidate, type DiagnosticView, type DiagnosticKind, type parseDiagnosticAnswer } from "@/lib/diagnostic";
 import type { VerificationMetadata } from "@/lib/reinforcement";
+import { recordCoachReview } from './coach-personalization-service';
 
 export class DiagnosticError extends Error {
   constructor(public status: number, message: string) { super(message); }
@@ -120,8 +121,9 @@ export async function answerDiagnostic(client: PoolClient, userId: string, submi
   await client.query("LOCK TABLE question_answer_stats IN ROW EXCLUSIVE MODE");
   if (item.question_id !== null) await recordFirstAnswers(async (text, values) => (await client.query(text, values)).rows, userId,
     [{ question_id: item.question_id, selected_answer: submission.answer }]);
-  await client.query(`UPDATE diagnostic_items SET selected_answer = $3, is_correct = ($3 = ANY(vetexam_answer_keys(answer_key))), answered_at = CURRENT_TIMESTAMP
-    WHERE session_id = $1 AND position = $2 AND selected_answer IS NULL`, [submission.sessionId, item.position, submission.answer]);
+  const saved = await client.query(`UPDATE diagnostic_items SET selected_answer = $3, is_correct = ($3 = ANY(vetexam_answer_keys(answer_key))), answered_at = CURRENT_TIMESTAMP
+    WHERE session_id = $1 AND position = $2 AND selected_answer IS NULL RETURNING is_correct`, [submission.sessionId, item.position, submission.answer]);
+  if (kind !== 'custom' && saved.rows[0]) await recordCoachReview(client,userId,item,saved.rows[0].is_correct);
   if (rows.filter(row => row.selected_answer === null).length === 1) {
     await client.query("UPDATE diagnostic_sessions SET completed_at = CURRENT_TIMESTAMP WHERE id = $1 AND completed_at IS NULL", [submission.sessionId]);
   }

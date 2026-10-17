@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { questionTransaction } from '@/lib/question-transaction';
 import { DiagnosticError } from '@/lib/diagnostic-service';
-import { answerDailyTask, ensureDailyTask, readDailyTask, setDailyTarget } from '@/lib/daily-task-service';
+import { answerDailyTask, ensureDailyTask, readDailyTask, setDailyTarget, setBusyMode } from '@/lib/daily-task-service';
 import { validDailyTarget } from '@/lib/daily-task';
 import { DAILY_TARGET_MAX } from '@/lib/daily-task-config';
 import { validTaskId } from '@/lib/reinforcement';
@@ -27,6 +27,7 @@ async function handle(request: Request,action: 'read'|'start'|'target'|'answer')
     if (!body || typeof body!=='object' || Array.isArray(body)) return json({error:'資料格式錯誤'},400);
     const row=body as Record<string,unknown>;
     if (action==='target') {
+      if(Object.keys(row).length===1 && typeof row.busy==='boolean')return json(await questionTransaction(client=>setBusyMode(client,userId,row.busy as boolean)));
       if(Object.keys(row).length!==1 || !validDailyTarget(row.target)) return json({error:'每日題數無效'},400);
       const target=row.target;
       return json(await questionTransaction(client=>setDailyTarget(client,userId,target)));

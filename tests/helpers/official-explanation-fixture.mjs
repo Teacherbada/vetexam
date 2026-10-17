@@ -12,6 +12,7 @@ export function load(path, mocks = {}) {
   new Function('require', 'exports', code)(name => {
     if (name === 'server-only' || name.endsWith('.css')) return {};
     if (name in mocks) return mocks[name];
+    if (name === './coach-personalization-service') return load('lib/coach-personalization-service.ts', {'./coach-personalization':load('lib/coach-personalization.ts',{'../data/exam-chapters':load('data/exam-chapters.ts')})});
     if (name === './question-answer' || name === '@/lib/question-answer') return load('lib/question-answer.ts');
     if (name === './exam-year' || name === '@/lib/exam-year') return load('lib/exam-year.ts');
     if (name.startsWith('node:') || name.startsWith('react')) return require(name);

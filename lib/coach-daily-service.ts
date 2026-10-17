@@ -17,6 +17,7 @@ export async function readCoachEvidence(client:PoolClient,userId:string):Promise
    AND NOT EXISTS(SELECT 1 FROM events e WHERE e.id=s.question_id)
  ), summary AS (
   SELECT id,(array_agg(correct ORDER BY at DESC,correct ASC))[1] correct,
+   (array_agg(correct ORDER BY at DESC,correct ASC))[2] previous_correct,
    count(*) FILTER(WHERE NOT correct)::int wrong_count,max(at)::text last_answered FROM evidence GROUP BY id
  ) SELECT s.*,q.subject,q.chapter,m.due::text,m.last_review::text
  FROM summary s JOIN questions q ON q.id=s.id JOIN question_sets qs ON qs.id=q.question_set_id

@@ -9,7 +9,7 @@ import { diagnosticTestConnectionString } from './diagnostic-database.mjs';
 import { memoryService } from './memory-test-loader.mjs';
 import {loadCoach} from './helpers/coach-v2-fixture.mjs';
 function load(path,mocks={}) {
-  const exports={};new Function('require','exports',ts.transpileModule(readFileSync(new URL('../'+path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText)(name=>{if(name==='server-only')return{};if(name==='../lib/learning-client')return{learningOwner:()=>null};if(Object.hasOwn(mocks,name))return mocks[name];throw new Error('Unexpected import '+name)},exports);return exports;
+  const exports={};new Function('require','exports',ts.transpileModule(readFileSync(new URL('../'+path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText)(name=>{if(name==='server-only')return{};if(name==='../lib/learning-client')return{learningOwner:()=>null};if(Object.hasOwn(mocks,name))return mocks[name];if(['./coach-personalization-service','./coach-personalization'].includes(name))return loadCoach('lib/'+name.slice(2)+'.ts');throw new Error('Unexpected import '+name)},exports);return exports;
 }
 const chapters=load('data/exam-chapters.ts'),followConfig=load('lib/follow-up-config.ts');
 const config=load('lib/daily-task-config.ts',{'../data/tasks':load('data/tasks.ts')});
