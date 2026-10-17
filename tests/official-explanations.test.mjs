@@ -29,7 +29,7 @@ test('real SQL: add, reload, edit, retry, conflict, rollback; preserve all other
     assert.equal(second.explanation, '既有解析不能遺失');
     await f.save({ ...payload(second), explanation: second.explanation + '\n\n' + markdown });
     await assert.rejects(f.db.transaction(async tx => {
-      await service.saveExplanation(tx, { ...payload(saved), explanation: 'should rollback' }); throw Error('rollback test');
+      await service.saveExplanation(tx, service.parseExplanation({ ...payload(saved), explanation: 'should rollback' })); throw Error('rollback test');
     }), /rollback test/);
     assert.equal((await service.readExplanation(f.sql.query, 1)).explanation, markdown);
     for (const id of [3, 4, 999]) {
@@ -37,7 +37,7 @@ test('real SQL: add, reload, edit, retry, conflict, rollback; preserve all other
       await assert.rejects(f.save({ ...payload(saved), id }), { status: 404 });
     }
     const after = await f.sql.query('SELECT * FROM questions ORDER BY id', []);
-    const strip = rows => rows.map(value => { const row = { ...value }; delete row.explanation; delete row.explanation_status; delete row.explanation_version; return row; });
+    const strip = rows => rows.map(value => { const row = { ...value }; delete row.explanation; delete row.explanation_status; delete row.explanation_version;delete row.explanation_binding; return row; });
     assert.deepEqual(strip(before), strip(after));
     assert.deepEqual(after.slice(2), before.slice(2));
     assert.deepEqual(await f.sql.query('SELECT * FROM question_answer_stats', []), [{ id: 1, question_id: 1, selected_answer: 'A' }]);
@@ -55,7 +55,7 @@ test('real guard and API: admin only, narrow payload, body limits, CSRF, conflic
     const response = await f.route.GET(req('GET'));
     assert.equal(response.headers.get('cache-control'), 'private, no-store');
     const saved = await response.json();
-    assert.deepEqual(Object.keys(saved).sort(), ['explanation', 'id', 'revision', 'status']);
+    assert.deepEqual(Object.keys(saved).sort(), ['explanation', 'id', 'revision','sourceChanged', 'status']);
     for (const bad of [{ answer: 'A' }, { question: 'overwrite' }, { userId: 'member' }, { kind: 'ai' }, { explanation: '' }, { explanation: '  \n' }, { explanation: 'x'.repeat(20001) }, { explanation: '\0' }, { id: -1 }, { id: '1' }, { revision: 'bad' }]) {
       assert.equal((await f.route.PATCH(req('PATCH', { ...payload(saved), explanation: markdown, ...bad }))).status, 400);
     }

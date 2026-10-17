@@ -17,8 +17,9 @@ export async function GET(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    if (!await requireAdmin(request)) return adminJson({ error: '僅限管理員使用' }, 403);
+    const admin=await requireAdmin(request);
+    if (!admin) return adminJson({ error: '僅限管理員使用' }, 403);
     const input = parseExplanation(await readAdminBody(request));
-    return adminJson(await questionTransaction(client => saveExplanation(client, input)));
+    return adminJson(await questionTransaction(client => saveExplanation(client, input,admin.session.user.id)));
   } catch (error) { return adminError(error); }
 }

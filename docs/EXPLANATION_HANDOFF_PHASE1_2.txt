@@ -1,5 +1,8 @@
 VetExam 國考解析協作：Phase 1／2 操作與後續設計
 
+歷史階段紀錄：目前 Phase 3 已接續實作；新版匯入、收據、來源綁定、發布與撤回的現況
+及 migration／回復方式，以 EXPLANATION_HANDOFF_PHASE3.txt 為準。以下保留 Phase 1／2 交付時紀錄。
+
 基準與範圍
 本次基於 main 4144b763315e19a56e2e07d05e895ff8f485a80e。
 只新增管理員未解析題匯出、新版解析結構驗證及既有匯入介面的預覽。

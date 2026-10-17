@@ -31,7 +31,7 @@ try{
     const req=route.request(),path=new URL(req.url()).pathname;
     const handler=path==='/api/admin/questions/explanation/export'?exportRoute:path==='/api/admin/questions/explanation/import'?f.batchRoute:path==='/api/admin/questions'?f.list:path==='/api/admin/questions/explanation'?f.route:null;
     if(handler){
-      if(path.endsWith('/import')&&req.postDataJSON().action==='import'){writes++;await new Promise(r=>setTimeout(r,200));}
+      if(path.endsWith('/import')&&req.method()==='POST'&&req.postDataJSON().action==='import'){writes++;await new Promise(r=>setTimeout(r,200));}
       const response=await handler[req.method()](new Request(req.url(),{method:req.method(),headers:{...req.headers(),'x-fixture-user':'fixture-admin'},...(req.postData()?{body:req.postData()}: {})}));
       return route.fulfill({status:response.status,headers:Object.fromEntries(response.headers),body:Buffer.from(await response.arrayBuffer())});
     }
@@ -56,16 +56,20 @@ try{
   const sample=JSON.parse(await readFile(new URL('../public/examples/explanation-handoff.example.json',import.meta.url),'utf8')).explanations[0];
   const structured={formatVersion:'vetexam-explanations-v1',explanations:exported.questions.map(q=>({...sample,questionId:q.questionId,questionFingerprint:q.questionFingerprint,sourceFingerprint:q.sourceFingerprint,expectedAnswers:q.officialAnswers,optionExplanations:Object.fromEntries(Object.entries(q.options).filter(([,v])=>v?.trim()).map(([k])=>[k,`選項 ${k} 獨立說明`])),references:[{...sample.references[0],supports:['correctAnswerReason']}],doubts:[],coreConcept:'**合成觀念**\n\n|重點|理由|\n|---|---|\n|C|中文 terminology|\n\n<script>window.__handoffXss=true</script>'}))};
   await file.setInputFiles({name:'handoff.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(structured))});await upload.click();
-  await region.getByText('新版交接僅供內容核對，未寫入。通過項目仍須人工查核，Phase 3 完成前不可匯入或發布。',{exact:true}).waitFor();
-  assert.equal(await region.locator('article').count(),10);assert.equal(await region.getByRole('button',{name:/確認匯入並儲存/}).count(),0);assert(await region.getByLabel('匯入第 1 筆',{exact:true}).isDisabled());
+  await region.getByText('預覽共 10 筆，尚未寫入。預覽有效 15 分鐘。',{exact:true}).waitFor();
+  assert.equal(await region.locator('article').count(),10);assert.equal(await region.getByRole('button',{name:/確認匯入並儲存/}).count(),1);assert(!await region.getByLabel('匯入第 1 筆',{exact:true}).isDisabled());
   await region.locator('article').first().getByText('解析預覽',{exact:true}).click();assert.equal(await region.locator('article').first().locator('table').count(),1);assert.equal(await page.evaluate(()=>window.__handoffXss),undefined);assert.equal(await region.locator('article').first().getByRole('heading',{name:'E',exact:true}).count(),1);
   for(const width of [320,375,768,1280]){await page.setViewportSize({width,height:900});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));}
   await region.locator('article').first().screenshot({path:fileURLToPath(new URL('handoff-preview.png',artifacts))});assert.equal(writes,0);assert.equal((await service.readExplanation(f.sql.query,60)).status,'unwritten');
+  await region.getByRole('button',{name:'勾選全部可匯入',exact:true}).click();await region.getByLabel(/我已核對勾選的題目/).check();
+  await region.getByRole('button',{name:'確認匯入並儲存草稿（10 筆）',exact:true}).evaluate(button=>{button.click();button.click();});
+  await region.getByText('匯入結果：成功 10 筆、失敗 0 筆、略過 0 筆。',{exact:true}).waitFor();assert.equal(writes,1);
+  assert.equal((await service.readExplanation(f.sql.query,60)).status,'draft');assert.equal(await region.locator('a[href*="receiptId="]').count(),1);
   await file.setInputFiles({name:'broken.json',mimeType:'application/json',buffer:Buffer.from('{broken')});await upload.click();
   await region.getByRole('alert').filter({hasText:'JSON 格式錯誤'}).waitFor();
   const input={explanations:[...Array.from({length:20},(_,i)=>item(i+10)),item(2,{expectedAnswer:'B'}),item(999),item(40,{expectedAnswer:'A'})]};
   await file.setInputFiles({name:'explanations.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(input))});await upload.click();
-  await region.getByText('預覽共 23 筆，尚未寫入。預覽有效 15 分鐘。',{exact:true}).waitFor();assert.equal(writes,0);
+  await region.getByText('預覽共 23 筆，尚未寫入。預覽有效 15 分鐘。',{exact:true}).waitFor();assert.equal(writes,1);
   assert.equal((await service.readExplanation(f.sql.query,10)).status,'unwritten');
   assert(await region.getByLabel('匯入第 21 筆',{exact:true}).isDisabled());
   assert(await region.getByLabel('匯入第 22 筆',{exact:true}).isDisabled());
@@ -80,7 +84,7 @@ try{
   const apply=region.getByRole('button',{name:'確認匯入並儲存草稿（20 筆）',exact:true});assert(await apply.isDisabled());
   await region.getByLabel(/我已核對勾選的題目/).check();
   await apply.evaluate(button=>{button.click();button.click();});
-  await region.getByText('匯入結果：成功 20 筆、失敗 0 筆、略過 3 筆。',{exact:true}).waitFor();assert.equal(writes,1);
+  await region.getByText('匯入結果：成功 20 筆、失敗 0 筆、略過 3 筆。',{exact:true}).waitFor();assert.equal(writes,2);
   for(let id=10;id<30;id++)assert.equal((await service.readExplanation(f.sql.query,id)).status,'draft');
   await upload.click();await region.getByText('預覽共 23 筆，尚未寫入。預覽有效 15 分鐘。',{exact:true}).waitFor();
   assert(await region.getByLabel('匯入第 1 筆',{exact:true}).isDisabled());
@@ -88,6 +92,14 @@ try{
   const editor=page.getByLabel('精選解析內容',{exact:true});await editor.waitFor();
   await page.waitForFunction(()=>!document.querySelector('textarea[rows="16"]')?.disabled);
   assert.equal(await editor.inputValue(),input.explanations[0].explanation);
+  const editPanel=page.getByRole('region',{name:'精選解析編輯'});
+  await editPanel.getByLabel('我已人工核對解析及參考資料，確認與題庫答案一致。').check();await editPanel.getByRole('button',{name:'發布解析',exact:true}).click();
+  await editPanel.getByText(/已人工確認並發布解析/).waitFor();assert.equal((await service.readExplanation(f.sql.query,10)).status,'published');
+  await editPanel.getByRole('button',{name:'取消發布',exact:true}).click();await editPanel.getByText(/已取消發布，內容保留為草稿/).waitFor();
+  await f.db.exec("UPDATE questions SET answer='A' WHERE id=10");await editPanel.getByRole('button',{name:'重新載入解析',exact:true}).click();
+  const recheck=editPanel.getByLabel('我已重新核對最新題目與來源，確認本解析適用於目前版本。');await recheck.waitFor();assert(await editPanel.getByRole('button',{name:'發布解析',exact:true}).isDisabled());
+  await recheck.check();await editPanel.getByRole('button',{name:'儲存草稿',exact:true}).click();await editPanel.getByText(/草稿已儲存，考生無法閱讀/).waitFor();assert.equal((await service.readExplanation(f.sql.query,10)).sourceChanged,false);
+  for(const width of [375,1280]){await page.setViewportSize({width,height:900});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await editPanel.screenshot({path:fileURLToPath(new URL(`handoff-review-${width}.png`,artifacts))});}
   assert.deepEqual(errors,[]);
   console.log('PASS: real admin UI file parse/preview/categories/selection/Markdown/20 drafts/double-click/replay/reload; 320/375/768/1280 responsive; no browser errors');
 }catch(error){if(page)console.error((await page.locator('body').innerText()).slice(-4000));console.error(log);throw error;}

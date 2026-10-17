@@ -1,6 +1,6 @@
 import 'server-only';
 import {createHash} from 'node:crypto';
-import {QuestionAdminError} from './admin-questions';
+import {QuestionAdminError,issuePreviewToken} from './admin-questions';
 import {validId} from './admin-question-input';
 import {answerKeys} from './question-answer';
 import {parseImport,previewImport,questionFingerprint} from './featured-explanation-import';
@@ -126,6 +126,7 @@ export function structuredMarkdown(item:StructuredExplanation){
     item.references.map((r,i)=>`${i+1}. ${r.title}\n\n<${r.url}>\n\n版本：${r.version??'unknown'}；適用民國年份：${r.applicableYears==='unknown'?'unknown':r.applicableYears.join('、')}\n\n對應區塊：${r.supports.join('、')}\n\n對應敘述：${r.statement}`).join('\n\n')+
     (item.doubts.length?'\n\n### 疑義待人工審核\n'+item.doubts.map(d=>`- ${d.code}：${d.detail}`).join('\n'):'');
 }
+export function handoffTokenFingerprint(item:unknown, version:unknown){return digest(['handoff-import-v1',item,version]);}
 export async function previewHandoff(query:Query,input:unknown,userId:string){
   exact(input,['formatVersion','explanations'],'交接檔');
   if(input.formatVersion!==HANDOFF_FORMAT||!Array.isArray(input.explanations)||!input.explanations.length||input.explanations.length>20)throw new QuestionAdminError('新版格式須為 vetexam-explanations-v1，每批 1–20 題');
@@ -137,7 +138,7 @@ export async function previewHandoff(query:Query,input:unknown,userId:string){
   const converted={explanations:entries.map(e=>e.item?{questionId:e.item.questionId,questionFingerprint:e.item.questionFingerprint,expectedAnswer:e.item.expectedAnswers,explanation:structuredMarkdown(e.item)}:{})};
   const legacy=await previewImport(query,parseImport(converted),userId);
   const previewRows:ExplanationImportRow[]=legacy.rows.map((row,index)=>{
-    // No import capability is returned for the new format until Phase 3 persists version bindings.
+    // Replace the legacy capability with one that binds the entire structured input.
     const {token:discarded,...view}=row;void discarded;
     const entry=entries[index],item=entry.item;if(!item)return {...view,questionId:entry.id??null,category:'invalid',reason:entry.error??'格式無效'};
     const q=byId.get(item.questionId);if(!q)return view;
@@ -145,7 +146,7 @@ export async function previewHandoff(query:Query,input:unknown,userId:string){
     if(question.sourceFingerprint!==item.sourceFingerprint)return {...view,category:'invalid',reason:'題目／圖片／來源快照已變更，請重新匯出並核對'};
     if(JSON.stringify(Object.keys(item.optionExplanations).sort())!==JSON.stringify(letters.filter(k=>question.options[k]?.trim())))return {...view,category:'invalid',reason:'必須逐一提供原題所有實際選項解析，不得缺漏或新增選項'};
     if(question.manualReviewReasons.length||item.doubts.length)return {...view,category:'invalid',reason:'需人工處理：'+[...question.manualReviewReasons,...item.doubts.map(d=>d.code+'：'+d.detail)].join('；')};
-    return view.category==='ready'?{...view,reason:'結構與版本核對通過；來源內容未查證，僅供預覽，未寫入'}:view;
+    return view.category==='ready'?{...view,token:issuePreviewToken(handoffTokenFingerprint(item,q.explanation_version),userId),reason:'結構與版本核對通過；匯入後為草稿，仍須人工查核來源內容'}:view;
   });
-  return {handoffPreview:true,rows:previewRows,notice:'Phase 1／2 僅校驗預覽，未儲存草稿或發布。Phase 3 版本綁定與收據完成前，新版格式禁止匯入。'};
+  return {handoffPreview:true,rows:previewRows,notice:'尚未寫入。勾選確認後只儲存草稿，不會自動發布。'};
 }

@@ -19,4 +19,4 @@ export type ExplanationImportRow = {
 };
 export type ImportSelection = { index: number; token: string };
 export type ImportOutcome = { index: number; questionId: number | null; status: 'success' | 'failed' | 'skipped'; reason: string };
-export type ImportResult = { rows: ImportOutcome[]; success: number; failed: number; skipped: number };
+export type ImportResult = { rows: ImportOutcome[]; success: number; failed: number; skipped: number;receiptId?:string;replayed?:boolean };

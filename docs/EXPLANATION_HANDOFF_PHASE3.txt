@@ -1,0 +1,109 @@
+VetExam 解析協作 Phase 3
+
+範圍
+延續 PR #7 的 Phase 1/2，沿用既有題目維護、匯入、精選解析欄位及 Markdown 元件。
+沒有 AI API、題目內容／答案／圖片寫入、計分修改或正式資料測寫。
+本文件取代 EXPLANATION_HANDOFF_PHASE1_2.txt 中「新版僅預覽」與 Phase 3 尚未實作的描述。
+
+操作
+1. /admin/questions：原「匯出未解析國考題」下載 10 題 JSON 及需要的原圖。
+2. ChatGPT 依 public/examples/explanation-handoff.schema.json 回傳；範例內假 ID／指紋須換成匯出值。
+3. 「批次匯入精選解析」上傳、驗證、勾選、確認儲存草稿。新版最多 20 題，舊版最多 50 題。
+4. 結果提供管理員專用收據連結；「查看最近 20 筆匯入收據」可在重新整理後找回結果。
+5. 題目清單「查看／編輯」：人工核對正文、選項、完整答案集合、原圖及引用，確認後發布。
+6. 「取消發布」只撤下解析、保留正文，不呼叫校對工作台的整題還原。
+7. 題目／來源變動後會撤下已綁定解析。重新載入解析，核對最新資料，勾選重新核對來源，
+   先儲存草稿，再勾選人工審核並發布。不可用舊版直接發布。
+
+API（全部沿用 requireAdmin、private/no-store、POST/PATCH 同源檢查）
+POST /api/admin/questions/explanation/import
+  preview: {action:"preview",input:<原新版或舊版 JSON>}
+  import: {action:"import",input:<同一 JSON>,selected:[{index:0,token:"預覽 token"}],requestId:"UUID"}
+  新版必須提供 requestId；UI 自動產生，失敗重試保留同一值。
+  舊客戶端未提供 requestId 時，以完整 input＋勾選索引的 SHA-256 作為穩定識別。
+  相同 actor/requestId、相同內容回傳原結果並標示 replayed；不同內容回覆 409。
+  replayed.success 是原交易的成功數，不能再當成新的寫入數累加。
+  欄位順序不同也可能算不同 payload，重試應送相同 JSON；token 不納入 payload hash。
+GET /api/admin/questions/explanation/import?receiptId=<id>：原收據及時間。
+GET /api/admin/questions/explanation/import：目前管理員最近 20 筆收據。
+  不回傳持久化原始 input，只有逐筆結果；其他管理員不能查到該 actor 的收據。
+PATCH /api/admin/questions/explanation
+  既有 draft/publish/unpublish；新增 confirmSourceReview:true（明確重新核對後儲存草稿）。
+  發布仍必須 confirmReview:true，並檢查含來源快照的 revision。不可直接提交題目／答案等欄位。
+
+交易與資料
+questions.explanation / explanation_status / explanation_version 繼續存放呈現內容與狀態。
+新增 questions.explanation_binding JSONB：資料庫來源 signature、匯入時兩種指紋、收據 ID、審核資訊。
+explanation_import_receipts：actor/requestId 唯一鍵、payload hash、原始 JSON、逐筆結果、前後解析版本。
+explanation_review_events：解析專用草稿／發布／撤回的前後內容及審核操作紀錄。
+不在收據中保存整份原圖或私人教材，不建立重複題庫。
+同一交易取得收據唯一鍵、依 ID 鎖定題目與來源、重新驗證並呼叫原 applyImport，
+批次寫入綁定後再完成收據。資料庫錯誤整筆回滾；COMMIT 回應遺失時用同一識別碼取回結果。
+輸入不合格逐筆拒絕；既有草稿與已發布內容一律略過。未勾選項目不寫入。
+簽章 token 綁定完整結構化 input 及解析版本，防止預覽後換內容。
+引用仍保持 unverified；管理員確認發布不會自動把文獻逐筆標成已驗證。
+特殊答案、全給分、回傳疑義仍拒絕自動匯入，必須人工處理；沒有自動醫學查證。
+
+來源變更保護
+資料庫 SHA-256 signature 包含題幹、完整選項、答案、科目／章節、題號、圖片雜湊、
+題庫名稱、年份、科目、檔名/hash、可見性，以及校對版本／原圖。
+觸發器在 questions、question_sets、question_proofreading 更新時撤下已綁定解析，
+因此沿用既有 published-only 考生查詢，不修改首頁、教練或其他前台 API。
+只在解析操作新增保護；migration 不替舊解析建立虛構審核紀錄、不批次改變舊狀態。
+舊解析在本功能首次儲存／發布後才建立綁定。
+
+Migration、備份與回復
+檔案：migrations/20261018_explanation_handoff_safety.sql。
+依賴既有精選解析、複數答案及校對 migrations。先在隔離 DB 測試，本次未執行正式 migration。
+正式上線前：
+1. 記錄目前部署 SHA、建立 Neon 還原點／隔離分支並確認可還原；備份 questions、question_sets、
+   question_proofreading 及新增解析收據／事件（若曾執行過）。備份存於管理員受控位置。
+2. 與 Dot 協調短暫停止題目寫入，避免 DDL／來源觸發器與題庫匯入競爭鎖。
+3. 使用既有伺服器 DB 身分，在交易內執行此 SQL；設定短 lock_timeout，取得鎖失敗即回滾。
+   不設計自動正式遷移或在 build 時執行 migration。
+4. 確認新增欄位／兩張表／索引／函式／觸發器及舊資料筆數與內容，再部署應用程式。
+   未 migration 時新管理 API 會失敗，不能先發佈新應用。
+5. 發現問題優先退回舊應用，保留新增欄位、收據、事件及觸發器。舊版發布已綁定且過期的解析
+   可能被拒絕，應暫停解析寫入，待修復後恢復；不要為了回復而關閉保護或自動發布。
+   DDL 尚未提交時直接 ROLLBACK。提交後不 drop 欄位／表，也不回灌整份 questions 覆蓋 Dot 新匯入。
+   若真的需移除 schema，先單獨備份新增內容，另行審核離線移除方案。
+
+測試及限制
+PGlite 合成資料：新版 10 題、舊版 20/50 題、複數正解／E、來源變更、部分失敗、
+同 requestId 重試／不同 payload 衝突、不同 requestId 不覆蓋、交易回滾、收據隔離、發布／撤回／重新審核。
+既有公開 API 隱藏草稿、Markdown 安全、原答案／作答／AI 題庫不變的回歸測試。
+Playwright 真實管理元件＋隔離 API：新版 10 題與舊版 20 題、雙擊、收據、重新載入、
+發布與撤回、來源變更重新核對，320/375/768/1280px 無水平溢出。
+PGlite 會序列化同一引擎的交易；這不是 Neon 多連線鎖競爭、死鎖或效能壓測的證據。
+Phase 4／正式上線前仍須在隔離 Neon/PostgreSQL 多連線測試匯入與 Dot 寫題同時進行、
+來源更正與發布競爭、COMMIT 網路中斷，以及大圖題庫的查詢成本。鎖逾時／死鎖會回滾，不能略過。
+本次沒有部署正式站。Vercel Preview 仍缺少隔離 DATABASE_URL；不能使用正式 DB 代替。
+來源版本是資料庫快照；無法偵測尚未輸入資料庫的外部官方更正。未知來源維持 unknown。
+第一批真實 10 題的醫學內容、來源正確性與圖片判讀仍需管理員人工驗收。
+未新增解析歷史版本還原 UI、匯出工作保留鎖或自動官方文獻查核。
+
+Phase 3 修改檔案（相對於 Phase 1/2 commit 2ffd999）
+管理介面：
+  app/admin/questions/FeaturedExplanationImport.tsx
+  app/admin/questions/OfficialExplanationEditor.tsx
+API：
+  app/api/admin/questions/explanation/import/route.ts
+  app/api/admin/questions/explanation/route.ts
+資料邏輯／型別：
+  lib/explanation-safe-import.ts（新增）
+  lib/explanation-handoff.ts
+  lib/official-explanation.ts
+  lib/featured-explanation-import-input.ts
+資料庫：
+  migrations/20261018_explanation_handoff_safety.sql（新增，未套用正式庫）
+測試：
+  tests/explanation-safe-import.test.mjs（新增）
+  tests/explanation-handoff.test.mjs
+  tests/featured-explanation-import.test.mjs
+  tests/featured-explanation-import-browser.mjs
+  tests/official-explanations.test.mjs
+  tests/helpers/featured-explanation-import-fixture.mjs
+  tests/helpers/official-explanation-fixture.mjs
+說明：
+  docs/EXPLANATION_HANDOFF_PHASE3.txt（新增）
+  docs/EXPLANATION_HANDOFF_PHASE1_2.txt（標示為歷史階段紀錄）

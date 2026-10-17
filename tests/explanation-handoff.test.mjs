@@ -52,12 +52,12 @@ test('real admin guard on JSON/images, strict filters, no hidden access or overs
   await f.sql.query('UPDATE questions SET image_data_url=$1 WHERE id=11',['x'.repeat(33*1024*1024)]);assert.equal((await f.get()).status,413);
  }finally{await f.close();}
 });
-test('single, multiple and E answers preview via existing converter; all formats stay read-only',async()=>{
+test('single, multiple and E answers preview via existing converter; preview stays read-only',async()=>{
  const f=await fixture();try{
   const before=await snapshot(f),data=await (await f.get()).json(),items=data.questions.filter(q=>![12,13,14].includes(q.questionId)).map(item);
-  const r=await preview(f,items);assert.equal(r.status,200);assert(r.data.handoffPreview);assert(r.data.rows.every(q=>q.category==='ready'&&!q.token));assert.match(r.data.rows[0].explanation,/#### E/);assert.match(r.data.rows[0].explanation,/內容尚未查核/);
+  const r=await preview(f,items);assert.equal(r.status,200);assert(r.data.handoffPreview);assert(r.data.rows.every(q=>q.category==='ready'&&q.token));assert.match(r.data.rows[0].explanation,/#### E/);assert.match(r.data.rows[0].explanation,/內容尚未查核/);
   const retry=await Promise.all([preview(f,items),preview(f,items)]);assert(retry.every(r=>r.status===200));
-  assert.equal((await f.call({action:'import',input:file(items),selected:[{index:0,token:'forged'}]})).status,409);
+  assert.equal((await f.call({action:'import',input:file(items),selected:[{index:0,token:'forged'}]})).status,400);
   assert.deepEqual(await snapshot(f),before);
   const legacy={explanations:[{questionId:10,expectedAnswer:['A','E'],explanation:'既有格式 E 複數答案測試'}]};assert.equal((await f.call({action:'preview',input:legacy})).data.rows[0].category,'ready');
  }finally{await f.close();}

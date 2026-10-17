@@ -10,6 +10,9 @@ export const handoff = load('lib/explanation-handoff.ts', {
   './featured-explanation-import':batch, './featured-explanation-import-input':contract,
   './explanation-handoff-input':handoffContract,
 });
+export const safeImport=load('lib/explanation-safe-import.ts',{
+  './admin-questions':adminService,'./featured-explanation-import':batch,'./explanation-handoff':handoff,
+});
 export async function importFixture() {
   const f = await fixture();
   process.env.BETTER_AUTH_SECRET = 'local-import-test-secret-only-at-least-32-characters';
@@ -25,6 +28,7 @@ export async function importFixture() {
     '@/lib/admin': admin, '@/lib/admin-question-http': http, '@/lib/admin-questions': adminService,
     '@/lib/featured-explanation-import': batch,
     '@/lib/explanation-handoff': handoff,
+    '@/lib/explanation-safe-import':safeImport,
     '@/lib/question-transaction': { questionTransaction: run => f.db.transaction(tx => run(tx)) },
   });
   const call = async (body, user = 'fixture-admin', headers = {}) => {
