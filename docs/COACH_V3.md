@@ -41,7 +41,7 @@ Phase 1 以前的 `coach_plan IS NULL` 舊任務完整保留，精簡模式需�
 
 ## Migration 與回復
 
-`migrations/20261017_coach_personalization.sql`：一個 nullable JSONB 欄位與一個 partial index；不回填、不改舊題目／學習資料。先 migration，後部署程式。此次尚未套用正式 migration、push 或部署。
+`migrations/20261017_coach_personalization.sql`：一個 nullable JSONB 欄位與一個 partial index；不回填、不改舊題目／學習資料。先 migration，後部署程式。2026-10-17 使用者授權上線，已用 runner 備份五張學習資料表至工作樹 `.tmp/coach-v3-before-production-20261017.json`，交易內套用 migration 並確認原有紀錄完全不變。程式依既有 main → Vercel 流程發布，實際上線狀態以該 commit 的 Vercel 狀態及部署後驗證為準。
 
 重用既有 runner，新增 `--phase3` 選項；預設僅列 SQL，不連線：
 
@@ -49,7 +49,7 @@ Phase 1 以前的 `coach_plan IS NULL` 舊任務完整保留，精簡模式需�
 node scripts/migrate-coach-v2.mjs --phase3
 ```
 
-將來獲准部署時，先取得必要備份並使用新的本機備份檔名：
+部署時先取得必要備份並使用新的本機備份檔名：
 
 ```powershell
 node scripts/migrate-coach-v2.mjs --phase3 --apply --backup .tmp/coach-v3-before-release.json --env-dir <環境檔目錄>
@@ -97,4 +97,4 @@ Runner 備份五張學習資料表完整紀錄，交易內比較原有資料是�
 
 沒有可靠考點標籤，因此使用章節，不宣稱相同觀念。舊作答仍供近期弱點分析，新間隔狀態自新版教練作答開始，不批次回填舊紀錄；一般刷題仍使用原有 FSRS，沒有改動其排程。週偏好當週有效且不重抽今天，週日設定會在下週失效。
 
-正式 migration、正式部署、真實會員作答、遠端 PostgreSQL 多連線競爭與正式流量壓測未執行；沒有將隔離 E2E 說成正式驗證。索引建立與程式／schema 部署順序是主要上線風險。
+正式 migration 已完成並核對原有紀錄。真實會員作答、遠端 PostgreSQL 多連線競爭與正式流量壓測未執行；沒有將隔離 E2E 說成正式驗證。正式部署後僅做唯讀頁面、API 權限及資料完整性檢查。
