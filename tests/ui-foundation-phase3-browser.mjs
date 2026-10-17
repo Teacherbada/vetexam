@@ -36,7 +36,7 @@ if(phase==='after'){
  await p.getByRole('button',{name:'挑戰這題',exact:false}).click();await p.getByRole('group',{name:'本週魔王題答案選項'}).getByRole('button').first().click();await p.getByRole('region',{name:'答案與解析'}).waitFor();await p.keyboard.press('Escape');
 }
 await p.goto(base+'/subjects');await p.getByRole('button',{name:'選擇獸醫病理學，設定練習'}).waitFor();await capture('subjects');
-await p.getByRole('button',{name:'選擇獸醫病理學，設定練習'}).click();await p.getByText('符合條件共有 40 題',{exact:true}).waitFor();await p.locator('details summary').click();await capture('subject-settings');
+await p.getByRole('button',{name:'選擇獸醫病理學，設定練習'}).click();await p.getByText('符合條件共有 40 題',{exact:true}).waitFor();await p.locator('summary').filter({hasText:/^章節：/}).click();await capture('subject-settings');
 if(phase==='after'){await p.keyboard.press('Tab');assert(await p.getByRole('dialog').evaluate(el=>el.contains(document.activeElement)));await p.getByRole('button',{name:'腫瘤',exact:true}).click();await p.getByText('符合條件共有 20 題',{exact:true}).waitFor();const url=new URL(await p.getByRole('link',{name:'開始刷題 →',exact:true}).getAttribute('href'),base);assert.equal(JSON.parse(url.searchParams.get('groups'))[0].chapter,'腫瘤');await p.keyboard.press('Escape');assert.equal(await p.getByRole('dialog').count(),0);assert(await p.getByRole('button',{name:'選擇獸醫病理學，設定練習'}).evaluate(el=>el===document.activeElement));}
 await p.goto(base+'/favorites');await p.locator('article').waitFor();await capture('favorites');
 await p.goto(base+'/wrong');await p.locator('article').first().waitFor();await capture('wrong');

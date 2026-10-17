@@ -23,8 +23,8 @@ try {
   await page.goto(base + "/subjects");
   await page.getByRole("button", { name: `選擇${source.subject}，設定練習`, exact: true }).click();
   const roc = source.year >= 1912 ? source.year - 1911 : source.year;
-  const western = source.year >= 1912 ? source.year : source.year + 1911;
-  await page.getByRole("button", { name: `民國 ${roc} 年（西元 ${western}）`, exact: true }).waitFor();
+  await page.getByRole('group', {name: '考試年份（可多選）'}).locator('summary').click();
+  await page.getByRole("button", { name: `民國 ${roc} 年`, exact: true }).waitFor();
   for (const width of [320, 375, 768]) {
     await page.setViewportSize({ width, height: 812 });
     assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
