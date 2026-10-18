@@ -65,10 +65,17 @@ function describe(q:Row,assets:Map<string,HandoffAsset>):HandoffQuestion{
   };
 }
 export async function exportQuestions(query:Query,params:URLSearchParams):Promise<QuestionHandoff>{
-  if([...params.keys()].some(k=>!['questionSetId','limit','afterId'].includes(k)))throw new QuestionAdminError('匯出參數無效');
+  if([...params.keys()].some(k=>!['questionSetId','limit','afterId','questionNumbers'].includes(k)||params.getAll(k).length!==1))throw new QuestionAdminError('匯出參數無效');
   const id=Number(params.get('questionSetId')),limit=Number(params.get('limit')??10),after=Number(params.get('afterId')??0);
   if(!validId(id)||!Number.isInteger(limit)||limit<1||limit>20||!Number.isInteger(after)||after<0||after>2147483647)throw new QuestionAdminError('請指定題庫 ID、1–20 題及有效的起始 ID');
-  const rows=await readRows(query,"q.question_set_id=$1 AND q.id>$2 AND (q.explanation IS NULL OR q.explanation='') AND q.explanation_status='draft'",[id,after],limit);
+  const numbersText=params.get('questionNumbers');
+  let numbers:number[]|null=null;
+  if(numbersText!==null){
+    const parts=numbersText.split(',').map(n=>n.trim());
+    if(numbersText.length>240||parts.length>20||parts.some(n=>!/^\d+$/.test(n)||!validId(Number(n)))||new Set(parts.map(Number)).size!==parts.length)throw new QuestionAdminError('指定題號須為 1–20 個不重複的正整數，以逗號分隔');
+    numbers=parts.map(Number);
+  }
+  const rows=await readRows(query,"q.question_set_id=$1 AND q.id>$2 AND (q.explanation IS NULL OR q.explanation='') AND q.explanation_status='draft'"+(numbers?' AND q.question_number=ANY($3::int[])':''),numbers?[id,after,numbers]:[id,after],limit);
   const assets=new Map<string,HandoffAsset>();
   const result:QuestionHandoff={formatVersion:EXPORT_FORMAT,exportedAt:new Date().toISOString(),questions:rows.map(q=>describe(q,assets)),assets:[...assets.values()],nextAfterId:rows.length===limit?Number(rows.at(-1)!.id):null,
     notice:'來源與梯次 unknown 代表尚無可靠資料。圖片引用需管理員登入下載原圖，再與 JSON 一併提供給 ChatGPT；不是公開連結。僅供內容核對，未儲存或發布解析。'};

@@ -1,0 +1,85 @@
+VetExam 國考解析交接：第一批 10 題操作與匯出篩選
+
+基準與本次範圍
+2026-10-18 核對 main：056e2b2a4cf143658576c883e70a07560befadda（已合併 PR #7）。
+該版本已具有管理員匯出、原圖下載、結構化解析預覽、草稿匯入、收據及來源綁定。
+本次僅補充年份／科目篩選與指定題號，以及相關合成測試；不另建解析系統。
+不新增 migration、不改匯入 API／發布規則，不寫正式資料、不部署正式站。
+舊 Phase 1/2、Phase 3 文件是當時開發紀錄；目前實際可使用新版草稿匯入，
+不再是「只預覽」。本次仍須經 PR 審查後才合併新的篩選功能。
+
+管理員操作
+1. 到 /admin/questions，展開「匯出未解析國考題（ChatGPT 協作）」。
+2. 可依「匯出年份」「匯出科目」縮小題庫選項，再選定一個公開國考題庫。
+   年份／科目取自現有管理 API 的題庫資料，沒有固定清單，也不猜測考試梯次。
+   年份以民國顯示，保留資料庫原值；民國與西元儲存值會歸入相同顯示年份。
+   年份／科目只是篩選題庫清單，請求仍以選定的 questionSetId 精確查詢。
+   切換篩選會清除題庫選擇和舊預覽；不會自動選擇另一個題庫。
+3. 「指定題號」可留白，或輸入 1,3,5（也接受介面輸入中文逗號／頓號）。
+   最多 20 個不重複正整數。這是原試題題號，不是資料庫 questionId。
+   每批預設 10 題，最多 20 題，仍可使用起始 ID 及「準備下一批」。
+   題號篩選與 ID 游標同時生效，結果依 ID 排序，不依輸入題號順序配對。
+   不存在、已有解析、起始 ID 之前的題目不會匯出，不自動補入其他題庫。
+   同題庫若有重複題號，預覽會列出各自 ID；須人工核對，不依題號匯回解析。
+4. 讀取預覽，逐題核對題庫、題號、ID、題幹、選項與完整答案集合。
+   「下載題目交接 JSON」，並下載每一張不重複原圖。
+   將 JSON 和實際圖片一起交給 ChatGPT；受保護的管理員網址無法取代圖片。
+5. 使用既有 public/examples/explanation-handoff.schema.json，參考
+   public/examples/explanation-handoff.example.json 回傳解析。
+   範例是假資料，指紋為零且含疑義，不能直接匯入。必須複製匯出時的真實 ID、
+   questionFingerprint、sourceFingerprint、officialAnswers（轉為 expectedAnswers）。
+6. 在同頁「批次匯入精選解析」上傳 JSON、驗證預覽、逐筆勾選，確認儲存草稿。
+   結果提供成功／失敗／略過原因及收據。重新整理後可查看最近 20 筆收據。
+   既有草稿和已發布解析一律不覆蓋；輸入或題目版本不符的項目無法勾選。
+7. 第一批正式內容驗證先停在草稿。管理員必須另行核對醫學內容、完整答案、
+   圖片與引用；此次開發與測試不會替任何真實題目產生或發布解析。
+
+API 相容擴充
+GET /api/admin/questions/explanation/export?questionSetId=123&limit=10&afterId=0
+維持舊行為；可加 &questionNumbers=1,3,5。
+questionNumbers：1–20 個不重複正整數，逗號分隔，最多 240 字元。
+多次傳入同名查詢參數會被拒絕。無效題號回覆 400，不執行查詢。
+伺服器只查公開 exam 題，使用參數化 int[] 條件，不建立資料或修改題庫。
+回應格式維持 vetexam-question-handoff-v1；圖片下載仍檢查管理員及來源快照。
+
+回傳 JSON 契約（詳細限制以既有 JSON Schema 為準）
+根物件：formatVersion="vetexam-explanations-v1"，explanations 陣列（1–20 筆）。
+每筆必填：
+  questionId、questionFingerprint、sourceFingerprint、expectedAnswers（完整 A–E 集合）、
+  explanationVersion="1.0"、coreConcept、optionExplanations、correctAnswerReason、
+  examMemory、extendedKnowledge、references、doubts、reviewStatus="pending_review"。
+optionExplanations 必須逐一對應原題的全部實際選項；原題有 E 就不能省略。
+references 每筆保留 title、url、version、applicableYears、supports、statement、
+verificationStatus="unverified"。至少一筆 supports 對應 correctAnswerReason。
+來源未查核不能宣稱已驗證；未知版本使用 null，未知適用年份使用 "unknown"。
+疑義用 doubts 標記，不能為了通過匯入而隱藏；非空疑義會阻止自動匯入。
+每份檔案最多 2 MiB，轉換後每題 Markdown 最多 20,000 字元。
+
+POST /api/admin/questions/explanation/import（沿用既有流程）
+預覽：{action:"preview", input:<回傳 JSON>}
+匯入：{action:"import", input:<同一 JSON>, selected:[{index:0,token:"預覽 token"}], requestId:"UUID"}
+管理 UI 自動保留重試識別碼；伺服器在交易內再驗證 ID、完整答案、兩種指紋與
+解析版本，只更新解析相關欄位。相同交易重試回傳原收據，不重複寫入。
+解析 Markdown 與引用保存在既有 explanation；結構化 input 由既有收據保存。
+
+測試方式
+tests/explanation-handoff.test.mjs：匯出、題號與 ID 不同、游標、非法／重複題號、
+私人／AI 題隔離、圖片原始位元組、來源／答案／選項變更，以及 Schema。
+tests/explanation-safe-import.test.mjs、featured-explanation-import.test.mjs、
+featured-explanations.test.mjs、official-explanations.test.mjs：草稿、重試、拒絕覆蓋、
+版本衝突、回滾、權限、公開端草稿隱藏、原題／作答／獸醫練功房資料不變。
+tests/featured-explanation-import-browser.mjs：真實管理元件搭配隔離 PGlite API，
+年份／科目／題號選擇，10 題 JSON 與原圖下載、回傳、預覽、草稿匯入、重新載入，
+以及既有 20 題匯入、審核流程、320／375／768／1280px 溢出檢查。
+所有寫入只使用合成題目與本機隔離資料庫，Next 使用無法連線的測試 DATABASE_URL。
+本次執行結果：上述五組單元／整合測試 29 項通過，瀏覽器完整流程通過；
+手機與桌面匯出畫面已檢視。Next production build（49 個靜態頁面）及 ESLint 通過。
+建置只有多 worktree lockfile 的工作區提示，未為此修改不相關的 Next 設定。
+
+限制與開始第一批的條件
+官方試題來源、答案來源、更正版本與梯次目前沒有可靠專用資料，仍輸出 unknown，
+不把題庫檔名當作已驗證官方來源。sourceFingerprint 驗證的是資料庫來源快照，
+無法偵測尚未輸入資料庫的外部官方更正。
+特殊合選、全給分與有疑義的題目須人工處理；格式驗證不能驗證醫學事實。
+功能可支援第一批 10 題內容製作；正式內容須由管理員選取、下載原圖及人工核對。
+本次新的篩選介面待 PR 合併後才能在部署環境使用，沒有連接正式 DB 進行驗收。
